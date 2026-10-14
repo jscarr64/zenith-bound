@@ -1,6 +1,6 @@
 # zenith-bound correctness contract
 
-**Status: draft, 2026-10-14.** This file exists before any `mag` code. The clauses below are normative. The remaining clauses of `docs/PLAN.md` Part L (value model, invariant, precision, exponent range, rounding, the other radius rules, domains, exactness, correctness vs tightness, determinism) move in here before L0 code is written. If this file and the plan disagree, this file wins and the plan gets fixed. Every test cites a clause number.
+**Status: draft, 2026-10-14.** This file exists before any `mag` code. The clauses below are normative; clauses 1 and 5 are LOCKED. The remaining clauses of `docs/PLAN.md` Part L (value model, invariant, precision, exponent range, rounding, the other radius rules, domains, exactness, correctness vs tightness, determinism) move in here before L0 code is written. If this file and the plan disagree, this file wins and the plan gets fixed. Every test cites a clause number.
 
 Notation: `Mag` is `enum Mag { Finite { exp: i64, mant: u64 }, Infinity }`, an upper bound on a nonnegative real. "Rounded up/down" means toward +∞/−∞.
 
@@ -59,3 +59,11 @@ This is zenith-float's `exponent()` convention (`3` is `e = 2`, `m = 0xC000…`)
 - `ε`: `ulp_mag(pre_round_exp, prec)` if rounding `q` was inexact, otherwise 0.
 
 4.4 All radius steps are O(1) Mag operations on u64/u128. Only `q` is computed at `prec`.
+
+## 5. Precision rounding — LOCKED (approved by Jeff, 2026-10-14)
+
+5.1 A midpoint at precision `prec` is rounded to **exactly** `prec` bits (any `prec ≥ 1`, not only a multiple of 64), once, under the caller's `rm`.
+
+5.2 Exact-bit rounding lives in **zenith-float** (PLAN C1 **P15**, tied to zf defect 6). zenith-bound **never** re-chops or re-rounds a zf result to a smaller precision, and has no chop fallback, because a second rounding of an already-rounded value is double rounding.
+
+5.3 If the zf 2.0.0 defect-6 fix delivers exact-bit rounding, P15 folds into 2.0.0; otherwise it stays in 2.1. Either way, L0 does not start until it is green on Pop.
