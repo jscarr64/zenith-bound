@@ -12,7 +12,7 @@
   - Tests are written red first. **No single exact-input tests** (Jeff's ban, B3): every test is a property, oracle or adversarial *set*, or an overestimation measurement.
 - **Core principle (B2):** every result either carries a defensible enclosure or explicitly reports that the guarantee could not be established. Correctness is kept separate from tightness.
 - **Constraint:** MPFR, mpmath and FLINT/Arb (via python-flint) are dev-only oracles. Never shipped, never a dependency.
-- **Coding constraint until 2026-10-30:** coding is done by a local 7B model in one-file, hunk-sized steps. Files over ~15 KB overflow its context. L0 is therefore planned as many small files (≤ ~10 KB target, hard cap 15 KB), each with one responsibility (Part D, L0 file plan).
+- **Coding constraint until 2026-10-30:** coding is done by Pop's only local model, qwen3-coder:30b (MoE, temp ≤ 0.1, low top_p, fixed seed), with hunk-sized directives that bots review. The old ≤10 KB/15 KB limits came from the deleted qwen2.5-coder 7B's context and are lifted; L0 keeps one responsibility per file with a soft target of ≤ ~30 KB per file so review diffs stay small (Part D, L0 file plan).
 
 ## Summary in plain language
 
@@ -29,7 +29,7 @@ zf precision is also rounded up to a multiple of 64 bits. zenith-bound's `prec` 
 
 **Order:** zf 2.0.0 fix → zf 2.1 prerequisites (now including the overflow fix) → L0 contract and real balls → L1 elementary functions and constants → L2 complex, polynomials, series, matrices, then selected specials → L3 quadrature → L4 validated workflows (root isolation, verified linear solve, ODE) and adaptive precision. Each layer starts with failing tests and is green on Pop before the next.
 
-**Rough size: ~175–335 runs** (was ~147–268). Jeff discounts AI timeline estimates, so read these only as relative sizes between items. The growth comes from the bigger zf 2.1 set, the contract layer, `ComplexBall`/polynomial/series/matrix work, and smaller-file L0 steps for the 7B model.
+**Rough size: ~173–331 runs** (was ~147–268). Jeff discounts AI timeline estimates, so read these only as relative sizes between items. The growth comes from the bigger zf 2.1 set, the contract layer, `ComplexBall`/polynomial/series/matrix work, and review-sized L0 steps for the local model.
 
 zf's old `Ball` is deprecated in zf 2.1 (pointing to zenith-bound) and removed in zf 3.0. zenith-bound starts at 0.0.0 (scaffold) and 0.1.0 (L0).
 
@@ -282,7 +282,7 @@ B2's order maps onto the layers like this: (1) contract + (2) real balls = **L0*
 
 - **Gate:** zf 2.0.0 fix green on Pop; zf 2.1 P1–P13 merged and green on Pop. Until P12 lands, L0 can be written against the K3 workaround, but not released.
 - **Order inside L0:** `CONTRACT.md` → `mag/*` → `ball/*` construction → add/sub/mul → div → sqrt → compare/contains/overlap → precision reduction → encoding.
-- **File plan for the 7B model (until 2026-10-30), each file ≤ ~10 KB, one responsibility:**
+- **File plan for the local qwen3-coder:30b (until 2026-10-30), one responsibility per file, soft target ≤ ~30 KB:**
 
   | File | Content |
   |---|---|
@@ -401,7 +401,7 @@ If the ball holds 0 and has a large radius, print `0 ± r` or `[±r]`. Never pad
 
 ## Part G. Effort (relative sizes; one run ≈ one agent session)
 
-Jeff discounts AI timeline estimates, so this table gives **relative runs only**. Weeks/months are dropped. Before 2026-10-30, L0 runs are 7B-model hunk steps, so the same work takes more, smaller runs.
+Jeff discounts AI timeline estimates, so this table gives **relative runs only**. Weeks/months are dropped. Before 2026-10-30, L0 runs are qwen3-coder:30b hunk steps with bot review; the extra run overhead from the old 7B context limit is removed.
 
 | Item | 10-13 runs | 10-14 runs | Why it changed |
 |---|---:|---:|---|
@@ -409,7 +409,7 @@ Jeff discounts AI timeline estimates, so this table gives **relative runs only**
 | zf 2.1 prerequisites (C1 P1–P13) + deprecations | 6–10 | 12–20 | 5 → 11 items; K3 overflow fix with corrected tests/generator; P13 test coverage |
 | Scaffold, NOTICE, CI on 1.99 | 2–4 | 2–3 | scaffold prepared (Part N) |
 | B: no-float guards + audit | 4–8 | 4–8 | — |
-| L0: contract + Mag + real balls | 12–20 | 18–30 | contract doc; locked Mag (u64/i64, add_up/mul_up/ulp/unique); error kinds; small-file split for the 7B model |
+| L0: contract + Mag + real balls | 12–20 | 16–26 | contract doc; locked Mag (u64/i64, add_up/mul_up/ulp/unique); error kinds; one-responsibility file split |
 | L1: elementary + constants | 20–35 | 20–35 | first-order rules (B3) are simpler, but composition/subdivision adds about as much |
 | L2a–c: ComplexBall (rect+disk), polynomials, series, matrices | (partly in L0/L4) | 18–32 | new scope (B1) |
 | L2d: selected specials | 35–60 | 30–55 | derivative bounds for erf/J0/J1; unprovable cases return `Indeterminate` instead of research |
@@ -442,7 +442,7 @@ Jeff discounts AI timeline estimates, so this table gives **relative runs only**
 - **zf directed rounding at overflow (K3)** is wrong today and hidden by the tests. Mitigation: P12/P13 are zf 2.1 gates; L0 treats any near-`EXPONENT_MAX` directed result as overflowed until then.
 - **Directed rounding is tested, not proven.** Mitigation: P13 runs every mode per case for every op; zenith-bound's own sets check containment against exact rationals independent of zf's rounding.
 - **32-bit exponent range differs (K5).** Mitigation: P5, and until then refuse out-of-range values on 32-bit targets so bytes never differ.
-- **7B-model context limit until 2026-10-30.** Mitigation: the L0 file plan (≤ ~10 KB files); larger edits wait for cloud runs.
+- **Local-model quality until 2026-10-30 (qwen3-coder:30b).** Mitigation: hunk-sized directives, bot review of every diff, red→green gate on Pop; very large refactors wait for cloud runs.
 - **The B3 single-case test ban** makes some regressions harder to pin. Mitigation: proptest regression files store failing seeds, and each adversarial set is a named, enumerated generator.
 
 ## Part I. Accumath step-by-step solutions and trace logs
@@ -592,7 +592,7 @@ Columns: layer; whether it changes the zf 2.1 prerequisites; relative effect on 
 | B4–B9 | `is_unique_at` | L0 | P4 | included |
 | B4–B9 | sqrt radius path, exact domain check, touch-0 rule, domain error | L0 | P6 | included |
 | B4–B9 | zf 2.1 prerequisites marked EXISTS/MISSING | C1 | yes (P12, P13 added) | + (zf 2.1 roughly doubles) |
-| Note | 7B local model until 2026-10-30, ≤ 15 KB files | L0 file plan | no | + (more, smaller runs) |
+| Note | qwen3-coder:30b local model until 2026-10-30, hunk-sized directives | L0 file plan | no | ≈ (no extra runs from context) |
 
 ## Part N. Repo scaffold (prepared, not created)
 
