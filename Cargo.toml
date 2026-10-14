@@ -1,0 +1,10 @@
+[package]
+name = "zenith-bound"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+description = "Guaranteed-bounds (ball arithmetic) on zenith-float. Pre-release: nothing is guaranteed yet."
+publish = false
+
+[dependencies]
