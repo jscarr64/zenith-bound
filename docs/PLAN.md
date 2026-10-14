@@ -1,7 +1,7 @@
 # Plan: zenith-bound, rigorous ball arithmetic on zenith-float (revision 2026-10-14)
 
 - **Branch under review:** `jscarr64/zenith-float` `cursor/oracle-step1-2-0-0-79c6`, head `508a40039fcb6118d4eb07f14596f0153639298f` (committed 2026-10-14 10:57 CT; `04ba6a8` is in its history). Read through the GitHub connector only. No clone, no push, no PR.
-- **This document:** a plan only. It revises `zenith-bound_PLAN_2026-10-13.md` and folds in Jeff's briefs B1–B9. Part K is the Task 1 audit of zf's rounding that this revision rests on.
+- **This document:** a plan only. It revises `zenith-bound_PLAN_2026-10-13.md` and folds in Jeff's briefs B1–B9. Part K is the Task 1 audit of zf's rounding that this revision rests on. **Amended 2026-10-14 after an outside review**; every review item and its disposition is in Part R.
 - **Decisions (locked):**
   - Name: **zenith-bound**. A new, separate open-source crate and repo on top of zenith-float (zf). Not a feature inside zf.
   - License: **MIT OR Apache-2.0**. Files ported from puremp keep puremp's MIT notice (`NOTICE-puremp`).
@@ -29,7 +29,7 @@ zf precision is also rounded up to a multiple of 64 bits. zenith-bound's `prec` 
 
 **Order:** zf 2.0.0 fix → zf 2.1 prerequisites (now including the overflow fix) → L0 contract and real balls → L1 elementary functions and constants → L2 complex, polynomials, series, matrices, then selected specials → L3 quadrature → L4 validated workflows (root isolation, verified linear solve, ODE) and adaptive precision. Each layer starts with failing tests and is green on Pop before the next.
 
-**Rough size: ~173–331 runs** (was ~147–268). Jeff discounts AI timeline estimates, so read these only as relative sizes between items. The growth comes from the bigger zf 2.1 set, the contract layer, `ComplexBall`/polynomial/series/matrix work, and review-sized L0 steps for the local model.
+**Rough size: ~195–345 runs** (was ~147–268 on 10-13; ~173–331 before the outside review). Jeff discounts AI timeline estimates, so read these only as relative sizes between items. The growth comes from the bigger zf 2.1 set (P1–P14), the contract layer, the review's added L0/L1 scope, the independent truth model, `ComplexBall`/polynomial/series/matrix work, and review-sized L0 steps for the local model.
 
 zf's old `Ball` is deprecated in zf 2.1 (pointing to zenith-bound) and removed in zf 3.0. zenith-bound starts at 0.0.0 (scaffold) and 0.1.0 (L0).
 
@@ -63,7 +63,7 @@ zf's old `Ball` is deprecated in zf 2.1 (pointing to zenith-bound) and removed i
 
 **Rule.** Ball midpoints, radii, and every piece of error-bound math use only zenith-float software types. That means no `f32` or `f64`, no FPU rounding-mode control, no SIMD or CPU intrinsics, and no hardware FMA (`mul_add`). Directed rounding comes only from zf's own `RoundingMode::Up` and `RoundingMode::Down`.
 
-**The `Mag` type is software.** The locked design (C6): `enum Mag { Finite { exp: i64, mant: u64 }, Infinity }`, value `mant·2^(exp−63)`, always rounded upward with integer ops only (`u128` products, `leading_zeros`, shifts). Exponent overflow becomes `Infinity`, never saturation.
+**The `Mag` type is software.** The locked design (C6): `enum Mag { Finite { exp: i64, mant: u64 }, Infinity }`, value `0.mant·2^exp` = `mant·2^(exp−64)` (zf's convention, pinned in Part L clause 4a; the 10-14 draft wrote `mant·2^(exp−63)`), always rounded upward with integer ops only (`u128` products, `leading_zeros`, shifts). Exponent overflow becomes `Infinity`, never saturation.
 
 **What the ball path touches today:**
 - `zenith-float-num/src/ieee_soft/mod.rs:135` defines `Ieee64::mul_add`. It is software (integer bit ops), but the name matches the banned family. The ball path must not call it. zenith-bound bans `#[allow]`, so instead its `clippy.toml` `disallowed-methods` lists `Ieee64::mul_add` and the module is never imported.
@@ -83,7 +83,7 @@ All four guards live in the **zenith-bound repo's CI**, using the same pinned to
    Clippy can't reliably ban the primitive types themselves, so add `#![deny(clippy::float_arithmetic, clippy::float_cmp, clippy::cast_precision_loss, clippy::as_conversions)]` in `lib.rs`. `float_arithmetic` is the lint that catches any `f64` op.
 2. **CI scan.** `scripts/check_no_float.sh` runs `rg -n '\bf(32|64)\b|as f(32|64)|std::arch|core::arch|target_feature|mul_add|fma' src/` in zenith-bound, plus the zf modules it calls. Any match fails CI. A second pass runs `cargo +nightly rustc -- -Zunpretty=hir` on the ball modules and greps the HIR for `f64` and `f32` types, so float use hidden behind macros is caught too.
 3. **No-float build.** zenith-bound is `#![no_std]` (with `alloc`). Build it for `thumbv6m-none-eabi`, a target with **no FPU** (`--target thumbv6m-none-eabi`). Any `f64` op then lowers to a soft-float libcall, so also link with `-C link-arg=--no-undefined` and check `nm` output for `__aeabi_d*`, `__adddf3`, `__muldf3` and `fma`. Any such symbol fails the check. This proves that no float code got in. It copies zf's `nostd-tests` pattern (`nostd-tests/`, `nostd-qemu`).
-4. **Behavioural test.** On x86_64, set the host FPU to round-toward-+inf with `fesetround`, from a `libc` dev-dep in a test binary only, before running the ball suite. The ball results must stay **bit-identical** to the golden hashes. Run the same check under `qemu` for `thumbv6m`, where no FPU exists. If any result depends on hardware floats, the hashes differ.
+4. **Behavioural test.** On x86_64, set the host FPU to round-toward-+inf with `fesetround` before running the ball suite. Calling `fesetround` needs `unsafe`, so this lives in a **separate dev-only crate**, `fpu-check/` (`publish = false`, a workspace member that zenith-bound never depends on, with `libc` as its only extra dependency). zenith-bound itself keeps `#![forbid(unsafe_code)]` with no exceptions. The ball results must stay **bit-identical** to the golden hashes. Run the same check under `qemu` for `thumbv6m`, where no FPU exists. If any result depends on hardware floats, the hashes differ.
 
 ## Part K. Task 1 audit: does zf round correctly toward −∞ and +∞? (head `508a400`)
 
@@ -107,7 +107,7 @@ Line numbers are on `508a400`. Paths are under `zenith-float-num/` unless stated
 
 | Op | Entry | Mode handling | Finite range | Underflow (subnormal) | Overflow |
 |---|---|---|---|---|---|
-| add / sub | `src/num.rs:244`, `:257` → `add_sub` `:588`; mantissa `abs_add`/`abs_sub` take `rm` and the sign (`:642-695`). Exact cancellation gives −0 under `Down` (`:666`) | all 7 | correct for Up/Down/ToZero/FromZero/ToEven/ToOdd | `subnormalize` `:724` + `flush_to_min` `:798-813` are mode-aware and look right | **wrong for directed modes** (see K3) |
+| add / sub | `src/num.rs:244`, `:257` → `add_sub` `:588`; mantissa `abs_add`/`abs_sub` take `rm` and the sign (`:642-695`). Exact cancellation gives −0 under `Down` (`:666`); zenith-bound normalizes it to +0 at the ball boundary (Part L clause 1) | all 7 | correct for Up/Down/ToZero/FromZero/ToEven/ToOdd | `subnormalize` `:724` + `flush_to_min` `:798-813` are mode-aware and look right | **wrong for directed modes** (see K3) |
 | mul | `src/num.rs:296` → `mul_general_case` | all 7 | correct | mode-aware | **wrong** |
 | div | `src/num.rs:384` | all 7 | correct | mode-aware | **wrong** |
 | sqrt | `src/ops/sqrt.rs:21` (passes `rm` to `mantissa.sqrt`) | all 7 | correct | mode-aware | n/a (can't overflow) |
@@ -192,7 +192,9 @@ Subnormal results in the MPFR differential only check MPFR's underflow flag, not
 | **P12 (new)** | **Directed rounding at overflow** returns ±`max_value` | **DEFECT** (K3) | every directed bound |
 | **P13 (new)** | Rounding-mode docs say "directed", MPFR differential covers **every** mode for **every** op each case (including sub/div), and the Inf branch of `assert_float_close` checks MPFR's actual value | test gap (K4) | trust in P6 |
 
-P1, P4, P6 and P10 exist (P10 needs validation). P2, P3, P7, P8, P9, P11 are missing. P5 is partial. P12 and P13 are new because of Task 1. **The zf 2.1 set grows from 5 items to 11** (effect: zf 2.1 roughly doubles, see Part G).
+| **P14 (new, review)** | **Up/Down MPFR coverage for every transcendental kernel zenith-bound uses** (exp, log, log1p, expm1, log2, log10, exp2, sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh, asinh, acosh, atanh, pow, and the constants), at 256 and 512 bits, every mode per case. **Ziv-loop exact-case trap:** when the true result is exactly representable (`exp(0) = 1`, `log(1) = 0`, `sin(0) = 0`, `atan(0) = 0`, `pow(x, 0)`, `2^n` for `exp2` of an integer, `log2` of a power of two, and similar), a Ziv loop never gets a rounding-safe approximation and either spins to its cap or picks the wrong directed neighbour; each kernel must detect exact cases before the loop, and the MPFR set must contain every such case. **Alternative** where a kernel can't meet this: call it with `ToEven` and use a **proven ≤ 1 ulp** error bound (written analysis, reviewed), adding 1 ulp to the radius | MISSING (gap named in Part H) | every L1 radius; this is the former Part H mitigation, now a gate |
+
+P1, P4, P6 and P10 exist (P10 needs validation). P2, P3, P7, P8, P9, P11 are missing. P5 is partial. P12 and P13 are new because of Task 1; P14 is new because of the outside review. **The zf 2.1 set grows from 5 items (10-13) to 14 (P1–P14)**, 10 of which are missing, partial or defective, plus small helpers on P1 and P10 (effect: zf 2.1 roughly doubles, see Part G). L0 needs P1–P13; L1 also needs P14.
 
 ### C2. zf's prototype `Ball` and `ComplexBall`
 Unchanged from 10-13: deprecated in zf 2.1 (pointing to zenith-bound), `contains` truncation bug fixed (`ball.rs:236`), removed in zf 3.0. `ziv_round` stays in zf. `GkResult.abs_err_est` is renamed `heuristic_err` in 3.0.
@@ -201,6 +203,10 @@ Unchanged from 10-13: deprecated in zf 2.1 (pointing to zenith-bound), `contains
 - 0.0.0 = scaffold (Part N). 0.1 = L0, 0.2 = L1, 0.3 = L2, 0.4 = L3, 0.5 = L4. 1.0 when L0–L4 are green and the Part J encoding and Part I trace format are frozen.
 - Own `CHANGELOG.md`, tags, docs. Records its zf range (`zenith-float = ">=2.1, <3"`).
 - Accumath pins both crates exactly and commits `Cargo.lock`.
+- **MSRV policy:** the MSRV is the frozen pin, Rust 1.99 (`rust-version = "1.99"`, `rust-toolchain.toml`). It moves only by a deliberate decision, in a minor release (0.x) or a major release (≥ 1.0), named in the changelog. CI builds on exactly 1.99.
+- **Release tooling:** reuse zf's lint configuration (`clippy.toml`, `[lints]` table, rustfmt settings) instead of writing a new one; `cargo-deny` (licenses: only MIT/Apache-2.0/BSD/ISC/Unicode/Zlib-class licenses allowed, so LGPL oracles can never enter the dependency graph; advisories; bans; sources) and `cargo-semver-checks` run in CI from 0.1 on.
+- **Encoding-freeze promise:** `zf-ball-enc v1` (Part J) and the trace format (Part I) are frozen at 1.0. After that, a change gets a new version byte and the decoder keeps reading every earlier version. Before 1.0, any change bumps the minor version and the changelog says so.
+- **crates.io name:** `https://crates.io/api/v1/crates/zenith-bound` returned HTTP 404 ("crate `zenith-bound` does not exist") on 2026-10-14, so the name was free then. Nothing was published or reserved.
 - **License decided: MIT OR Apache-2.0.** puremp-derived files keep puremp's MIT notice; the crate remains `MIT OR Apache-2.0` because MIT-licensed portions are compatible with both and their notice is preserved in `NOTICE-puremp`.
 
 ### C4. The puremp port (github.com/KarpelesLab/puremp, MIT, © 2026 Karpelès Lab Inc.; HEAD `283471d` on 2026-10-14)
@@ -224,11 +230,13 @@ Provenance: `NOTICE-puremp` at the repo root holds the full MIT text; each porte
   - `Interval { lo, hi }` (inf–sup) with `Ball::to_interval` (lo rounded Down, hi rounded Up) and `Interval::to_ball`, for subdivision (B1).
   - `BallPoly`, `BallSeries` (truncated power series with an order), `BallMat`, `ComplexBallMat` (B1).
   - `Tri { True, False, Unknown }`.
+  - **No `PartialEq`/`PartialOrd` on `Ball`** (or on any ball container). `==` on enclosures is ambiguous. Use `identical(&self, &Ball) -> bool` (same mid bits, same `Mag`, same `prec`) for representation equality and the `Tri` comparisons (`lt`, `le`, `eq`, …) for value questions.
+  - `DomainPolicy { Strict, Clip }` (see Part L clause 7): one enum, passed or defaulted the same way to every op that has a domain.
 - **Precision is explicit** on every op: `fn add(&self, b: &Ball, prec: u32, rm: RoundingMode) -> BoundResult<Ball>`. `rm` only shapes the midpoint; it never affects correctness (B1: "mid rounded to prec p with rm").
 - **Results and error kinds** (B2):
   ```text
   enum BoundError {
-      Domain { op, detail },          // log of a ball reaching ≤ 0, sqrt of a ball below 0, division by a ball containing 0
+      Domain { op, detail },          // ball outside the domain under DomainPolicy (Part L clause 7); division by a ball touching 0
       Resource { op, limit },         // precision cap, iteration/evaluation budget, memory
       Overflow { op },                // exponent beyond zf range (K3)
   }
@@ -246,30 +254,37 @@ Provenance: `NOTICE-puremp` at the repo root holds the full MIT text; each porte
 
 ```text
 enum Mag { Finite { exp: i64, mant: u64 }, Infinity }
-value(Finite) = mant · 2^(exp − 63),   mant ∈ [2^63, 2^64)    (the one exception: proven zero is Finite{exp: 0, mant: 0}, see below)
+value(Finite) = 0.mant · 2^exp = mant · 2^(exp − 64),   mant ∈ [2^63, 2^64), so value ∈ [2^(exp−1), 2^exp)
+               (the one exception: proven zero is Finite{exp: 0, mant: 0}, see below)
 ```
+- **Exponent convention (changed by the review, Part R 1.4).** `exp` means the same thing as zf's `exponent()`: value = 0.m·2^e with the mantissa read as a fraction in [1/2, 1). The 10-14 draft used `mant·2^(exp−63)` (a leading-bit exponent, one less). The fields and their widths are unchanged; only the meaning of `exp` moves by one, so a Mag and a zf midpoint compare exponents directly. Jeff to confirm, because C6 is locked.
 - **Exponent width.** Brief 8 says `exp: i32` "check the range against zf; widen if needed". Task 1: zf mids use `i32`, but `Mag` needs `exp(mid) − prec − 1` (below `i32::MIN` for small mids at large precision) and products of radii (double the exponent). **Widened to `i64`.** Any `i64` overflow → `Infinity`.
-- **Zero.** A radius of zero is allowed only when exactness is proven (B2). Represented as `Mag::Zero` would add a variant to a locked enum, so zero is the canonical `Finite { exp: 0, mant: 0 }`, the only finite value with `mant < 2^63`. Every constructor checks this invariant.
+- **Zero.** A radius of zero is allowed only when exactness is proven (B2). Represented as `Mag::Zero` would add a variant to a locked enum, so zero is the canonical `Finite { exp: 0, mant: 0 }`, the only finite value with `mant < 2^63`. Every constructor checks this invariant. **Every Mag operation early-returns on a zero operand** before any normalization or `leading_zeros` call (`add_up(0, b) = b`, `mul_up(0, finite) = 0`, `from_exact_num(0) = 0`, comparisons with 0 by sign only). **`0 · Infinity = Infinity`** (conservative: an unbounded radius stays unbounded). Zero is a required member of every Mag test set.
+- **Underflow.** A result whose exponent would go below `i64::MIN` rounds **up** to the smallest positive Mag (`mant = 2^63, exp = i64::MIN`), never to zero and never by wrapping. All exponent arithmetic uses `checked_*`; `None` on the high side gives `Infinity`, on the low side gives the smallest positive Mag.
 - **`add_up(a, b)`**: align to the larger exponent; shifted-out bits OR into a sticky bit; add with carry (carry renormalises by one, its lost bit also goes to sticky); if sticky, add 1 at the last place and renormalise. If the shift is ≥ 64, return `larger + 1 ulp` (the smaller is nonzero, so this is the rounded-up result).
-- **`mul_up(a, b)`**: the `u128` product `P = ma·mb` lies in `[2^126, 2^128)` and value = `P·2^(ea+eb−126)`. If `P ≥ 2^127`: `mant = P >> 64`, `exp = ea + eb + 1`, sticky = low 64 bits ≠ 0. If `P ∈ [2^126, 2^127)`: `mant = P >> 63`, `exp = ea + eb`, sticky = low 63 bits ≠ 0 (this is the "verify the −63 normalisation" case). If sticky, +1 at the last place and renormalise (a carry to `2^64` gives `mant = 2^63`, `exp + 1`). Tests are sets over both product ranges, including `2^63·2^63` and `(2^64−1)²`, checked against exact `u128`/rational arithmetic.
+- **`mul_up(a, b)`**: the `u128` product `P = ma·mb` lies in `[2^126, 2^128)` and value = `P·2^(ea+eb−128)`. If `P ≥ 2^127`: `mant = P >> 64`, `exp = ea + eb`, sticky = low 64 bits ≠ 0. If `P ∈ [2^126, 2^127)`: `mant = P >> 63`, `exp = ea + eb − 1`, sticky = low 63 bits ≠ 0 (the renormalisation case). If sticky, +1 at the last place and renormalise (a carry to `2^64` gives `mant = 2^63`, `exp + 1`). Tests are sets over both product ranges, including `2^63·2^63` and `(2^64−1)²`, checked against exact `u128`/rational arithmetic.
 - **Overflow** of the exponent → `Infinity`, never saturation. NaN or Inf inputs from zf map to `Infinity`. A non-finite scale in `mul` gives `Infinity`.
-- **`from_exact_num(x)`** = `|x|` rounded **up** to 64 bits via `top_u64_mantissa_and_sticky` (P2): `mant = top + sticky` with carry renormalisation, `exp = leading_bit_exponent(x) + 1` adjusted to the 2^(exp−63) convention. **`to_exact_num(m)`** = exact, via `from_mag_parts` (P3).
-- **Half ulp.** With `mid_exp` = zf's `exponent()` (value = 0.m × 2^e, so mid ∈ [2^(mid_exp−1), 2^mid_exp)), ulp at `prec` is `2^(mid_exp − prec)` and **half ulp = `2^(mid_exp − prec − 1)`**. A finite `Mag` lies in `[2^exp, 2^(exp+1))`, so **`smaller_than_half_ulp` is `exp < mid_exp − prec − 1`**. **Boundary set** at `mid_exp = 10, prec = 4` (half ulp `2^5`): `exp = 4` with every mantissa class `{2^63, 2^63+1, 2^64−1}` must be smaller; `exp = 5` must not; sweep `exp` 2..7 against an exact-rational model. It runs in zenith-bound's integer model, because zf can't hold a 4-bit midpoint (K5).
+- **`from_exact_num(x)`** = `|x|` rounded **up** to 64 bits via `top_u64_mantissa_and_sticky` (P2): `mant = top + sticky` with carry renormalisation, `exp = x.exponent()` (same convention, no adjustment). **`to_exact_num(m)`** = exact, via `from_mag_parts` (P3).
+- **Half ulp.** With `mid_exp` = zf's `exponent()` (value = 0.m × 2^e, so mid ∈ [2^(mid_exp−1), 2^mid_exp)), ulp at `prec` is `2^(mid_exp − prec)` and **half ulp = `2^(mid_exp − prec − 1)`**. A finite `Mag` lies in `[2^(exp−1), 2^exp)`, so **`smaller_than_half_ulp` is `exp ≤ mid_exp − prec − 1`**. **Boundary set** at `mid_exp = 10, prec = 4` (half ulp `2^5`): `exp = 5` with every mantissa class `{2^63, 2^63+1, 2^64−1}` must be smaller; `exp = 6` must not; sweep `exp` 3..8 against the independent rational model (Part E). It runs in zenith-bound's integer model, because zf can't hold a 4-bit midpoint (K5).
 - **`ulp_mag(pre_round_exp, prec)`** uses the leading-bit exponent of the **exact pre-round result** (P7), not of the rounded mid (rounding can carry into a new binade). **For a mid of 0** (exact cancellation), the rounding error is 0 if the op was exact; otherwise use the inputs' exponents or the exact difference, never the rounded mid. `min_normal_exponent` is defined from zf's `EXPONENT_MIN` (P5); below it, ulp is the subnormal ulp `2^(EXPONENT_MIN − prec)`.
-- **The midpoint is computed exactly** (exact add/mul of finite binaries, P4) and then rounded once to `prec` with `rm`, or every intermediate rounding is bounded and added to the radius. **Never** `prec + 4` with `RoundingMode::None` (the prototype's pattern).
-- **`is_unique_at(prec, rm)`**: `lo = m − r` rounded **Down** and `hi = m + r` rounded **Up** (exact via P4 where the sizes allow, otherwise directed at a working precision above `prec`), then both rounded to `prec` under `rm`; unique iff `lo == hi == mid`. Because the whole interval rounds to one value, this covers every mode and every tie. This is the B1 contract: the mid is unique and correctly rounded whenever the ball is unique.
-- **`sqrt`**: the mid uses `rm`. The radius path: `lo = m − r` rounded Down; `s = sqrt(lo)` rounded Down; `d = 2·s` (exact) rounded Down; `q = 1/d` rounded Up; `rad = mul_up(r, q) + ulp` with `add_up`. The domain check compares **exactly** (`mid` against `rad.to_exact_num()`, exact subtraction): if `m − r > 0`, use the formula. If `m − r ≤ 0 ≤ m + r` (the ball touches 0), return a ball enclosing `[0, √(m+r)]`, with `√(m+r)` rounded Up, mid = half of it, and rad rounded up to cover both ends. If `m + r < 0`, return `BoundError::Domain`; a caller that asked for a strict domain gets `Indeterminate`. **Never** a finite ball that pretends.
+- **Exact comparisons without building the radius in zf: `Mag::cmp_exact_num(&self, x: &ExactNum) -> Ordering`** (compares `|x|` with the Mag using exponents as `i64` and the top 64 mantissa bits plus sticky from P2), plus `Mag::cmp_exact_diff(&self, a, b)` for `|a − b|` vs the Mag (exponent gap first, then an exact difference only when it is small, see below). `contains`, `is_unique_at` and the sqrt/log/div domain checks use these and **never convert the radius to an `ExactNum`**, because a Mag exponent can lie far outside zf's `i32` range. `to_exact_num` stays for the cases that are proven in range and returns `Overflow` otherwise.
+- **Exact add only for a bounded gap.** An exact (`*_full_prec`) add/sub is used only when the operands' exponent gap is ≤ `prec + guard` (guard = 64 bits). Otherwise the smaller operand only affects a sticky bit: the result is the larger operand rounded under `rm` with the directed correction, and its error (≤ 1 ulp) goes into the radius; if neither path fits the precision cap, return `Resource`. This keeps `2^EXPONENT_MAX + 2^EXPONENT_MIN` from allocating ~2^32 bits. An **adversarial huge-gap set** (gaps at `prec + guard ± 1`, near `EXPONENT_MAX − EXPONENT_MIN`, mixed signs, under all 7 modes) is part of L0.
+- **The midpoint is computed exactly** (exact add/mul of finite binaries, P4, within the gap rule) and then rounded once to `prec` with `rm`, or every intermediate rounding is bounded and added to the radius. **Never** `prec + 4` with `RoundingMode::None` (the prototype's pattern).
+- **`is_unique_at(prec, rm)`**: compute the two rounding boundaries `b_lo < mid < b_hi` of the cell that rounds to `mid` at `prec` under `rm` (zf numbers in range; ties belong to the side `rm` sends them to); unique iff `r` is strictly below `mid − b_lo` and `b_hi − mid` (or ≤ on a side whose boundary itself rounds to `mid`), decided by `Mag::cmp_exact_diff`. If `r` is zero, unique iff `mid` is representable at `prec`. If `r` is `Infinity`, not unique. Because the whole interval rounds to one value, this covers every mode and every tie. This is the B1 contract: the mid is unique and correctly rounded whenever the ball is unique.
+- **`sqrt`**: the mid uses `rm`. The domain check is the **comparison `m > r`** by `Mag::cmp_exact_num` (no subtraction, no conversion of `r`). If `m > r`: `lo = m − r` rounded Down (gap rule above); `s = sqrt(lo)` rounded Down; `d = 2·s` (exact); `q = 1/d` rounded Up; `rad = mul_up(r, q) + ulp` with `add_up`. If `m ≤ r` and `−m ≤ r` (the ball touches 0): under `DomainPolicy::Clip` return a ball enclosing `[0, √(m+r)]`, with `√(m+r)` rounded Up, mid = half of it, and rad rounded up to cover both ends; under `Strict` return `Domain`. If `m < −r` (wholly negative), return `Domain` under both policies. **Never** a finite ball that pretends.
+- **`div` (in L0):** `a/b` with `q = m_a/m_b` (mid, rounded under `rm`). If the divisor touches 0 (`|m_b| ≤ r_b`, by `cmp_exact_num`), return `Domain` under both policies. Otherwise `rad = (r_a + |q|_up·r_b) / (|m_b| − r_b)_down + ε`, where `|q|_up` is `q` rounded up in magnitude into a Mag, `(|m_b| − r_b)_down` is computed with Down rounding into a lower-bound Mag (a Mag `sub_down`/`from_exact_num_down` helper in `mag/convert.rs`), the quotient is rounded up, and `ε` is the mid's rounding error.
 ## Part L. The correctness contract (B2 step 1, lands in L0 before any code)
 
 `docs/CONTRACT.md` in zenith-bound, written and reviewed before L0 code. Every later test cites a clause.
 
-1. **Value model.** A `Ball` denotes the closed set `[mid − rad, mid + rad]` of reals. `rad = Infinity` denotes all reals. A NaN midpoint is never stored; operations that would produce one return `Indeterminate` or an error.
+1. **Value model.** A `Ball` denotes the closed set `[mid − rad, mid + rad]` of reals. `rad = Infinity` denotes all reals; its canonical form has `mid = +0`. A NaN or infinite midpoint is never stored; operations that would produce one return `Indeterminate` or an error. **Signed zero:** a −0 midpoint (for example exact cancellation under `Down`, K2) is normalized to +0 at the ball boundary (every constructor and every op result), so `identical()` and the encoding see one zero.
 2. **Invariant (stated):** for every guaranteed op `f` and inputs `x_i ∈ X_i`, `f(x_1, …) ∈ f_ball(X_1, …)`, or the op returns `BoundError`/`Indeterminate`. Nothing else.
 3. **Precision model.** `prec: u32` bits, at least 1; zf stores a multiple of 64 bits (K5). `prec` shapes only the midpoint. The radius is always a `Mag` (64-bit mantissa, `i64` exponent).
+4a. **One exponent convention.** Everywhere in zenith-bound (API docs, `Mag`, the encoding, traces, tests) a finite nonzero value with exponent `e` and mantissa `m` (an unsigned integer of `k` bits with its top bit set) means **`0.m · 2^e = m · 2^(e − k)`**, i.e. zf's `exponent()` convention (value ∈ [2^(e−1), 2^e)). For `Mag`, `k = 64`. The leading-bit exponent, where needed, is always written `e − 1` and named `leading_bit_exponent`. No other convention (`m·2^e` with integer `m`, `mant·2^(exp−63)`) is used.
 4. **Exponent range.** Midpoints: zf's `EXPONENT_MIN..=EXPONENT_MAX` on 64-bit targets; on 32-bit targets zenith-bound refuses (`Overflow`) anything outside the 32-bit range so that results never differ by target (until P5 makes the ranges equal). Radii: `i64`, then `Infinity`.
 5. **Rounding.** The midpoint is rounded once to `prec` under the caller's `rm` from an exact or fully accounted value. The radius is rounded **up** at every step. No rounding error is ever dropped.
-6. **Radius rules.** Nonnegative. Zero only when exactness is proven (exact inputs and a ternary of `Equal`). Add: `(m+n) ± (r + s + ε)`. Mul: `mn ± (|m|s + |n|r + rs + ε)`, every term and sum evaluated with `mul_up`/`add_up`. `ε` = `ulp_mag(pre_round_exp, prec)` if the mid rounding was inexact, else 0 (a half ulp under nearest modes, a full ulp under directed ones).
-7. **Special values.** Division by a ball containing 0 never returns an ordinary finite ball (`Domain`, or `Indeterminate` when the caller opted into "whole line" semantics). Overflow: `Overflow` error or a ball with `rad = Infinity`, by caller choice; never saturation. Underflow: the radius absorbs the lost value, never zero.
+6. **Radius rules.** Nonnegative. Zero only when exactness is proven (exact inputs and a ternary of `Equal`); a zero radius early-returns through every Mag op (C6). Div: `(r_a + |q|·r_b)/(|m_b| − r_b) + ε`, numerator rounded up, denominator rounded down (C6). Add: `(m+n) ± (r + s + ε)`. Mul: `mn ± (|m|s + |n|r + rs + ε)`, every term and sum evaluated with `mul_up`/`add_up`. `ε` = `ulp_mag(pre_round_exp, prec)` if the mid rounding was inexact, else 0 (a half ulp under nearest modes, a full ulp under directed ones).
+7. **Domains and special values.** One `DomainPolicy { Strict, Clip }`, applied the same way by every op with a restricted domain (sqrt, log family, asin/acos, acosh, atanh, pow with a non-integer exponent, …): **`Strict`** returns `Domain` if any point of the input ball lies outside the domain; **`Clip`** encloses `f` over the intersection of the ball with the domain and returns `Domain` only if that intersection is empty (or is a single pole). The default is `Strict`. Division by a ball touching 0 returns `Domain` under both policies (there is no meaningful clipped quotient). Overflow: `Overflow` error or a ball with `rad = Infinity`, by caller choice; never saturation. Underflow: the radius absorbs the lost value, never zero; Mag exponent underflow rounds up to the smallest positive Mag (C6). `0 · Infinity` in radius arithmetic is `Infinity`.
 8. **Exactness.** `from_integer`, `from_rational` (exact when the denominator is a power of 2, otherwise a correctly enclosed ball), `is_exact` true only with proof.
 9. **Correctness vs tightness.** Correctness failures are P0 bugs. Tightness targets are measured (overestimation ratio vs the oracle's radius) and tracked; missing them is a performance bug.
 10. **Determinism.** Same `(op, inputs, prec, rm, version)` gives the same bytes on every supported target, build profile and thread count.
@@ -280,8 +295,9 @@ B2's order maps onto the layers like this: (1) contract + (2) real balls = **L0*
 
 ### L0 Contract and real balls (zenith-bound 0.1)
 
-- **Gate:** zf 2.0.0 fix green on Pop; zf 2.1 P1–P13 merged and green on Pop. Until P12 lands, L0 can be written against the K3 workaround, but not released.
-- **Order inside L0:** `CONTRACT.md` → `mag/*` → `ball/*` construction → add/sub/mul → div → sqrt → compare/contains/overlap → precision reduction → encoding.
+- **Gate:** zf 2.0.0 fix green on Pop; zf 2.1 P1–P13 merged and green on Pop (P14 gates L1). Until P12 lands (zf 2.0.0 currently returns Inf for every mode on overflow; the fix is in progress), L0 can be written against the K3 workaround, but not released.
+- **Order inside L0:** `CONTRACT.md` → `mag/*` (including `cmp`) → `policy.rs` → `ball/*` construction → add/sub/neg/abs → mul/sqr/powi → div → sqrt/hypot → sum/dot → compare/contains/overlap/union/intersect → floor/ceil/sgn → precision reduction → `decimal.rs` → encoding.
+- **Review rule:** every `src/mag/*` file gets, on top of the usual bot review, one extra review by a stronger reviewer (**Paul or Cassie**) before it merges; Mag is the trust root of every radius.
 - **File plan for the local qwen3-coder:30b (until 2026-10-30), one responsibility per file, soft target ≤ ~30 KB:**
 
   | File | Content |
@@ -293,33 +309,40 @@ B2's order maps onto the layers like this: (1) contract + (2) real balls = **L0*
   | `src/mag/mul.rs` | `mul_up` |
   | `src/mag/convert.rs` | `from_exact_num` (up), `to_exact_num` |
   | `src/mag/ulp.rs` | `ulp_mag`, `half_ulp`, `smaller_than_half_ulp` |
+  | `src/mag/cmp.rs` | `cmp_exact_num`, `cmp_exact_diff`, `cmp` (Mag vs Mag) |
+  | `src/policy.rs` | `DomainPolicy { Strict, Clip }` and its one shared domain-check helper |
   | `src/ball/mod.rs` | `Ball` struct, constructors from integers and rationals |
-  | `src/ball/arith_add.rs` | add, sub, neg |
-  | `src/ball/arith_mul.rs` | mul, `mul_2exp` |
+  | `src/ball/arith_add.rs` | add, sub, neg, abs (exponent-gap rule, C6) |
+  | `src/ball/arith_mul.rs` | mul, `mul_2exp`, sqr (a ball straddling 0 gives an enclosure of `[0, (|m|+r)^2]`), powi (repeated squaring; even powers use the sqr rule) |
   | `src/ball/arith_div.rs` | div, inv (domain rule) |
-  | `src/ball/sqrt.rs` | sqrt (C6) |
-  | `src/ball/compare.rs` | `Tri` comparisons, `contains`, `overlaps`, `is_exact`, `accuracy_bits` |
+  | `src/ball/sqrt.rs` | sqrt (C6), hypot (`sqrt(sqr(a) + sqr(b))` with the straddle rule; never Domain) |
+  | `src/ball/sum.rs` | `sum`, `dot` (sequential index order, one exact accumulation within the gap rule, one rounding, error into the radius) |
+  | `src/ball/compare.rs` | `Tri` comparisons, `identical`, `contains`, `overlaps`, `is_exact`, `accuracy_bits` (no `PartialEq`/`PartialOrd`) |
+  | `src/ball/set_ops.rs` | `union` (hull, rounded outward), `intersect` (returns `None` when disjoint, by exact comparison) |
+  | `src/ball/round.rs` | `floor`, `ceil` (an exact integer ball if the whole ball maps to one integer, else `Indeterminate`), `sgn` (returns `Tri`-style `Positive/Negative/Zero` or `Indeterminate` when the ball contains 0 and is not exactly 0) |
   | `src/ball/precision.rs` | `set_prec` (reduction enlarges radius), `refine(new_prec)`, `is_unique_at` |
   | `src/interval.rs` | inf–sup `Interval` and conversions |
+  | `src/decimal.rs` | decimal parse (gives an enclosing ball: the exact decimal rational, rounded Down/Up into a ball, radius 0 only if the decimal is a dyadic rational representable at `prec`) and decimal print (integer-only outward rounding; see Part F) |
   | `src/encode.rs` | canonical encoding (Part J) |
   | `tests/<topic>_props.rs` | one property/oracle/adversarial set per file |
 
   Modules later in the crate (B3): `mag`, `ball`, `complex`, `arith`, `elementary`, `special`, `certify`. `arith` holds the shared radius formulas used by `ball` and `complex`.
 - **Real ball ops (B2 step 2):** exact construction from integers and rationals; add/sub/mul/div per the contract; compare (`Tri`), `contains`, `overlaps`; precision reduction that rounds the mid and adds the rounding error to the radius; division by a ball containing 0 returns `Domain`/`Indeterminate`, never a finite ball.
-- **Tests (red first, sets only):** containment properties (random points inside input balls, exact-rational truth), rounding sets for every `rm` (the mid equals the correctly rounded exact result when the inputs are exact), `is_unique_at` sets including ties, Mag boundary sets (C6), adversarial sets (cancellation `(1+2^-k)−1` over k, near-zero denominators, extreme exponents near `EXPONENT_MIN/MAX`, the K3 overflow edge), overestimation measurements against python-flint's `arb` radius, and reproducibility (two runs, two targets, byte-equal).
+- **Tests (red first, sets only):** zero (mid 0, radius 0, both) is a member of **every** set; containment properties (random points inside input balls, truth from the independent rational model, Part E), rounding sets for every `rm` (the mid equals the correctly rounded exact result when the inputs are exact), `is_unique_at` sets including ties, Mag boundary sets (C6), adversarial sets (cancellation `(1+2^-k)−1` over k, near-zero denominators, divisors touching 0, extreme exponents near `EXPONENT_MIN/MAX`, the K3 overflow edge, the huge-gap set (C6), Mag exponents beyond `i32` in `contains`/`is_unique_at`/sqrt, Mag underflow at `i64::MIN`, `0 · Infinity`, −0 inputs under every mode, sqr/abs/floor/ceil/sgn across 0, decimal round-trips including `[0.9999, 1.0001]`), overestimation measurements against python-flint's `arb` radius, and reproducibility (two runs, two targets, byte-equal).
 
 ### L1 Elementary functions and constants (B2 step 3; B3 radius rules)
 
-- Functions: sqrt (from L0), exp, log, sin, cos, tan, atan, pow; constants pi, e, ln2, ln10.
+- Functions: sqrt (from L0), exp, exp2, expm1, log, log2, log10, log1p, sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh, asinh, acosh, atanh, pow; constants pi, e, ln2, ln10. Every domain-restricted one obeys the single `DomainPolicy` (Part L clause 7). Gate: zf 2.1 P14 for every kernel listed.
 - **First-order radius bounds (B1, B3)**, every expression evaluated rounding **up** in `Mag`, plus the mid's own error bound:
-  - exp: `rad' = |exp(m)|·(exp(r) − 1) + ulp`.
+  - exp: `rad' = exp_up(m) · r · exp_up(r) + ulp` (since `exp(r) − 1 ≤ r·exp(r)`; avoids the cancellation in `exp(r) − 1`). The same pattern (`r` times an upper bound of `|f'|` over the ball) is used for exp2, expm1, sinh and cosh.
   - sin/cos: `rad' = min(r, 2) + ulp`. Correct first; tighten later (`|cos m|·r + r²/2`-style bounds) only behind overestimation measurements.
   - ln: `rad' = r/(m − r) + ulp` for `m > r` (exact check); otherwise `Domain`/`Indeterminate`.
   - sqrt: `rad' = r/(2√(m − r)) + ulp` (C6 path).
-  - Here "ulp" is the proven error bound of the midpoint evaluation. zf's kernels are correctly rounded by Ziv loops but don't export a bound, so the mid is evaluated with directed `Down`/`Up` calls and the gap is added (no API change), or through certified kernels with explicit truncation, rounding and argument-reduction terms where that is too slow.
+  - The other additions use the mean-value form `sup|f'| over the ball · r + ulp`, with `sup|f'|` bounded upward in Mag: log1p/log2/log10 as ln (scaled by `1/ln2`, `1/ln10` rounded up); asin/acos `r/√(1 − (|m|+r)^2)` (Domain/Clip at ±1); atan `min(r, π)`; atan2 by quadrant with the branch cut on the negative real axis documented, `Domain` at (0, 0) under both policies; tanh `min(r, 2)`; asinh `r/√(1+(|m|−r)_+^2)`; acosh `r/√((m−r)^2 − 1)` for `m − r > 1`; atanh `r/(1 − (|m|+r)^2)` for `|m| + r < 1`.
+  - Here "ulp" is the proven error bound of the midpoint evaluation. zf's kernels are correctly rounded by Ziv loops but don't export a bound, so the mid is evaluated with directed `Down`/`Up` calls and the gap is added (no API change, valid only once P14 covers that kernel, including its exact cases), or with `ToEven` plus a proven ≤ 1 ulp bound (P14 alternative), or through certified kernels with explicit truncation, rounding and argument-reduction terms where that is too slow.
 - **Domains, poles, branch cuts, argument reduction** documented per function in `CONTRACT.md`; reduction uses π/ln2 enclosed at `prec + exponent + guard` bits and adds `|n|·rad(π)`.
 - **Compositions (B1):** higher-order or derivative-based propagation (mean-value form `f(m) ± sup|f'|·r` over the ball, or a degree-2 Taylor form) for composed expressions; when the dependency problem widens a result, convert to `Interval` and **subdivide**, then re-hull. Lands in `arith`/`elementary`; used heavily in L4.
-- **Tests:** sets (oracle containment vs python-flint `arb` and mpmath at 2×prec, plus exact rational checks where values are algebraic), adversarial (`sin(10^100)`, near multiples of π, `log(1+2^-400)`, `exp(±2^30)` overflow → `Overflow`/`Infinity`), overestimation ratios recorded per function.
+- **Tests:** sets (oracle containment vs python-flint `arb` and mpmath at 2×prec, plus exact rational checks where values are algebraic), adversarial (`sin(10^100)`, near multiples of π, `log(1+2^-400)`, `log1p`/`expm1` at `±2^-400`, the exact cases (`exp(0)`, `log(1)`, `atan(0)`, `exp2(n)`, `log2(2^n)`, …) under Up and Down, `asin`/`acos`/`atanh` balls touching ±1 under both policies, `atan2` near the cut and at (0, 0), `exp(±2^30)` overflow → `Overflow`/`Infinity`), overestimation ratios recorded per function.
 
 ### L2 Complex, polynomials, power series, matrices, then selected specials (B1, B2 step 4)
 
@@ -371,7 +394,8 @@ Tests: sets as for L1, plus poles (gamma at −n), branch cuts approached from b
 
 - **Red first.** Every item starts as failing tests. **No single exact-input tests** (B3 ban): each test file is a property set, an oracle set, an adversarial set or an overestimation measurement.
 - **Containment invariants:** random points inside the input balls (exact rationals) map inside the output ball; inclusion monotonicity (`A ⊆ A′ ⇒ f(A) ⊆ f(A′)`); `x − x ∋ 0`; `div(mul(a, b), b) ∋ a`.
-- **Rounding sets:** for exact inputs, the mid equals the exact result correctly rounded under each of the 7 modes (truth from exact integer arithmetic); `rm` never changes containment.
+- **Rounding sets:** for exact inputs, the mid equals the exact result correctly rounded under each of the 7 modes; `rm` never changes containment.
+- **Truth is independent of zf (review).** No test takes its truth from zf's `*_full_prec` ops or any other zf result: that would be circular, since zenith-bound's mids come from the same code. Truth comes from (a) a **dev-only rational/bigint model**, `tests/model/` in a dev-only crate (`publish = false`, a dev-dependency only; pure-Rust bigint/rational arithmetic, MIT/Apache-licensed, never a normal dependency), which implements exact add/sub/mul/div of dyadic rationals, directed rounding to `k` bits for every `k`, and the Mag value model; or (b) **Python-generated truth** (`fractions.Fraction` exact rationals, plus mpmath/python-flint for transcendentals) written to goldens by `scripts/` in the pinned environment.
 - **Adversarial sets:** cancellation, near-zero denominators, extreme exponents (both ends, subnormal mids, the K3 overflow edge), branch cuts, poles, wide input balls.
 - **Transcendentals:** containment against python-flint at 2× precision and mpmath, plus independent checks (below).
 - **Refinement:** `refine(p2)` with `p2 > p1` gives a ball contained in the `p1` result (when inputs are exact) and `accuracy_bits` grows.
@@ -380,7 +404,8 @@ Tests: sets as for L1, plus poles (gamma at −n), branch cuts approached from b
 - **Oracles (B2):** FLINT/Arb through **python-flint**, dev-only, next to mpmath (and MPFR for scalar midpoints). Never shipped, never a dependency, never in `Cargo.toml`. Golden generation runs in `scripts/` with a pinned python environment. **Agreeing with Arb isn't proof**, so every oracle family is backed by:
   - exact rational checks wherever the truth is rational or algebraic (`sqrt` of squares, `exp(0)`, polynomial values, Hilbert solutions);
   - independent algorithms (series vs asymptotic, AGM vs Taylor for log, two argument-reduction paths), compared by containment;
-  - the mutation check: shrinking any radius by 1 ulp in a test build must make the suite fail.
+  - the mutation check: shrinking any radius by 1 ulp in a test build (a `cfg(zb_shrink_radius)` test-only switch in the radius finaliser) must make the suite fail;
+  - **`cargo-mutants`** over `src/mag/*`, `src/ball/*` and `src/encode.rs` (nightly CI; every surviving mutant is either killed by a new set or documented as equivalent).
 - **No-hardware tests:** Part B.4.
 
 ## Part F. Accumath: proven digits only
@@ -393,11 +418,11 @@ Differentiator (B2): Accumath goes from a symbolic expression to a certified enc
 5. Quadrature (`NIntegrate`-style)
 6. ODE (last; opt-in)
 
-**Printer rule:** convert the ball to decimal by rounding outward. Print the longest digit string that is the same for every point in `[mid−rad, mid+rad]`, so all printed digits are proven. Then either:
+**Printer rule** (implemented in zenith-bound `src/decimal.rs`, integer arithmetic only): convert the ball to decimal by rounding outward (`lo` rounded down and `hi` rounded up to decimal, with bigint scaling, no floats). Print the longest digit string that is the same for every point in `[mid−rad, mid+rad]`, so all printed digits are proven. **Fallback when there is no common digit string** (the ball straddles a decimal carry, e.g. `[0.9999, 1.0001]`, where `lo` and `hi` share no leading digit): print `mid ± r` with the mid's decimal rounded to nearest at the digit of `r`, and `r` rounded up so that the printed interval still contains the ball (here `1.0000 ± 1.0e-4`), or the outward-rounded interval `[0.9999, 1.0001]`. Then either:
 - (a) show `d.ddd…ddd ± r` with `r` to 2 significant digits, rounded up (Arb's `arb_printd` style), or
 - (b) truncate, adding `…` when the asked-for precision isn't reached.
 
-If the ball holds 0 and has a large radius, print `0 ± r` or `[±r]`. Never pad unproven digits. The default is (b) for `N[]` and (a) in "verbose" mode. If the user asks for d digits and fewer are proven, retry at a higher precision (Ziv-style doubling, capped). If the cap is hit, show what is proven and a warning.
+Parsing (`decimal.rs`) gives an **enclosing ball**: the decimal's exact rational, rounded Down and Up at `prec`, hulled; never a point rounded to nearest. If the ball holds 0 and has a large radius, print `0 ± r` or `[±r]`. Never pad unproven digits. The default is (b) for `N[]` and (a) in "verbose" mode. If the user asks for d digits and fewer are proven, retry at a higher precision (Ziv-style doubling, capped). If the cap is hit, show what is proven and a warning.
 
 ## Part G. Effort (relative sizes; one run ≈ one agent session)
 
@@ -406,11 +431,12 @@ Jeff discounts AI timeline estimates, so this table gives **relative runs only**
 | Item | 10-13 runs | 10-14 runs | Why it changed |
 |---|---:|---:|---|
 | Pre-gate: zf 2.0.0 intrinsics fix + Pop gate | 4–8 | 4–8 | — |
-| zf 2.1 prerequisites (C1 P1–P13) + deprecations | 6–10 | 12–20 | 5 → 11 items; K3 overflow fix with corrected tests/generator; P13 test coverage |
-| Scaffold, NOTICE, CI on 1.99 | 2–4 | 2–3 | scaffold prepared (Part N) |
-| B: no-float guards + audit | 4–8 | 4–8 | — |
-| L0: contract + Mag + real balls | 12–20 | 16–26 | contract doc; locked Mag (u64/i64, add_up/mul_up/ulp/unique); error kinds; one-responsibility file split |
-| L1: elementary + constants | 20–35 | 20–35 | first-order rules (B3) are simpler, but composition/subdivision adds about as much |
+| zf 2.1 prerequisites (C1 P1–P14) + deprecations | 6–10 | 14–24 | 5 → 14 items; K3 overflow fix with corrected tests/generator; P13 test coverage; P14 transcendental Up/Down coverage and exact-case trap (review) |
+| Scaffold, NOTICE, CI on 1.99, open-source readiness | 2–4 | 3–5 | scaffold prepared (Part N); CONTRIBUTING/SECURITY/status table, cargo-deny, cargo-semver-checks (review) |
+| B: no-float guards + audit | 4–8 | 5–9 | separate unsafe `fpu-check` dev crate (review) |
+| L0: contract + Mag + real balls | 12–20 | 22–34 | contract doc; locked Mag (u64/i64, add_up/mul_up/ulp/unique); error kinds; one-responsibility file split; review scope: Mag cmp, zero/underflow rules, gap rule, DomainPolicy, abs/sqr/powi/hypot/sum/dot/floor/ceil/sgn/union/intersect, `decimal.rs` |
+| Independent truth model + cargo-mutants (dev-only) | — | 4–8 | new (review): rational/bigint model, Python truth, mutation CI |
+| L1: elementary + constants | 20–35 | 28–46 | first-order rules (B3) are simpler, but composition/subdivision adds about as much; review adds 13 functions (asin…exp2) |
 | L2a–c: ComplexBall (rect+disk), polynomials, series, matrices | (partly in L0/L4) | 18–32 | new scope (B1) |
 | L2d: selected specials | 35–60 | 30–55 | derivative bounds for erf/J0/J1; unprovable cases return `Indeterminate` instead of research |
 | L3: Petras quadrature | 10–20 | 10–20 | — |
@@ -419,13 +445,14 @@ Jeff discounts AI timeline estimates, so this table gives **relative runs only**
 | Accumath printer + integration | 6–12 | 8–14 | expression → enclosure workflow (B2) |
 | I: step traces + checker | 12–24 | 12–24 | — |
 | J: determinism, encoding, CI matrix | 16–30 | 13–22 | partly folded into L0 tests; 32-bit exponent issue tracked under P5 |
-| **Total** | **~147–268** | **~175–335** | about +19–25% |
+| **Total** | **~147–268** | **~195–345** | about +29–33% (column sums: 195 and 345; before the review the column summed to 173–331, which the table's old total misstated as 175–335) |
 
 ## Part H. Risks
 
 - **The zf pre-gate slips.** zenith-bound L0 can't start until the zf intrinsics fix and the C1 APIs are green on Pop. Mitigation: keep C1 small and additive, and land it right after the fix.
 - **Two-repo drift.** zf changes break zenith-bound, or move its bytes. Mitigation: zenith-bound CI also runs against zf `main` nightly, Accumath pins exact versions, and zf runs zenith-bound's byte goldens as an allowed-to-fail downstream job.
-- **Directed-rounding correctness in zf becomes load-bearing.** Option A in C1 trusts that zf `Up`/`Down` really bracket the result. Mitigation: zf's MPFR oracle must cover `Up`/`Down` for every kernel zenith-bound uses, at 256 and 512 bits. The current gap is `ToOdd`/`None` only (`tests/mpfr/common.rs:279-287`). Make this a C1 gate.
+- **Directed-rounding correctness in zf becomes load-bearing.** The L1 midpoint rule trusts that zf `Up`/`Down` really bracket the result. Mitigation: this is now gate **P14** in C1 (MPFR Up/Down for every transcendental kernel used, at 256 and 512 bits, including the Ziv exact cases, or `ToEven` plus a proven ≤ 1 ulp bound). For the basic ops the gap is `ToOdd`/`None` only (`tests/mpfr/common.rs:279-287`), covered by P13.
+- **License contamination from oracles.** Arb/FLINT and MPFR are LGPL. Mitigation: clean-room rule (CONTRIBUTING.md): implement from the published papers only, never from their source; oracles and the goldens derived from them are dev-only and never shipped (NOTICE); `cargo-deny` rejects LGPL in the dependency graph.
 - **puremp provenance.** Missing a header or the SHA is a license defect. Mitigation: the NOTICE CI check (C4). Also, puremp's design differs from zf's (a Float radius, `Ordering`-ternary ops), so the port is an adaptation, not a copy, and the savings may be smaller than 20–30%.
 
 - **Trace volume.** Big solutions could log 10^5–10^6 steps. Mitigation: hash-chain the steps, keep the full record only for user-visible steps, and store sub-steps on demand. Replaying from the root always rebuilds them, because results are deterministic (Part J).
@@ -451,7 +478,7 @@ Jeff discounts AI timeline estimates, so this table gives **relative runs only**
 
 **Trace record (exact, serialisable).** One record per step, written as JSON Lines with a canonical CBOR twin:
 ```json
-{"v":1, "step":17, "parent":[12,15], "op":"zb.ball.mul", "op_ver":"2.2.0",
+{"v":1, "step":17, "parent":[12,15], "op":"zb.ball.mul", "op_ver":"0.1.0",
  "prec":256, "rm":"ToEven",
  "in":[{"mid":{"s":1,"m":"0x8000…","e":-3,"p":256},"rad":{"m":"0x8000_0000_0000_0000","e":-260}}, …],
  "params":{…},
@@ -459,9 +486,10 @@ Jeff discounts AI timeline estimates, so this table gives **relative runs only**
  "kind":"exact|arith|elementary|special|quad|la|ode",
  "digest":"blake3:…"}
 ```
-- **`mid`** is the sign, the mantissa as hex (no trailing zero limbs), the binary exponent `e` (value = `m·2^e`), and the precision `p`. Special values are encoded as `{"nan":true}`, `{"inf":±1}` or `{"zero":±1}`.
-- **`rad`** is the `Mag` mantissa as hex (64 bits, top bit set, or 0 for a proven-exact radius) and its `i64` exponent, or `{"inf":1}`.
-- **`digest`** is BLAKE3 over the Part J canonical encoding of this record without the digest, plus the parent digests. That makes the trace a Merkle chain, so editing any step breaks every digest after it. BLAKE3 is pure Rust and integer-only.
+- **`mid`** is the sign, the mantissa as hex (`k` bits, top bit set, no trailing zero bytes), the binary exponent `e` in the one pinned convention (Part L 4a: value = `0.m·2^e` = `m·2^(e−k)`), and the precision `p`. The only special midpoint is `{"zero":1}` (−0 is normalized; NaN and infinite mids are never stored, so there is no `nan` or `inf` form).
+- **`op_ver`** is the zenith-bound version (0.x before 1.0) that defines the op's bytes.
+- **`rad`** is the `Mag` mantissa as hex (64 bits, top bit set, or 0 for a proven-exact radius) and its `i64` exponent in the same convention (value = `0.mant·2^e`), or `{"inf":1}`.
+- **`digest`** is BLAKE3 over the Part J canonical encoding of this record without the digest, plus the parent digests. That makes the trace a Merkle chain, so editing any step breaks every digest after it. BLAKE3 is used through the `blake3` crate with `default-features = false, features = ["pure"]`: the portable Rust implementation only, no SIMD, no assembly, no runtime CPU-feature detection (the no-float/no-intrinsics scan covers it). It is integer-only.
 - **No decimal strings in records.** Decimal goes only in an optional `"display"` field, which the checker ignores.
 
 **Threading through Accumath.**
@@ -486,7 +514,7 @@ Jeff discounts AI timeline estimates, so this table gives **relative runs only**
 - Runtime with the sink on: about 5–20% for coarse steps. Sub-step tracing can add 2–3×, and is opt-in.
 - Storage: about 150–400 bytes per record at 256 bits.
 - Check time: about the cost of one step at `2·prec`.
-- Build effort: 12–24 runs, 3–5 weeks (see Part G). Most of it falls in the L0 and Accumath integration windows.
+- Build effort: 12–24 runs (see Part G). Most of it falls in the L0 and Accumath integration windows.
 
 ## Part J. Bit-identical ball results across machines and builds
 
@@ -510,20 +538,20 @@ Jeff discounts AI timeline estimates, so this table gives **relative runs only**
 
 **Canonical encoding (`zf-ball-enc v1`).**
 - Byte layout, big-endian:
-  - `tag u8` (0 finite, 1 zero, 2 inf, 3 nan)
-  - `sign u8`
+  - `tag u8` (0 finite, 1 zero). Values 2 and 3 (formerly inf and nan) are **reserved and rejected by the decoder**: no NaN or infinite midpoint is ever stored (Part L clause 1); the whole line is mid zero with an infinite `Mag`
+  - `sign u8` (0 or 1; must be 0 when tag = 1, since −0 is normalized)
   - `prec u32`
-  - `exp i64`
-  - `len u32` + mantissa bytes, MSB first, trailing zero bytes stripped, top bit set
-  - then `Mag`: tag `u8` (0 finite, 1 infinity), `exp i64`, `mant u64` (top bit set, or `exp = 0, mant = 0` for a proven-zero radius)
+  - `exp i64` (zf convention: value = `0.m·2^exp`, Part L 4a; absent when tag = 1)
+  - `len u32` + mantissa bytes, MSB first, trailing zero bytes stripped, top bit set (absent when tag = 1)
+  - then `Mag`: tag `u8` (0 finite, 1 infinity; anything else rejected), `exp i64` (value = `0.mant·2^exp`), `mant u64` (top bit set, or `exp = 0, mant = 0` for a proven-zero radius; any other `mant < 2^63` rejected)
 - Complex values are re then im. Matrices are `rows u32, cols u32`, row-major.
 - One value has exactly one encoding, and the decoder rejects anything non-canonical.
 - The same bytes feed the Part I digest and the golden hashes.
-- Version byte up front. Changing the format requires a new major `v`.
+- Version byte up front. Changing the format requires a new major `v`; frozen at zenith-bound 1.0 (encoding-freeze promise, C3).
 
 **Golden hash files.**
 - `zenith-bound/tests/goldens/ball_bytes/<layer>.jsonl` holds one row per case: `{case_id, op, inputs_enc_hex, prec, rm, out_blake3}`. Each layer also gets a file-level BLAKE3 of all outputs.
-- A golden only changes in a commit that bumps `op_ver` and says why. CI rejects a hash change without a version bump.
+- A golden only changes in a commit that bumps `op_ver` (a 0.x version before 1.0) and says why. CI rejects a hash change without a version bump.
 - These are **our own** outputs. They test determinism, not correctness. Correctness is still the oracle-inclusion test (Part E).
 
 **CI matrix.** This lives in the **zenith-bound repo**, using the same pinned toolchain as zf (Rust 1.99 via `rust-toolchain.toml`) and the Part B no-hardware guards. Every cell runs the byte goldens in both **debug and release**:
@@ -550,7 +578,7 @@ Jeff discounts AI timeline estimates, so this table gives **relative runs only**
 
 Without J, a trace made on one machine might not byte-replay on another. Without I, a byte-identical answer is still unaudited.
 
-**Effort.** 16–30 runs, 3–6 weeks: about 4–8 runs for the bans and lints, 4–6 for the encoding and hashes, 6–12 for the CI matrix and cross-diff, and 2–4 to fix whatever the matrix finds, most likely in `Consts` caching and `mantissa/` thresholds.
+**Effort.** 13–22 runs (matches Part G; partly folded into L0 tests): about 3–6 runs for the bans and lints, 3–5 for the encoding and hashes, 5–8 for the CI matrix and cross-diff, and 2–3 to fix whatever the matrix finds, most likely in `Consts` caching and `mantissa/` thresholds.
 
 ## Part M. Where each brief item lands
 
@@ -582,7 +610,7 @@ Columns: layer; whether it changes the zf 2.1 prerequisites; relative effect on 
 | B3 | ComplexBall rect + disk with conversions; `refine(new_prec)` | L2a; `refine` in L0 | no | + |
 | B3 | Modules mag, ball, complex, arith, elementary, special, certify | L0–L4 | no | ≈ |
 | B3 | No single exact-input tests; overestimation measurements and broad sets | all | no | small + |
-| B4–B9 | Locked Mag: enum, `u64` mantissa, `Infinity`, value `mant·2^(exp−63)` | L0 | P1–P3; **exponent widened to `i64`** | included |
+| B4–B9 | Locked Mag: enum, `u64` mantissa, `Infinity`, value `0.mant·2^exp` (was written `mant·2^(exp−63)`; convention pinned, Part L 4a) | L0 | P1–P3; **exponent widened to `i64`** | included |
 | B4–B9 | `add_up` (sticky, +1 ulp, shift ≥ 64), `mul_up` (`u128`, both product ranges) | L0 | no | included |
 | B4–B9 | Overflow → Infinity, NaN/Inf → Infinity | L0 | P12 for the mid side | included |
 | B4–B9 | `from_exact_num`/`to_exact_num` | L0 | P2, P3 | included |
@@ -591,7 +619,8 @@ Columns: layer; whether it changes the zf 2.1 prerequisites; relative effect on 
 | B4–B9 | Exact mid or accounted rounding; never `prec+4` with `None` | L0 | P4 | included |
 | B4–B9 | `is_unique_at` | L0 | P4 | included |
 | B4–B9 | sqrt radius path, exact domain check, touch-0 rule, domain error | L0 | P6 | included |
-| B4–B9 | zf 2.1 prerequisites marked EXISTS/MISSING | C1 | yes (P12, P13 added) | + (zf 2.1 roughly doubles) |
+| B4–B9 | zf 2.1 prerequisites marked EXISTS/MISSING | C1 | yes (P12, P13, P14 added) | + (zf 2.1 roughly doubles) |
+| Review | Outside review 2026-10-14 (all items) | see Part R | P14 | + (Part G) |
 | Note | qwen3-coder:30b local model until 2026-10-30, hunk-sized directives | L0 file plan | no | ≈ (no extra runs from context) |
 
 ## Part N. Repo scaffold (prepared, not created)
@@ -599,5 +628,61 @@ Columns: layer; whether it changes the zf 2.1 prerequisites; relative effect on 
 Prepared locally at `/workspace/zenith-bound-scaffold/` (not a git repo, nothing pushed, no GitHub repo created):
 - `Cargo.toml` (zenith-bound 0.0.0, edition 2021, rust-version 1.99, `MIT OR Apache-2.0`, `publish = false`), `rust-toolchain.toml` (channel 1.99), `src/lib.rs` (crate doc + `#![forbid(unsafe_code)]` only).
 - `LICENSE-MIT` and `LICENSE-APACHE` (Apache text fetched from apache.org; MIT copyright Jeff Carr), `NOTICE-puremp` (puremp's MIT license verbatim from its repo, HEAD `283471d`), `README.md` (pre-release, nothing guaranteed), `docs/PLAN.md` (this plan).
-- `jscarr64/zenith-bound` did not exist on GitHub on 2026-10-14 (repository search returned 0). Creating it needs Jeff's approval.
+- The repo now exists as `jscarr64/zenith-bound` (scaffold commit `d0dd0f9`). The review added `CONTRIBUTING.md`, `SECURITY.md`, a top-level `NOTICE` (oracles and derived goldens are dev-only) and README updates (status table) in a docs-only commit.
 
+
+## Part R. Review 2026-10-14 dispositions
+
+An outside review of this plan (main `71681fa`) raised the items below. Each has a disposition: **accepted** (done as asked), **changed** (done, differently from how it was asked, with the reason), or **rejected** (not done, with the reason). This revision is docs only; no code changed.
+
+### R1. Inconsistencies
+| # | Item | Disposition | Where |
+|---|---|---|---|
+| 1.1 | Part G totals didn't match the headline or the column sums | **Accepted.** The 10-14 column summed to 173–331 while the table said 175–335. After the review's scope changes the column sums to **195–345**; the headline, Summary and table total all say that. Part J's own effort line (16–30, plus weeks) now matches Part G's 13–22, and the leftover week counts in Parts I and J are gone | Summary, Part G, I, J |
+| 1.2 | "5 → 11" vs C1 listing P1–P13 | **Accepted.** Now "5 → 14 (P1–P14)" in C1 and Part G | C1, G |
+| 1.3 | Add P14: Up/Down MPFR coverage for every transcendental kernel; Ziv exact-case trap; ToEven + proven ≤ 1 ulp alternative; move Part H's gate into the P list | **Accepted.** P14 added to C1 and gates L1; Part H now points to P14. The stray "Option A in C1" (no such option exists) is removed | C1, L1, H |
+| 1.4 | One exponent convention for zf `0.m·2^e`, Part I `m·2^e` and Mag `mant·2^(exp−63)` | **Accepted (convention), changed (Mag).** CONTRACT.md clause 4a pins zf's `0.m·2^e`. Mag keeps its fields (`u64` mantissa with the top bit set, `i64` exponent), but `exp` now means `0.mant·2^exp`, so the mul_up exponent formulas and the half-ulp boundary set were redone. The encoding and traces use the same convention. **Jeff should confirm, because C6 was locked** | B, C6, L 4a, I, J, M |
+| 1.5 | Encoding tag 3 = nan contradicts the no-stored-NaN rule | **Accepted.** Tags 2 and 3 are reserved and the decoder rejects them; the whole line is mid +0 with `rad = Infinity`. Trace `nan`/`inf` mids are gone too | L 1, I, J |
+| 1.6 | −0 from exact cancellation under Down | **Accepted.** −0 is normalized to +0 at the ball boundary; the encoding rejects sign = 1 on zero | K2, L 1, J |
+| 1.7 | BLAKE3 pure feature | **Accepted.** `default-features = false, features = ["pure"]`: no SIMD, no asm, no CPU detection | I |
+| 1.8 | op_ver example should be 0.x | **Accepted.** `"0.1.0"`; op_ver is defined as the zenith-bound version | I, J |
+
+### R2. Soundness
+| # | Item | Disposition | Where |
+|---|---|---|---|
+| 2.1 | Zero Mag early-returns everywhere; zero in every test set; 0·∞ = Infinity | **Accepted** | C6, L 6–7, L0 tests |
+| 2.2 | Underflow below `i64::MIN` rounds UP to the smallest positive Mag | **Accepted.** `checked_*` everywhere; the low side gives `mant = 2^63, exp = i64::MIN` | C6, L 7 |
+| 2.3 | `Mag::cmp_exact_num` etc.; contains / is_unique_at / sqrt domain never build the radius in zf | **Accepted.** `cmp_exact_num` and `cmp_exact_diff` added in `src/mag/cmp.rs`; `is_unique_at` is restated as a comparison against the rounding-cell boundaries | C6, L0 file plan |
+| 2.4 | Exact add only within the gap ≤ prec+guard, otherwise the sticky/directed path or Resource; sqrt domain is the comparison m > r; adversarial huge-gap set | **Accepted.** guard = 64 bits | C6, L0 tests |
+| 2.5 | Division radius `(r_a + |q|_up·r_b)/(|m_b|−r_b)_down + ε`; a divisor touching 0 gives Domain | **Accepted.** Domain under both policies (the old "Indeterminate when whole line" option is gone) | C6, L 6–7 |
+| 2.6 | exp radius `r·exp_up(r)` | **Accepted.** `rad' = exp_up(m)·r·exp_up(r) + ulp`; the same pattern covers exp2/expm1/sinh/cosh | L1 |
+| 2.7 | One DomainPolicy {Strict, Clip}, applied uniformly | **Accepted.** Default Strict; replaces the sqrt "strict domain gets Indeterminate" wording | C5, C6, L 7, L0 `policy.rs`, L1 |
+
+### R3. Scope
+| # | Item | Disposition | Where |
+|---|---|---|---|
+| 3.1 | L0: abs, sqr (straddle → `[0,(|m|+r)^2]`), powi, hypot, sum/dot, floor/ceil/sgn → Tri or Indeterminate, union/intersect in the file plan; no PartialEq/PartialOrd, use identical() and Tri | **Accepted** | C5, L0 file plan |
+| 3.2 | L1: asin, acos, atan2, sinh, cosh, tanh and their inverses, log1p, expm1, log2, log10, exp2 | **Accepted.** Each has a radius rule, domain policy and adversarial cases; all need P14 | L1, C1 P14 |
+| 3.3 | `decimal.rs`: parse → enclosing ball; print rounds outward in integers, with a fallback when there's no common digit string | **Accepted.** In the L0 file plan; the Part F printer points to it; the fallback is `mid ± r` or the interval form | L0, F |
+| 3.4 | Adjust the estimates (relative runs only) | **Accepted.** zf 2.1 14–24, scaffold/OSS 3–5, B 5–9, L0 22–34, L1 28–46, new truth-model/mutants row 4–8; total 195–345 | G |
+
+### R4. Testing
+| # | Item | Disposition | Where |
+|---|---|---|---|
+| 4.1 | No truth from zf `*_full_prec` (circular) | **Accepted.** A dev-only rational/bigint model crate, or Python `Fraction`/mpmath/python-flint goldens | E, L0 tests, C6 |
+| 4.2 | cargo-mutants plus the shrink-radius-by-1-ulp check | **Accepted.** Shrinking is a `cfg(zb_shrink_radius)` switch; cargo-mutants runs nightly on mag/ball/encode | E |
+| 4.3 | Every `mag/*` file gets an extra stronger-reviewer review (Paul or Cassie) | **Accepted** | L0 review rule, CONTRIBUTING.md |
+
+### R5. Open-source readiness
+| # | Item | Disposition | Where |
+|---|---|---|---|
+| 5.1 | Clean-room rule for LGPL Arb/FLINT and MPFR in CONTRIBUTING; NOTICE says oracles and derived goldens are dev-only | **Accepted.** CONTRIBUTING.md has the rule; a new top-level `NOTICE` and a README section say it; `NOTICE-puremp` is unchanged | CONTRIBUTING.md, NOTICE, README.md, H |
+| 5.2 | README per-function status table (Guaranteed / Heuristic / Refused); "rigorous" only after the contract tests pass | **Accepted.** Every row starts as "Not yet (pre-release)" | README.md |
+| 5.3 | SECURITY.md: containment failures are security-grade | **Accepted** | SECURITY.md |
+| 5.4 | CONTRIBUTING: no-float rule, red-first, the single-exact-input-test ban, oracle setup | **Accepted** | CONTRIBUTING.md |
+| 5.5 | Reuse lint, cargo-deny, cargo-semver-checks, encoding-freeze promise | **Accepted** | C3 |
+| 5.6 | Check whether `zenith-bound` is free on crates.io | **Accepted.** On 2026-10-14 the API returned HTTP 404, "crate `zenith-bound` does not exist", so the name was free. Nothing was reserved (`publish = false`) | C3 |
+| 5.7 | MSRV policy: the frozen Rust 1.99 pin | **Accepted** | C3, CONTRIBUTING.md |
+| 5.8 | The unsafe fesetround test goes in a separate dev crate | **Accepted.** `fpu-check/` (`publish = false`); zenith-bound keeps `forbid(unsafe_code)` | B.4 |
+
+**Open for Jeff:** 1.4 changes the meaning of the locked Mag exponent by one. The representation is unchanged.
