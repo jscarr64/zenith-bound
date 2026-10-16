@@ -497,9 +497,8 @@ fn run_edge(label: &str, rule: &Rule, parity: &Parity, op: &Op) -> Result<Tally,
 
 // ---- the real Mag ------------------------------------------------------------------------------------------------------------
 
-fn mag_of(v: &Val) -> Result<Mag, String> {
-    Mag::finite(v.mant, v.exp)
-        .map_err(|e| format!("Mag::finite({:#x}, {}) failed: {:?}", v.mant, v.exp, e))
+fn mag_from(mant: u64, exp: i64) -> Result<Mag, String> {
+    Mag::finite(mant, exp).map_err(|e| format!("Mag::finite({:#x}, {}) failed: {:?}", mant, exp, e))
 }
 
 fn out_of(m: &Mag) -> Result<Out, String> {
@@ -515,11 +514,11 @@ fn out_of(m: &Mag) -> Result<Out, String> {
 }
 
 fn binary(f: fn(&Mag, &Mag) -> Mag) -> impl Fn(&Val, &Val) -> Result<Out, String> {
-    move |a: &Val, b: &Val| out_of(&f(&mag_of(a)?, &mag_of(b)?))
+    move |a: &Val, b: &Val| out_of(&f(&mag_from(a.mant, a.exp)?, &mag_from(b.mant, b.exp)?))
 }
 
 fn unary(f: fn(&Mag) -> Mag) -> impl Fn(&Val, &Val) -> Result<Out, String> {
-    move |a: &Val, _b: &Val| out_of(&f(&mag_of(a)?))
+    move |a: &Val, _b: &Val| out_of(&f(&mag_from(a.mant, a.exp)?))
 }
 
 fn w1_random(
@@ -560,7 +559,7 @@ fn mag_adapter_round_trips_finite_values() -> Result<(), String> {
         (i64::MAX, u64::MAX),
     ] {
         let v = Val { exp, mant };
-        let m = mag_of(&v)?;
+        let m = mag_from(v.mant, v.exp)?;
         expect_eq(
             "Mag::finite then exp and mant",
             &out_of(&m)?,
