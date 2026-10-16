@@ -1,10 +1,10 @@
 //! `add_up`: the least `Mag` at or above the sum of two magnitudes.
 
-use super::round::loose;
-use super::round::norm_u128;
+use super::round::norm;
 use super::round::settle;
 use super::Mag;
 use super::TOP;
+use core::num::NonZeroU128;
 use core::num::NonZeroU64;
 
 impl Mag {
@@ -30,48 +30,37 @@ impl Mag {
 }
 
 fn add_parts(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64) -> Mag {
+    settle(add_checked(ea, ma, eb, mb), true)
+}
+
+fn add_checked(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64) -> Option<Mag> {
     let (ea, ma, eb, mb) = if ea >= eb {
         (ea, ma, eb, mb)
     } else {
         (eb, mb, ea, ma)
     };
-    let gap = match i128::from(ea).checked_sub(i128::from(eb)) {
-        Some(gap) => gap,
-        None => return Mag::infinity(),
-    };
-    if gap >= 64 {
-        return successor(ea, ma.get());
+    // |ea - eb| < 2^65, so the checked subtraction cannot fail.
+    let gap = i128::from(ea).checked_sub(i128::from(eb))?;
+    match u32::try_from(gap) {
+        // gap < 64: `ma << gap < 2^127`, so the aligned sum is exact in 128 bits (checked_add
+        // cannot fail) and nonzero because `mb` is.
+        Ok(gap) if gap < 64 => {
+            let sum = NonZeroU128::from(mb).checked_add(u128::from(ma.get()) << gap)?;
+            norm(sum, i128::from(eb).checked_sub(64)?, false, true)
+        }
+        // gap >= 64: the smaller operand is below one unit of the larger one's last place.
+        _ => Some(successor(ea, ma)),
     }
-    let gap_u = match u32::try_from(gap) {
-        Ok(gap) => gap,
-        Err(_) => return Mag::infinity(),
-    };
-    let shifted = match u128::from(ma.get()).checked_shl(gap_u) {
-        Some(shifted) => shifted,
-        None => return Mag::infinity(),
-    };
-    let sum = match shifted.checked_add(u128::from(mb.get())) {
-        Some(sum) => sum,
-        None => return Mag::infinity(),
-    };
-    let scale = match i128::from(eb).checked_sub(64) {
-        Some(scale) => scale,
-        None => return loose(true),
-    };
-    settle(norm_u128(sum, scale, false, true), true)
 }
 
 /// The next `Mag` strictly above the canonical finite value `(exp, mant)`.
-fn successor(exp: i64, mant: u64) -> Mag {
-    if mant == u64::MAX {
-        match exp.checked_add(1) {
+fn successor(exp: i64, mant: NonZeroU64) -> Mag {
+    match mant.get().checked_add(1) {
+        Some(next) => Mag::from_canonical(exp, next),
+        // mant was u64::MAX: the next value is 2^63 at the next exponent, or Infinity (reachable).
+        None => match exp.checked_add(1) {
             Some(exp) => Mag::from_canonical(exp, TOP),
             None => Mag::infinity(),
-        }
-    } else {
-        match mant.checked_add(1) {
-            Some(mant) => Mag::from_canonical(exp, mant),
-            None => Mag::infinity(),
-        }
+        },
     }
 }
