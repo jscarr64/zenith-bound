@@ -2,6 +2,11 @@
 //!
 //! Pre-release. Nothing in this crate is guaranteed yet.
 #![forbid(unsafe_code)]
+#![deny(
+    missing_docs,
+    clippy::allow_attributes,
+    clippy::arithmetic_side_effects
+)]
 
 pub mod error;
 pub mod mag;
