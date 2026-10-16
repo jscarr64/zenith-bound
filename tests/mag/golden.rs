@@ -182,13 +182,13 @@ fn perturb(op: &str, want: &MagV) -> Option<MagV> {
     if is_up(op) {
         match want {
             MagV::Infinity => Some(max_mag()),
-            _ => Some(succ(want)),
+            MagV::Finite { .. } => Some(succ(want)),
         }
     } else {
         match want {
             MagV::Infinity => None,
             MagV::Finite { mant: 0, .. } => Some(min_pos_mag()),
-            _ => pred(want),
+            MagV::Finite { .. } => pred(want),
         }
     }
 }
