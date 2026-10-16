@@ -43,49 +43,61 @@ fn result(it: &mut SplitWhitespace) -> Result<MagV, String> {
     Ok(MagV::Finite { exp, mant })
 }
 
+/// Runs one row if its op is `op`; returns whether it ran.
+fn run_line(line: &str, op: &str) -> Result<bool, String> {
+    let line = line.trim();
+    if line.is_empty() || line.starts_with('#') {
+        return Ok(false);
+    }
+    let mut it = line.split_whitespace();
+    if word(&mut it)? != op {
+        return Ok(false);
+    }
+    let (got, want) = match op {
+        "ulp_mag" | "half_ulp" => {
+            let exp = i64_of(&mut it)?;
+            let prec = u32::try_from(u64_of(&mut it)?).map_err(|e| format!("bad u32: {}", e))?;
+            let m = if op == "ulp_mag" {
+                Mag::ulp_mag(exp, prec)
+            } else {
+                Mag::half_ulp(exp, prec)
+            };
+            (to_magv(&m)?, result(&mut it)?)
+        }
+        _ => {
+            let a = from_magv(&finite(&mut it)?)?;
+            let b = from_magv(&finite(&mut it)?)?;
+            let m = match op {
+                "add_up" => a.add_up(&b),
+                "mul_up" => a.mul_up(&b),
+                "mul_lower" => a.mul_lower(&b),
+                "sub_lower" => a.sub_lower(&b),
+                "div_up" => a.div_up(&b),
+                "div_lower" => a.div_lower(&b),
+                _ => return Err(format!("unknown op {}", op)),
+            };
+            (to_magv(&m)?, result(&mut it)?)
+        }
+    };
+    if let Some(extra) = it.next() {
+        return Err(format!(
+            "unexpected trailing token {:?} after the result of a {} row",
+            extra, op
+        ));
+    }
+    if got != want {
+        return Err(format!("{}: expected {:?}, got {:?}", line, want, got));
+    }
+    Ok(true)
+}
+
 /// Runs every row whose op is `op`; returns how many rows ran.
 fn run(op: &str) -> Result<usize, String> {
     let mut ran = 0usize;
     for line in ROWS.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
+        if run_line(line, op)? {
+            ran += 1;
         }
-        let mut it = line.split_whitespace();
-        if word(&mut it)? != op {
-            continue;
-        }
-        let (got, want) = match op {
-            "ulp_mag" | "half_ulp" => {
-                let exp = i64_of(&mut it)?;
-                let prec =
-                    u32::try_from(u64_of(&mut it)?).map_err(|e| format!("bad u32: {}", e))?;
-                let m = if op == "ulp_mag" {
-                    Mag::ulp_mag(exp, prec)
-                } else {
-                    Mag::half_ulp(exp, prec)
-                };
-                (to_magv(&m)?, result(&mut it)?)
-            }
-            _ => {
-                let a = from_magv(&finite(&mut it)?)?;
-                let b = from_magv(&finite(&mut it)?)?;
-                let m = match op {
-                    "add_up" => a.add_up(&b),
-                    "mul_up" => a.mul_up(&b),
-                    "mul_lower" => a.mul_lower(&b),
-                    "sub_lower" => a.sub_lower(&b),
-                    "div_up" => a.div_up(&b),
-                    "div_lower" => a.div_lower(&b),
-                    _ => return Err(format!("unknown op {}", op)),
-                };
-                (to_magv(&m)?, result(&mut it)?)
-            }
-        };
-        if got != want {
-            return Err(format!("{}: expected {:?}, got {:?}", line, want, got));
-        }
-        ran += 1;
     }
     if ran == 0 {
         Err(format!("no rows for {}", op))
@@ -132,4 +144,62 @@ fn review_rows_ulp_mag() -> Result<(), String> {
 #[test]
 fn review_rows_half_ulp() -> Result<(), String> {
     run("half_ulp").map(|_| ())
+}
+
+const REVIEW_OPS: [&str; 8] = [
+    "sub_lower",
+    "add_up",
+    "div_up",
+    "div_lower",
+    "mul_up",
+    "mul_lower",
+    "ulp_mag",
+    "half_ulp",
+];
+
+fn first_row_of(op: &str) -> Result<&'static str, String> {
+    ROWS.lines()
+        .find(|l| l.split_whitespace().next() == Some(op))
+        .ok_or_else(|| format!("no {} row in the review goldens", op))
+}
+
+fn expect_row_rejected(line: &str, op: &str) -> Result<(), String> {
+    match run_line(line, op) {
+        Err(_) => Ok(()),
+        Ok(_) => Err(format!("the review-row runner accepted: {}", line)),
+    }
+}
+
+#[test]
+fn review_row_runner_accepts_the_first_row_of_every_op() -> Result<(), String> {
+    for op in REVIEW_OPS {
+        let line = first_row_of(op)?;
+        if !run_line(line, op)? {
+            return Err(format!("{} row was not run: {}", op, line));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn review_row_runner_rejects_trailing_tokens_on_binary_and_ulp_rows() -> Result<(), String> {
+    for op in REVIEW_OPS {
+        let line = first_row_of(op)?;
+        expect_row_rejected(&format!("{} 7", line), op)?;
+        expect_row_rejected(&format!("{} inf", line), op)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn review_row_runner_rejects_rows_missing_a_column() -> Result<(), String> {
+    for op in REVIEW_OPS {
+        let line = first_row_of(op)?;
+        let cut = line
+            .rsplit_once(' ')
+            .map(|(head, _)| head)
+            .ok_or_else(|| format!("row has no space: {}", line))?;
+        expect_row_rejected(cut, op)?;
+    }
+    Ok(())
 }
