@@ -4,6 +4,8 @@ use super::round::loose;
 use super::round::norm_u128;
 use super::round::settle;
 use super::Mag;
+use core::num::NonZeroU128;
+use core::num::NonZeroU64;
 
 impl Mag {
     /// Least `Mag` at or above `self / other` (CONTRACT 14.1, 14.4).
@@ -14,11 +16,7 @@ impl Mag {
     /// yields zero. Exponent underflow rounds up to the smallest positive `Mag`;
     /// exponent overflow is `Infinity`.
     pub fn div_up(&self, other: &Mag) -> Mag {
-        if self.is_infinity() || other.is_infinity() || other.is_zero() {
-            Mag::infinity()
-        } else {
-            div_parts(self, other, true)
-        }
+        div_parts(self, other, true)
     }
 
     /// Greatest `Mag` at or below `self / other` (CONTRACT 14.2, 14.4).
@@ -27,43 +25,32 @@ impl Mag {
     /// zero. Exponent underflow yields zero. Exponent overflow yields the largest
     /// finite `Mag`.
     pub fn div_lower(&self, other: &Mag) -> Mag {
-        if self.is_infinity() || other.is_infinity() || other.is_zero() {
-            Mag::zero()
-        } else {
-            div_parts(self, other, false)
-        }
+        div_parts(self, other, false)
     }
 }
 
 fn div_parts(num: &Mag, den: &Mag, up: bool) -> Mag {
-    let Some((ea, ma)) = num.nonzero() else {
-        return Mag::zero();
-    };
-    let Some((eb, mb)) = den.nonzero() else {
+    if num.is_infinity() || den.is_infinity() {
         return loose(up);
-    };
-    let numerator = match u128::from(ma.get()).checked_shl(64) {
-        Some(numerator) => numerator,
-        None => return loose(up),
-    };
-    let divisor = u128::from(mb.get());
-    let quot = match numerator.checked_div(divisor) {
-        Some(quot) => quot,
-        None => return loose(up),
-    };
-    let sticky = match quot.checked_mul(divisor) {
-        Some(prod) => match numerator.checked_sub(prod) {
-            Some(rem) => rem != 0,
-            None => true,
-        },
-        None => true,
-    };
-    let scale = match i128::from(ea)
-        .checked_sub(i128::from(eb))
-        .and_then(|diff| diff.checked_sub(64))
-    {
-        Some(scale) => scale,
-        None => return loose(up),
-    };
-    settle(norm_u128(quot, scale, sticky, up), up)
+    }
+    match (num.nonzero(), den.nonzero()) {
+        // A zero divisor is decided before a zero numerator (CONTRACT 14.6): 0 / 0 is Infinity up.
+        (_, None) => loose(up),
+        (None, Some(_)) => Mag::zero(),
+        (Some((ea, ma)), Some((eb, mb))) => settle(div_checked(ea, ma, eb, mb, up), up),
+    }
+}
+
+fn div_checked(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64, up: bool) -> Option<Mag> {
+    let numerator = u128::from(ma.get()) << 64;
+    let divisor = NonZeroU128::from(mb);
+    let quot = numerator / divisor;
+    let sticky = numerator % divisor != 0;
+    // |ea - eb - 64| < 2^66, so the checked steps cannot fail.
+    let scale = i128::from(ea)
+        .checked_sub(i128::from(eb))?
+        .checked_sub(64)?;
+    // quot >= 2^127 / 2^64 = 2^63, so it is nonzero; division does not carry that in its type,
+    // so a zero quotient would be `None` here and settle to the sound bound.
+    norm_u128(quot, scale, sticky, up)
 }
