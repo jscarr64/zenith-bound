@@ -19,7 +19,7 @@ test-code exemption: #[cfg(test)] items, tests/, benches/, examples/ and test he
 like library code, and every pattern below applies to every scanned path.
 
 Flagged on added lines only (comments and string literals are ignored):
-  .clone(  .clone_from(  Clone::clone  .to_vec(  .cloned(  .to_owned(  derive(..Clone|Copy..)
+  .clone(  .clone_from(  Clone::clone  .to_vec(  .cloned(  .copied(  .to_owned(  derive(..Clone|Copy..)
   impl Clone|Copy for  unsafe  #[allow / #![allow  unwrap(  expect(  panic!  unreachable!  todo!
   unimplemented!  f32  f64  core::arch / std::arch / target_feature / mul_add / is_x86_feature_detected
 (`assert!`, `assert_eq!`, `assert_ne!`, `assert_matches!` and their `debug_` forms ARE flagged, as are `unwrap_or_default(`, `unwrap_unchecked(`, `unwrap_err(`, `unwrap_err_unchecked(` and `expect_err(`. A `#[derive(` that spans several lines is flagged when a following added line of the same block names Clone or Copy.)
@@ -29,7 +29,7 @@ for every flagged site (hash = sha1 of the added line with whitespace collapsed)
 ONLY JEFF MAY EXTEND IT (.github/CODEOWNERS requires his review). Models never add entries. An unwrap that
 is absolutely necessary is listed there with its reason, for Jeff.
 
-CLONE COUNT: total `.clone(` occurrences in all scanned Rust files (tests included) must never go up versus
+CLONE COUNT: total `.clone(` and `.copied(` occurrences in all scanned Rust files (tests included) must never go up versus
 tools/clone_count_baseline.txt (starts at 0). The baseline is only ever lowered, with --update-baseline.
 
 REF COUNT: total uses of `add_ref(` `sub_ref(` `mul_ref(` `div_ref(` (borrowed-borrowed zenith-float calls,
@@ -65,6 +65,7 @@ PATTERNS = [
     ("clone_path", re.compile(r"\bClone::clone\b")),
     ("to_vec", re.compile(r"\.to_vec\(")),
     ("cloned", re.compile(r"\.cloned\(")),
+    ("copied", re.compile(r"\.copied\(")),
     ("to_owned", re.compile(r"\.to_owned\(")),
     ("derive_clone", re.compile(r"#\[derive\([^)]*\b(?:Clone|Copy)\b")),
     ("impl_clone", re.compile(r"\bimpl(?:<[^>]*>)?\s+(?:Clone|Copy)\s+for\b")),
@@ -172,12 +173,12 @@ def clone_count():
                     continue
                 lines = open(os.path.join(dp, f), errors="replace").read().split("\n")
                 for l in lines:
-                    total += len(re.findall(r"\.clone\(", strip(l)))
+                    total += len(re.findall(r"\.(?:clone|copied)\(", strip(l)))
     build_rs_path = os.path.join(ROOT, "build.rs")
     if os.path.exists(build_rs_path):
         lines = open(build_rs_path, errors="replace").read().split("\n")
         for l in lines:
-            total += len(re.findall(r"\.clone\(", strip(l)))
+            total += len(re.findall(r"\.(?:clone|copied)\(", strip(l)))
     return total
 
 

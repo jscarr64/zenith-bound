@@ -26,6 +26,7 @@ clone_from|y.clone_from(&x);
 clone_path|let y = Clone::clone(&x);
 to_vec|let y = s.to_vec();
 cloned|let y = it.cloned();
+copied|let y = it.copied();
 to_owned|let y = s.to_owned();
 derive_clone|#[derive(Clone)]
 derive_clone|#[derive(Debug, Clone, Copy)]
@@ -164,6 +165,9 @@ printf 'fn a(x: &S) { let y = x.clone(); }\n' > src/x.rs; git add -A; git commit
 echo 1 > tools/clone_count_baseline.txt
 scan --count-only >/dev/null || fail "count == baseline should pass"
 echo 0 > tools/clone_count_baseline.txt; scan --count-only >/dev/null && fail "count above baseline passed"
+printf 'fn a(x: &S) { let y = x.clone(); let z = it.copied(); }\n' > src/x.rs; echo 2 > tools/clone_count_baseline.txt
+scan --count-only | grep -q "clone count 2 == baseline" || fail "a .copied( use must count with the clone family: $(scan --count-only)"
+printf 'fn a(x: &S) { let y = x.clone(); }\n' > src/x.rs
 echo 5 > tools/clone_count_baseline.txt; scan --count-only | grep -qi "lower" || fail "no hint to lower baseline"
 scan --update-baseline >/dev/null || fail "lowering baseline failed"; [ "$(tr -d '[:space:]' < tools/clone_count_baseline.txt)" = 1 ] || fail "baseline not lowered"
 echo 0 > tools/clone_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising baseline allowed"; [ "$(tr -d '[:space:]' < tools/clone_count_baseline.txt)" = 0 ] || fail "baseline raised"
