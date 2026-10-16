@@ -120,14 +120,6 @@ impl Mag {
         Mag::from_canonical(i64::MAX, u64::MAX)
     }
 
-    /// A new `Mag` with the same exponent and mantissa, or `Infinity`.
-    fn replicate(&self) -> Mag {
-        match &self.inner {
-            Inner::Infinity => Mag::infinity(),
-            Inner::Finite { exp, mant } => Mag::from_canonical(*exp, *mant),
-        }
-    }
-
     /// `(exp, mant)` when this value is finite and nonzero; the type carries the nonzero mantissa.
     fn nonzero(&self) -> Option<(i64, NonZeroU64)> {
         match &self.inner {

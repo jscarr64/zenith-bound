@@ -25,7 +25,8 @@ impl Mag {
     /// Greatest `Mag` at or below `self - other` (CONTRACT 14.2).
     ///
     /// The result is zero when `self <= other`, and when either operand is `Infinity`.
-    /// Subtracting zero from a finite value returns that value (CONTRACT 2.3). A
+    /// Subtracting zero from a finite value gives that value (CONTRACT 2.3), built from its
+    /// integer parts by `Mag::from_canonical`. A
     /// positive result whose exponent would fall below `i64::MIN` is zero.
     pub fn sub_lower(&self, other: &Mag) -> Mag {
         if self.is_infinity() || other.is_infinity() {
@@ -36,7 +37,7 @@ impl Mag {
         }
         match (self.nonzero(), other.nonzero()) {
             (Some((ea, ma)), Some((eb, mb))) => sub_parts(ea, ma.get(), eb, mb.get()),
-            (Some(_), None) => self.replicate(),
+            (Some((e, m)), None) => Mag::from_canonical(e, m.get()),
             _ => Mag::zero(),
         }
     }

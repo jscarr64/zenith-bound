@@ -9,19 +9,20 @@ use core::num::NonZeroU64;
 impl Mag {
     /// Least `Mag` at or above `self + other` (CONTRACT 14.1, 14.3).
     ///
-    /// An `Infinity` operand yields `Infinity` (CONTRACT 14.6). A zero operand is returned
-    /// as the other value, before any alignment (CONTRACT 2.3). The operands are aligned
-    /// to the larger exponent; bits shifted out become sticky, and a sticky sum rounds up
-    /// one unit in the last place. When the exponent gap is at least 64 and the smaller
-    /// operand is nonzero, the result is the larger operand plus one unit.
+    /// An `Infinity` operand yields `Infinity` (CONTRACT 14.6). A zero operand yields the
+    /// other value, before any alignment (CONTRACT 2.3); the result is built from that
+    /// operand's integer parts by `Mag::from_canonical`, as for every other result. The
+    /// operands are aligned to the larger exponent; bits shifted out become sticky, and a
+    /// sticky sum rounds up one unit in the last place. When the exponent gap is at least 64
+    /// and the smaller operand is nonzero, the result is the larger operand plus one unit.
     pub fn add_up(&self, other: &Mag) -> Mag {
         if self.is_infinity() || other.is_infinity() {
             Mag::infinity()
         } else {
             match (self.nonzero(), other.nonzero()) {
-                (None, _) => other.replicate(),
-                (_, None) => self.replicate(),
                 (Some((ea, ma)), Some((eb, mb))) => add_parts(ea, ma, eb, mb),
+                (Some((e, m)), None) | (None, Some((e, m))) => Mag::from_canonical(e, m.get()),
+                (None, None) => Mag::zero(),
             }
         }
     }
