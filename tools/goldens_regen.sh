@@ -4,6 +4,8 @@
 # Nothing under the repo is written. To add a generator, add a line to the GENERATORS list.
 set -u
 export LC_ALL=C
+# PYTHONNOUSERSITE=1: a stray ~/.local mpmath (e.g. 1.3.0) must not shadow the pinned system mpmath 1.2.1 (the version check stays strict).
+export PYTHONNOUSERSITE=1
 root=${GOLDENS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 PY=${GOLDENS_PYTHON:-/usr/bin/python3}
 GENERATORS="scripts/gen_goldens.py scripts/gen_ball_goldens.py"
