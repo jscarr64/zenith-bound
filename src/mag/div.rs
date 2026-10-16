@@ -1,7 +1,7 @@
 //! `div_up` and `div_lower` on a 128/64 division with a sticky remainder.
 
 use super::round::loose;
-use super::round::norm_u128;
+use super::round::norm;
 use super::round::settle;
 use super::Mag;
 use core::num::NonZeroU128;
@@ -44,13 +44,13 @@ fn div_parts(num: &Mag, den: &Mag, up: bool) -> Mag {
 fn div_checked(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64, up: bool) -> Option<Mag> {
     let numerator = u128::from(ma.get()) << 64;
     let divisor = NonZeroU128::from(mb);
-    let quot = numerator / divisor;
+    // quot >= 2^127 / 2^64 = 2^63, so it is nonzero; division does not carry that in its type,
+    // so a zero quotient would be `None` here and settle to the sound bound.
+    let quot = NonZeroU128::new(numerator / divisor)?;
     let sticky = numerator % divisor != 0;
     // |ea - eb - 64| < 2^66, so the checked steps cannot fail.
     let scale = i128::from(ea)
         .checked_sub(i128::from(eb))?
         .checked_sub(64)?;
-    // quot >= 2^127 / 2^64 = 2^63, so it is nonzero; division does not carry that in its type,
-    // so a zero quotient would be `None` here and settle to the sound bound.
-    norm_u128(quot, scale, sticky, up)
+    norm(quot, scale, sticky, up)
 }

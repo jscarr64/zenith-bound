@@ -223,7 +223,11 @@ fn prop_constructor_is_value_preserving() -> Result<(), String> {
             return Ok(());
         }
         let lz = mant.leading_zeros();
-        let k = u32::from(rng.below(64)) % lz.saturating_add(1);
+        let modulus = match lz.checked_add(1) {
+            Some(modulus) => modulus,
+            None => return Ok(()),
+        };
+        let k = u32::from(rng.below(64)) % modulus;
         let shifted_mant = mant << k;
         let shifted_exp = match exp.checked_sub(i64::from(k)) {
             Some(e) => e,

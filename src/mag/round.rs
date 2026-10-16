@@ -59,12 +59,6 @@ fn pack(exp: i128, mant: u64, up: bool) -> Mag {
     }
 }
 
-/// [`norm`] for an integer that the caller has shown to be nonzero but whose type does not say
-/// so (a quotient). `None` for zero, which the caller settles.
-pub(super) fn norm_u128(m: u128, scale: i128, sticky: bool, up: bool) -> Option<Mag> {
-    norm(NonZeroU128::new(m)?, scale, sticky, up)
-}
-
 /// Round `m * 2^scale` toward `+∞` when `up` is set, otherwise toward zero.
 pub(super) fn norm(m: NonZeroU128, scale: i128, sticky: bool, up: bool) -> Option<Mag> {
     // `lz` is in 0..=127. A value with more than 64 bits drops `drop` low bits (at most 64);
