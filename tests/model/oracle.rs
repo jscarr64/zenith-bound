@@ -186,7 +186,7 @@ pub fn check_down(
             let s = succ(r);
             match s {
                 MagV::Infinity => Ok(()),
-                _ => match exact_cmp(&s) {
+                MagV::Finite { .. } => match exact_cmp(&s) {
                     Some(Ordering::Greater) => Ok(()),
                     Some(_) => Err(format!("not the largest lower bound {:?}", r)),
                     None => Err(format!("model cannot align {:?}", r)),
