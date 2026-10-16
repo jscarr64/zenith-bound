@@ -1,0 +1,4 @@
+# Mutants documented as equivalent (they cannot change observable behaviour, so no test can kill them).
+# One per line: `mutant_id<TAB>reason (why the mutated code behaves identically)`. A surviving mutant listed here is reported as
+# SURVIVED-EQUIVALENT and does not fail tools/mutate.sh; a surviving mutant NOT listed here fails it.
+# STARTS EMPTY (header only). Every entry needs a written reason; entries are reviewed like tools/rules_allowlist.txt.

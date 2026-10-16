@@ -1,0 +1,8 @@
+# Mutant manifest (TEST_PLAN section 11). One mutant per line, four TAB-separated columns:
+#   fn_path<TAB>mutant_id<TAB>patch<TAB>suite
+#   fn_path   repo-relative source file, then `:` and the function it mutates (e.g. src/mag/mod.rs:Mag::add_up); the file must exist at HEAD
+#   mutant_id unique id; the patch file is tools/mutants/NNN-<name>.patch and the id is NNN-<name>
+#   patch     the patch file name inside tools/mutants/ (a unified diff against the repo root, applied with `git apply`)
+#   suite     the integration test target that must FAIL on the mutant: `cargo test --test <suite>`
+# Blank lines and lines starting with # are ignored. tools/mutate.sh runs every row (or one with --only ID).
+# No real mutants yet: src/mag does not exist at this head. The seed catalog is TEST_PLAN section 11.
