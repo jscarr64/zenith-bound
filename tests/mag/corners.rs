@@ -28,13 +28,13 @@ fn round_up_ops_with_an_infinity_operand_give_infinity() -> Result<(), String> {
         check_is(
             "add_up",
             &[x, &MagV::Infinity],
-            &x_mag.add_up(&inf),
+            &from_magv(x)?.add_up(Mag::infinity()),
             &MagV::Infinity,
         )?;
         check_is(
             "add_up",
             &[&MagV::Infinity, x],
-            &inf.add_up(x_mag),
+            &Mag::infinity().add_up(from_magv(x)?),
             &MagV::Infinity,
         )?;
         check_is(
@@ -65,7 +65,7 @@ fn round_up_ops_with_an_infinity_operand_give_infinity() -> Result<(), String> {
     check_is(
         "add_up",
         &[&MagV::Infinity, &MagV::Infinity],
-        &inf.add_up(&inf),
+        &Mag::infinity().add_up(Mag::infinity()),
         &MagV::Infinity,
     )?;
     check_is(
@@ -124,13 +124,13 @@ fn round_down_ops_with_an_infinity_operand_give_zero() -> Result<(), String> {
         check_is(
             "sub_lower",
             &[x, &MagV::Infinity],
-            &x_mag.sub_lower(&inf),
+            &from_magv(x)?.sub_lower(&inf),
             &zero_mag(),
         )?;
         check_is(
             "sub_lower",
             &[&MagV::Infinity, x],
-            &inf.sub_lower(x_mag),
+            &Mag::infinity().sub_lower(x_mag),
             &zero_mag(),
         )?;
         check_is(
@@ -156,7 +156,7 @@ fn round_down_ops_with_an_infinity_operand_give_zero() -> Result<(), String> {
     check_is(
         "sub_lower",
         &[&MagV::Infinity, &MagV::Infinity],
-        &inf.sub_lower(&inf),
+        &Mag::infinity().sub_lower(&inf),
         &zero,
     )?;
     check_is(
@@ -202,7 +202,12 @@ fn round_up_overflow_is_infinity_and_round_up_underflow_is_the_smallest_positive
     let tiny = from_magv(&min_pos_mag())?;
     let max = max_mag();
     let min = min_pos_mag();
-    check_is("add_up", &[&max, &max], &big.add_up(&big), &MagV::Infinity)?;
+    check_is(
+        "add_up",
+        &[&max, &max],
+        &from_magv(&max)?.add_up(from_magv(&max)?),
+        &MagV::Infinity,
+    )?;
     check_is("mul_up", &[&max, &max], &big.mul_up(&big), &MagV::Infinity)?;
     check_is("div_up", &[&max, &min], &big.div_up(&tiny), &MagV::Infinity)?;
     check_is("mul_up", &[&min, &min], &tiny.mul_up(&tiny), &min_pos_mag())?;

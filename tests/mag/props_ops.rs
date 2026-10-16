@@ -20,7 +20,7 @@ fn is_zero(m: &MagV) -> bool {
 
 fn check_binary(
     name: &str,
-    lib: fn(&Mag, &Mag) -> Mag,
+    lib: fn(Mag, Mag) -> Mag,
     oracle: fn(&MagV, &MagV) -> Option<MagV>,
     verify: fn(&MagV, &MagV, &MagV) -> Result<(), String>,
     needs_nonzero_divisor: bool,
@@ -28,7 +28,7 @@ fn check_binary(
     run_cases(name, CASES, &|rng| {
         let a = draw_mag(rng);
         let b = draw_partner(rng, &a);
-        let got = to_magv(&lib(&from_magv(&a)?, &from_magv(&b)?))?;
+        let got = to_magv(&lib(from_magv(&a)?, from_magv(&b)?))?;
         let want =
             oracle(&a, &b).ok_or_else(|| format!("direct oracle failed on {:?} {:?}", a, b))?;
         if got != want {
@@ -68,12 +68,12 @@ fn check_unary(
     })
 }
 
-fn commutes(name: &str, lib: fn(&Mag, &Mag) -> Mag) -> Result<(), String> {
+fn commutes(name: &str, lib: fn(Mag, Mag) -> Mag) -> Result<(), String> {
     run_cases(name, CASES, &|rng| {
         let a = draw_mag(rng);
         let b = draw_partner(rng, &a);
-        let ab = to_magv(&lib(&from_magv(&a)?, &from_magv(&b)?))?;
-        let ba = to_magv(&lib(&from_magv(&b)?, &from_magv(&a)?))?;
+        let ab = to_magv(&lib(from_magv(&a)?, from_magv(&b)?))?;
+        let ba = to_magv(&lib(from_magv(&b)?, from_magv(&a)?))?;
         if ab != ba {
             return Err(format!(
                 "{}({:?}, {:?}) = {:?} but swapped gives {:?}",
@@ -126,7 +126,7 @@ fn sqrt_up_is_lower_or_successor() -> Result<(), String> {
     })
 }
 
-fn monotone(name: &str, lib: fn(&Mag, &Mag) -> Mag) -> Result<(), String> {
+fn monotone(name: &str, lib: fn(Mag, Mag) -> Mag) -> Result<(), String> {
     run_cases(name, CASES, &|rng| {
         let x = draw_mag(rng);
         let y = draw_partner(rng, &x);
@@ -137,8 +137,8 @@ fn monotone(name: &str, lib: fn(&Mag, &Mag) -> Mag) -> Result<(), String> {
         } else {
             (x, y)
         };
-        let r_lo = to_magv(&lib(&from_magv(&lo)?, &from_magv(&c)?))?;
-        let r_hi = to_magv(&lib(&from_magv(&hi)?, &from_magv(&c)?))?;
+        let r_lo = to_magv(&lib(from_magv(&lo)?, from_magv(&c)?))?;
+        let r_hi = to_magv(&lib(from_magv(&hi)?, from_magv(&c)?))?;
         if direct::order(&r_lo, &r_hi) == core::cmp::Ordering::Greater {
             return Err(format!("{}({:?}, {:?}) = {:?} exceeds {}({:?}, {:?}) = {:?} although the first operand is not larger", name, lo, c, r_lo, name, hi, c, r_hi));
         }
@@ -161,7 +161,7 @@ fn prop_add_up_matches_integer_oracle_and_model() -> Result<(), String> {
 fn prop_mul_up_matches_integer_oracle_and_model() -> Result<(), String> {
     check_binary(
         "mul_up",
-        Mag::mul_up,
+        |a, b| a.mul_up(&b),
         direct::mul_up,
         crate::mul_up::verify,
         false,
@@ -172,7 +172,7 @@ fn prop_mul_up_matches_integer_oracle_and_model() -> Result<(), String> {
 fn prop_div_up_matches_integer_oracle_and_model() -> Result<(), String> {
     check_binary(
         "div_up",
-        Mag::div_up,
+        |a, b| a.div_up(&b),
         direct::div_up,
         crate::div_up::verify,
         true,
@@ -183,7 +183,7 @@ fn prop_div_up_matches_integer_oracle_and_model() -> Result<(), String> {
 fn prop_mul_lower_matches_integer_oracle_and_model() -> Result<(), String> {
     check_binary(
         "mul_lower",
-        Mag::mul_lower,
+        |a, b| a.mul_lower(&b),
         direct::mul_lower,
         crate::lower_mul::verify,
         false,
@@ -194,7 +194,7 @@ fn prop_mul_lower_matches_integer_oracle_and_model() -> Result<(), String> {
 fn prop_div_lower_matches_integer_oracle_and_model() -> Result<(), String> {
     check_binary(
         "div_lower",
-        Mag::div_lower,
+        |a, b| a.div_lower(&b),
         direct::div_lower,
         crate::lower_div::verify,
         true,
@@ -205,7 +205,7 @@ fn prop_div_lower_matches_integer_oracle_and_model() -> Result<(), String> {
 fn prop_sub_lower_matches_integer_oracle_and_model() -> Result<(), String> {
     check_binary(
         "sub_lower",
-        Mag::sub_lower,
+        |a, b| a.sub_lower(&b),
         direct::sub_lower,
         crate::lower_sub::verify,
         false,
@@ -239,7 +239,7 @@ fn prop_add_up_is_commutative() -> Result<(), String> {
 
 #[test]
 fn prop_mul_up_is_commutative() -> Result<(), String> {
-    commutes("mul_up", Mag::mul_up)
+    commutes("mul_up", |a, b| a.mul_up(&b))
 }
 
 #[test]
@@ -264,5 +264,5 @@ fn prop_add_up_is_monotone() -> Result<(), String> {
 
 #[test]
 fn prop_mul_up_is_monotone() -> Result<(), String> {
-    monotone("mul_up", Mag::mul_up)
+    monotone("mul_up", |a, b| a.mul_up(&b))
 }

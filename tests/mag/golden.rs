@@ -110,7 +110,7 @@ fn run_line(line: &str) -> Result<(), String> {
                     let ma = from_magv(a)?;
                     let mb = from_magv(b)?;
                     let r = match row.op.as_str() {
-                        "add_up" => ma.add_up(&mb),
+                        "add_up" => ma.add_up(mb),
                         "mul_up" => ma.mul_up(&mb),
                         "mul_lower" => ma.mul_lower(&mb),
                         "sub_lower" => ma.sub_lower(&mb),
