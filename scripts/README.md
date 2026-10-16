@@ -27,3 +27,5 @@ Operand sets come from `goldlib.SplitMix64` streams of suite `l0b_ball` (same BA
     /usr/bin/python3 scripts/gen_ball_goldens.py --selftest
 
 The Rust side (`tests/common/ballrows.rs`, `tests/harness/ball_goldens_selftest.rs`) re-verifies every row with an independent exact-integer checker: full recomputation for `PREC <= 64` (u128), structural checks only above.
+
+The gate wrappers (`tools/full_gate.sh`, `tools/goldens_regen.sh`) export `PYTHONNOUSERSITE=1` and call `/usr/bin/python3`, so a `pip --user` mpmath in `~/.local` cannot shadow the pinned system mpmath 1.2.1. When running a generator by hand, do the same: `PYTHONNOUSERSITE=1 /usr/bin/python3 scripts/gen_goldens.py`.
