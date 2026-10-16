@@ -1,0 +1,13 @@
+diff --git a/src/mag/ulp.rs b/src/mag/ulp.rs
+index 94fed1e..0a659c3 100644
+--- a/src/mag/ulp.rs
++++ b/src/mag/ulp.rs
+@@ -51,7 +51,7 @@ impl Mag {
+         // below") is the one fallback.
+         let Some(threshold) = i128::from(mid_exp)
+             .checked_sub(i128::from(prec))
+-            .and_then(|diff| diff.checked_sub(1))
++            .and_then(|diff| diff.checked_sub(0))
+         else {
+             return false;
+         };

@@ -1,0 +1,13 @@
+diff --git a/src/mag/ulp.rs b/src/mag/ulp.rs
+index 94fed1e..0b64ab1 100644
+--- a/src/mag/ulp.rs
++++ b/src/mag/ulp.rs
+@@ -35,7 +35,7 @@ impl Mag {
+     /// directed mode needs the full ulp from [`Mag::ulp_mag`].
+     pub fn half_ulp(mid_exp: i64, prec: u32) -> Mag {
+         // |mid_exp - prec| < 2^64, so the checked step cannot fail. `Infinity` is the one fallback.
+-        match i128::from(mid_exp).checked_sub(i128::from(prec)) {
++        match i128::from(mid_exp).checked_add(i128::from(prec)) {
+             Some(mag_exp) => place_pow2(mag_exp),
+             None => Mag::infinity(),
+         }
