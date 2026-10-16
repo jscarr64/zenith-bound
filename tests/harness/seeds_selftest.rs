@@ -1,4 +1,5 @@
-//! COVERS: common::seeds::stream_seed, common::seeds::seed_for, common::seeds::SUITES, common::seeds::BASE, common::seeds::GENERATOR_VERSION, common::seeds::ZF_PIN, common::seeds::CASE_CLASS_GATE, common::seeds::CASE_CLASS_DEEP
+//! COVERS: common::seeds::stream_seed, common::seeds::seed_for
+//! Also pins (not function coverage): BASE, GENERATOR_VERSION, ZF_PIN, SUITES, CASE_CLASS_GATE, CASE_CLASS_DEEP.
 //! Oracle: stream_seed(suite, class) = splitmix64(BASE + suite * 2^32 + class), pinned values recomputed with an independent Python integer-mask implementation (2026-10-15).
 
 use crate::common::expect_eq;
