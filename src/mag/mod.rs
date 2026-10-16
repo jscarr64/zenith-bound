@@ -63,20 +63,22 @@ impl Mag {
     /// together with `exp == 0`. If `exp - lz` would be below `i64::MIN`, the value is not
     /// representable and this returns [`BoundError::Representation`] without rounding.
     pub fn finite(mant: u64, exp: i64) -> Result<Mag, BoundError> {
-        if mant == 0 {
-            if exp == 0 {
-                Ok(Mag::zero())
-            } else {
-                Err(BoundError::Representation)
+        match NonZeroU64::new(mant) {
+            None if exp == 0 => Ok(Mag::zero()),
+            None => Err(BoundError::Representation),
+            Some(nonzero) => {
+                // A nonzero `u64` has at most 63 leading zeros, so the shift below drops only
+                // zero bits and loses nothing.
+                let shift = nonzero.leading_zeros();
+                // One error arm for both steps: the `i128` subtraction cannot fail (it is below
+                // 2^65 in magnitude), and `i64::try_from` fails exactly when `exp - shift`
+                // is below `i64::MIN`, which is the documented representation error.
+                let exp = i128::from(exp)
+                    .checked_sub(i128::from(shift))
+                    .and_then(|adjusted| i64::try_from(adjusted).ok())
+                    .ok_or(BoundError::Representation)?;
+                Ok(Mag::from_canonical(exp, mant << shift))
             }
-        } else {
-            let shift = mant.leading_zeros();
-            let adjusted = i128::from(exp)
-                .checked_sub(i128::from(shift))
-                .ok_or(BoundError::Representation)?;
-            let exp = i64::try_from(adjusted).map_err(|_| BoundError::Representation)?;
-            let mant = mant.checked_shl(shift).ok_or(BoundError::Representation)?;
-            Ok(Mag::from_canonical(exp, mant))
         }
     }
 
