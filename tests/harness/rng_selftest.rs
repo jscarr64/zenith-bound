@@ -1,4 +1,4 @@
-//! COVERS: common::rng::SplitMix64::new, common::rng::SplitMix64::next_u64, common::rng::splitmix64, common::expect_eq
+//! COVERS: common::SplitMix64::new, common::SplitMix64::next_u64, common::rng::splitmix64, common::expect_eq
 //! Oracle: splitmix64 reference outputs (seed 0: the published values; the other seeds recomputed with an independent Python integer-mask implementation, 2026-10-15).
 
 use crate::common::expect_eq;
