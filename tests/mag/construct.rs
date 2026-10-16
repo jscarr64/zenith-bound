@@ -1,6 +1,7 @@
 //! CONTRACT 2.1, 15.4; oracle: the clauses (exact expected values); Mag has private fields and is built only through its constructors
-//! COVERS: Mag::exp, Mag::finite, Mag::infinity, Mag::is_infinity, Mag::is_zero, Mag::mant, Mag::zero, Eq for Mag, PartialEq for Mag
+//! COVERS: BoundError::Representation, Mag::exp, Mag::finite, Mag::infinity, Mag::is_infinity, Mag::is_zero, Mag::mant, Mag::zero, Eq for Mag, PartialEq for Mag
 
+use zenith_bound::error::BoundError;
 use zenith_bound::mag::Mag;
 
 fn made(mant: u64, exp: i64) -> Result<Mag, String> {
@@ -104,6 +105,33 @@ fn finite_rejects_an_exponent_that_cannot_be_represented() -> Result<(), String>
     for &(mant, exp, want_exp, want_mant) in &good_cases {
         let m = made(mant, exp)?;
         parts_are(&m, want_exp, want_mant)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn finite_rejections_are_the_representation_error() -> Result<(), String> {
+    let cases = [
+        // mant == 0 with exp != 0 (a proven zero is built with Mag::zero(), clause 2.1)
+        (0u64, 1i64),
+        (0, -1),
+        (0, i64::MIN),
+        (0, i64::MAX),
+        // exp - leading_zeros(mant) below i64::MIN: the value is below the smallest positive Mag
+        (1, i64::MIN),
+        (1, i64::MIN + 62),
+        (1u64 << 62, i64::MIN),
+        (0x7FFF_FFFF_FFFF_FFFF, i64::MIN),
+    ];
+
+    for &(mant, exp) in &cases {
+        let got = Mag::finite(mant, exp);
+        if !matches!(got, Err(BoundError::Representation)) {
+            return Err(format!(
+                "Mag::finite({}, {}) must be Err(BoundError::Representation), got {:?}",
+                mant, exp, got
+            ));
+        }
     }
     Ok(())
 }
