@@ -2,3 +2,6 @@
 //!
 //! Pre-release. Nothing in this crate is guaranteed yet.
 #![forbid(unsafe_code)]
+
+pub mod error;
+pub mod mag;
