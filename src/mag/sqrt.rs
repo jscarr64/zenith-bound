@@ -7,15 +7,16 @@ use super::Mag;
 use core::num::NonZeroU128;
 use core::num::NonZeroU64;
 
-/// `2^64` and `2^63` as nonzero `u128`, evaluated at compile time (the `None` arm is never taken).
-const P64: NonZeroU128 = match NonZeroU128::new(1u128 << 64) {
-    Some(v) => v,
-    None => NonZeroU128::MIN,
-};
-const P63: NonZeroU128 = match NonZeroU128::new(1u128 << 63) {
-    Some(v) => v,
-    None => NonZeroU128::MIN,
-};
+/// `2^64` as a nonzero `u128`. `isolate_highest_one` keeps only the top set bit of a value whose
+/// top bit is bit 64, so there is no `None` arm to settle and no value to get wrong.
+fn p64() -> NonZeroU128 {
+    (NonZeroU128::MIN | (1u128 << 64)).isolate_highest_one()
+}
+
+/// `2^63` as a nonzero `u128`, built the same way.
+fn p63() -> NonZeroU128 {
+    (NonZeroU128::MIN | (1u128 << 63)).isolate_highest_one()
+}
 
 impl Mag {
     /// Least `Mag` at or above `sqrt(self)` (CONTRACT 14.1, 14.4).
@@ -52,9 +53,9 @@ fn sqrt_checked(exp: i64, mant: NonZeroU64, up: bool) -> Option<Mag> {
     // N = mant * 2^63 with scale exp - 127. Either way `scale` is even, so `scale / 2` is exact.
     // |exp| < 2^63, so the checked steps cannot fail.
     let (factor, scale) = if exp.checked_rem_euclid(2)? == 0 {
-        (P64, exp.checked_sub(128)?)
+        (p64(), exp.checked_sub(128)?)
     } else {
-        (P63, exp.checked_sub(127)?)
+        (p63(), exp.checked_sub(127)?)
     };
     // mant < 2^64 and factor <= 2^64, so the product fits in a u128 and is nonzero by type.
     let radicand = NonZeroU128::from(mant).checked_mul(factor)?;
