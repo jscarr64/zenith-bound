@@ -2,13 +2,15 @@
 //! its LITTLE-ENDIAN bytes, so the digest does not depend on the target's endianness or pointer width. Integer-only, no dependencies.
 //! A digest names a drift, not a security property. The result rows `NAME WORDS HEX16` are what tools/digests.sh compares across targets.
 
+use super::modular::mul_u64;
+
 const START: u64 = 0xCBF2_9CE4_8422_2325;
 const PRIME: u64 = 0x0000_0100_0000_01B3;
 
-/// A running digest and the number of folded 64-bit words (a byte string counts its length in bytes).
+/// A running digest and the number of folded bytes.
 pub struct Digest {
     state: u64,
-    words: u64,
+    words: u128,
 }
 
 impl Digest {
@@ -19,11 +21,11 @@ impl Digest {
         }
     }
 
-    /// Folds bytes, FNV-1a: `state = (state ^ byte) * prime` per byte.
+    /// Folds bytes, FNV-1a: `state = (state ^ byte) * prime mod 2^64` per byte (`modular::mul_u64`).
     pub fn fold_bytes(&mut self, bytes: &[u8]) {
         for b in bytes {
-            self.state = (self.state ^ u64::from(*b)).wrapping_mul(PRIME);
-            self.words = self.words.wrapping_add(1);
+            self.state = mul_u64(self.state ^ u64::from(*b), PRIME);
+            self.words += 1;
         }
     }
 
@@ -41,7 +43,7 @@ impl Digest {
         self.state
     }
 
-    pub fn count(&self) -> u64 {
+    pub fn count(&self) -> u128 {
         self.words
     }
 

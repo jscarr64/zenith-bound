@@ -24,7 +24,7 @@ fn pinned_rng() -> Result<SplitMix64, String> {
 }
 
 fn fold(h: u64, v: u64) -> u64 {
-    (h ^ v).wrapping_mul(0x0000_0100_0000_01B3)
+    crate::common::modular::mul_u64(h ^ v, 0x0000_0100_0000_01B3)
 }
 
 const FNV_START: u64 = 0xCBF2_9CE4_8422_2325;
@@ -35,9 +35,9 @@ fn bits(v: i64) -> u64 {
 
 fn near_power_of_two(v: i64) -> bool {
     let a = v.unsigned_abs();
-    [a.wrapping_sub(1), a, a.wrapping_add(1)]
-        .iter()
-        .any(|x| x.is_power_of_two())
+    a.checked_sub(1).is_some_and(u64::is_power_of_two)
+        || a.is_power_of_two()
+        || a.checked_add(1).is_some_and(u64::is_power_of_two)
 }
 
 /// Band counts (Edge, Near0, Uniform, PowerOfTwo, Gap) and the FNV-1a digest of the values of `n` draws.

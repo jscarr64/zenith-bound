@@ -57,10 +57,8 @@ pub const SUITES: [SuiteSeed; 7] = [
 /// `splitmix64(BASE + suite_id * 2^32 + case_class)`. `suite_id * 2^32 + case_class` fits `u64` for every pair of `u32`
 /// inputs (it is the pair packed high/low); adding `BASE` wraps, deterministically.
 pub fn stream_seed(suite_id: u32, case_class: u32) -> u64 {
-    let packed = u64::from(suite_id)
-        .wrapping_mul(1u64 << 32)
-        .wrapping_add(u64::from(case_class));
-    splitmix64(BASE.wrapping_add(packed))
+    let packed = (u64::from(suite_id) << 32) | u64::from(case_class);
+    splitmix64(super::modular::add_u64(BASE, packed))
 }
 
 /// The stream seed of a suite from the table, `None` for a name that is not in the table.
