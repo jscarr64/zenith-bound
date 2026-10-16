@@ -5,7 +5,7 @@ Derived from zenith-float tools/rules_scan.py (commit d12a156), adapted for zeni
 model-written diff before review, and in tools/full_gate.sh (step `rules-scan`).
 
 Usage:
-  tools/rules_scan.sh                      # origin/main..HEAD, plus the two count-baseline checks
+  tools/rules_scan.sh                      # origin/main..HEAD, plus the count-baseline checks and the alias/rename tree check
   tools/rules_scan.sh A..B                 # any range (a bare rev means REV..HEAD)
   tools/rules_scan.sh --staged             # git diff --cached
   tools/rules_scan.sh --working            # git diff HEAD (staged + unstaged; new files must be staged)
@@ -52,10 +52,14 @@ ratcheted against tools/hidden_copy_count_baseline.txt (starts at 0, may only go
 Rule (a), the name, always applies. There is no allowlist for this count.
 CONVERTER EXEMPTION (rules (b) and (c) only; closed): a fn is a conversion, not a copy, only when its file is under tests/, it
 has no `self`/`Self`/generics, EVERY named type in its signature (Option, Result, Vec, Box, String aside) is one of Mag, MagV,
-Dy, and the argument type set and the return type set are disjoint: `fn from_magv(m: &MagV) -> Result<Mag, String>` and
-`fn from_magv(m: &MagV) -> Option<Dy>`, the two real ones. Under src/, benches/ and examples/ there is no exemption. A type
-alias or a rename of Mag, MagV or Dy (`type M2 = Mag;`, `type V = MagV;`, `use x::Mag as M;`, `{Dy as D}`) is flagged anywhere by
-the baseline-free labels type_alias and type_rename (any hit fails), and a wrapper or holder type (`struct W(Mag)`, `Pair`)
+Dy, and the argument type set and the return type set are disjoint. Exactly FOUR fns in the tree use it (verified by instrumenting
+converts_between_types over the whole tree): tests/mag/support.rs `to_magv(&Mag) -> Result<MagV, String>`, `from_magv(&MagV) ->
+Result<Mag, String>`, `dy_of(&MagV) -> Result<Dy, String>` and tests/model/dyadic.rs `Dy::from_magv(&MagV) -> Option<Dy>`. Under
+src/, benches/ and examples/ there is no exemption. A type alias or a rename of Mag, MagV or Dy (`type M2 = Mag;`, `type V = MagV;`,
+`use x::Mag as M;`, `{Dy as D}`), however rustfmt wraps it, is flagged anywhere by the baseline-free labels type_alias and
+type_rename (any hit fails): on each run of consecutive added lines joined with newlines (comments and strings stripped, first
+line reported), and on the whole text of every file under src/ tests/ benches/ examples/ in the count checks (default run and
+--count-only). A wrapper or holder type (`struct W(Mag)`, `Pair`)
 is not in the set, so none of them can make "no named type shared" true.
 
 SANCTIONED-REBUILD COUNT (O18-C, DECIDED): a `Mag` may be rebuilt from the two scalar integers of another `Mag` with
@@ -86,8 +90,6 @@ PATTERNS = [
     ("to_owned", re.compile(r"\.to_owned\(")),
     ("derive_clone", re.compile(r"#\[derive\([^)]*\b(?:Clone|Copy)\b")),
     ("impl_clone", re.compile(r"\bimpl(?:<[^>]*>)?\s+(?:Clone|Copy)\s+for\b")),
-    ("type_alias", re.compile(r"\btype\s+\w+\s*(?:<[^>]*>)?\s*=[^;]*\b(?:Mag|MagV|Dy)\b")),
-    ("type_rename", re.compile(r"\b(?:Mag|MagV|Dy)\s+as\s+\w+")),
     ("unsafe", re.compile(r"\bunsafe\b")),
     ("allow", re.compile(r"#!?\[allow\b|^\s*#!?\[.*\ballow\(")),
     ("unwrap", re.compile(r"\bunwrap\(")),
@@ -101,6 +103,13 @@ PATTERNS = [
     ("f32", re.compile(r"\bf32\b|\d_?f32\b")),
     ("f64", re.compile(r"\bf64\b|\d_?f64\b")),
     ("hwfloat", re.compile(r"\b(?:core|std)::arch\b|\btarget_feature\b|\bmul_add\b|\bis_x86_feature_detected\b")),
+]
+# Aliases and renames of the model/library types, matched on the joined (comment/string-stripped) text so rustfmt wrapping cannot
+# hide them: `type X<..> = ..Mag..;` (where-clause allowed) and `Mag as X` / `{MagV as Mv}` / `pub use ..::Dy as D`.
+TYPE_NAMES = r"\b(?:Mag|MagV|Dy)\b"
+MULTI = [
+    ("type_alias", re.compile(r"\btype\s+\w+\s*(?:<[^;]*?>)?\s*=[^;]*" + TYPE_NAMES)),
+    ("type_rename", re.compile(TYPE_NAMES + r"\s+as\s+\w+")),
 ]
 STR = re.compile(r'"(?:\\.|[^"\\])*"')
 REF_SUM = re.compile(r"\b(?:add_ref|sub_ref|mul_ref|div_ref)\(")
@@ -176,7 +185,37 @@ def scan_diff(text):
         for label, rx in PATTERNS:
             if rx.search(code) and key not in allow:
                 hits.append((path, n, label, " ".join(content.split()), key))
+    hits.extend(multi_line_hits(text, allow))
     return hits
+
+
+def multi_line_hits(text, allow):
+    """type_alias / type_rename on each run of consecutive added lines of one file, joined with newlines (line numbers kept)"""
+    out, run = [], []
+
+    def flush():
+        if not run:
+            return
+        path, first = run[0][0], run[0][1]
+        joined = "\n".join(strip(c) for _, _, c in run)
+        for label, rx in MULTI:
+            for m in rx.finditer(joined):
+                line = first + joined.count("\n", 0, m.start())
+                content = " ".join(run[min(joined.count("\n", 0, m.start()), len(run) - 1)][2].split())
+                key = "%s:%s" % (path, hashlib.sha1(content.encode()).hexdigest()[:12])
+                if key not in allow:
+                    out.append((path, line, label, content, key))
+        run.clear()
+
+    for path, n, content in parse_diff(text):
+        if not is_rust(path):
+            flush()
+            continue
+        if run and (run[0][0] != path or run[-1][1] + 1 != n):
+            flush()
+        run.append((path, n, content))
+    flush()
+    return out
 
 
 def clone_count():
@@ -309,10 +348,12 @@ TYPE_NAME = re.compile(r"\b[A-Z]\w*")
 
 
 def converts_between_types(sig, rel):
-    """True only for the two real model/library converters. The exemption is closed: the file is under tests/, there is no
+    """True only for the four model/library converters (tests/mag/support.rs to_magv, from_magv, dy_of; tests/model/dyadic.rs
+    Dy::from_magv). The exemption is closed: the file is under tests/, there is no
     `self`, `Self` or generics, a return type exists, EVERY named type in the signature (Option, Result, Vec, Box, String
     aside) is one of Mag, MagV, Dy, and the argument type set and the return type set are disjoint
-    (`fn from_magv(m: &MagV) -> Result<Mag, String>`, `fn from_magv(m: &MagV) -> Option<Dy>`). Under src/ benches/ examples/
+    (`fn from_magv(m: &MagV) -> Result<Mag, String>`, `fn to_magv(m: &Mag) -> Result<MagV, String>`, `fn from_magv(m: &MagV) ->
+    Option<Dy>`). Under src/ benches/ examples/
     there is no exemption at all. Aliases and renames of Mag/MagV/Dy are banned by the type_alias / type_rename scan labels, and
     a wrapper or holder type is not in the set, so `type M2 = Mag`, `use Mag as M`, `struct W(Mag)` or `-> Pair` never exempt."""
     if not rel.startswith("tests/"):
@@ -558,8 +599,35 @@ def rebuild_count_check(update=False):
     return 0
 
 
+def alias_tree_sites():
+    """[(relpath, line, label, text)] for every type alias / rename of Mag, MagV or Dy in the whole tree (whole-file text,
+    comments and strings blanked, wrapped forms included). Baseline-free: any hit fails."""
+    sites = []
+    paths = []
+    for d in DIRS:
+        for dp, dn, fn in os.walk(os.path.join(ROOT, d)):
+            dn[:] = sorted(x for x in dn if x not in ("target", ".git"))
+            paths.extend(os.path.join(dp, f) for f in sorted(fn) if f.endswith(".rs"))
+    if os.path.exists(os.path.join(ROOT, "build.rs")):
+        paths.append(os.path.join(ROOT, "build.rs"))
+    for path in paths:
+        text = blank_code(open(path, errors="replace").read())
+        for label, rx in MULTI:
+            for m in rx.finditer(text):
+                sites.append((os.path.relpath(path, ROOT), text.count("\n", 0, m.start()) + 1, label, " ".join(m.group(0).split())))
+    return sites
+
+
+def alias_tree_check():
+    sites = alias_tree_sites()
+    for rel, line, label, snippet in sites:
+        print("%s:%d [%s] %s" % (rel, line, label, snippet[:120]))
+    print("rules_scan: alias/rename of Mag, MagV or Dy: %d (no baseline, any hit fails)" % len(sites))
+    return 1 if sites else 0
+
+
 def both_count_checks(update=False):
-    return max(count_check(update), ref_count_check(update), hidden_count_check(update), rebuild_count_check(update))
+    return max(count_check(update), ref_count_check(update), hidden_count_check(update), rebuild_count_check(update), alias_tree_check())
 
 
 def main(argv):

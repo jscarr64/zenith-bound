@@ -167,6 +167,8 @@ flagged_hc_at tests/model/direct.rs "copy of a model value through Result with a
 flagged_hc_at tests/mag/support.rs "a converter still counts when it is named dup" 'fn dup(m: &MagV) -> Result<Mag, String> { Mag::zero() }'
 flagged_hc_at tests/model/direct.rs "a method on the type (self receiver) is not a converter" 'impl MagV { fn again(&self) -> Mag { match self { MagV::Finite { exp, mant } => Mag::from_parts(*exp, *mant), MagV::Infinity => Mag::infinity() } } }'
 clean_hc_at tests/mag/support.rs "model to library converter (other types in and out)" 'pub fn from_magv(m: &MagV) -> Result<Mag, String> { match m { MagV::Finite { exp, mant } => Mag::finite(*mant, *exp).map_err(|e| format!("{:?}", e)), MagV::Infinity => Ok(Mag::infinity()) } }'
+clean_hc_at tests/mag/support.rs "library to model converter (to_magv)" 'pub fn to_magv(m: &Mag) -> Result<MagV, String> { match m { Mag::Finite { exp, mant } => Ok(MagV::Finite { exp: *exp, mant: *mant }), Mag::Infinity => Ok(MagV::Infinity) } }'
+clean_hc_at tests/mag/support.rs "model to dyadic converter (dy_of)" 'pub fn dy_of(m: &MagV) -> Result<Dy, String> { match m { MagV::Finite { exp, mant } => Ok(Dy::from_mag(*exp, *mant)), MagV::Infinity => Err(String::new()) } }'
 clean_hc_at tests/model/dyadic.rs "model to dyadic converter" 'pub fn from_magv(m: &MagV) -> Option<Dy> { match m { MagV::Finite { exp, mant } => Some(Dy::from_mag(*exp, *mant)), MagV::Infinity => None } }'
 clean_hc_at tests/model/direct.rs "from-parts rebuild with computed arguments" 'fn f(a: i128, m: u128) -> Option<MagV> { Some(MagV::Finite { exp: i64::try_from(a).ok()?, mant: u64::try_from(m).ok()? }) }'
 clean_hc_at tests/model/direct.rs "comment and string" 'fn f() -> MagV { // MagV::new(x.exp, x.mant) and fn dup
@@ -217,6 +219,22 @@ type_rename|use zenith_bound::mag::Mag as Magnitude;
 CASES
 mkdiff src/mag/zz.rs 'type Pair = (u8, u8);' 'use std::fmt::Result as FmtResult;' 'use super::Mag;' 'let m = Mag::zero(); // type M2 = Mag; use x::Mag as M' 'let s = "type M2 = Mag; Mag as M";' 'type Word = u64;' 'impl Magnitude for X {}' > "$t/ok.diff"
 scan --diff-file "$t/ok.diff" >/dev/null || soft "alias-free lines flagged: $(scan --diff-file "$t/ok.diff")"
+# rustfmt-wrapped aliases and renames (Rusty's 7af7cc2 review G1): the labels see the joined added lines, so a wrap cannot hide them
+wrapped() { # wrapped <label> <added line>...: the lines form ONE statement; the label must be reported
+  local name="$1"; shift
+  mkdiff src/mag/zz.rs "$@" > "$t/d.diff"
+  out="$(scan --diff-file "$t/d.diff")" && { soft "wrapped form not flagged: $name: $*"; return; }
+  echo "$out" | grep -q "\[$name\]" || soft "wrong pattern label for wrapped $name: $out"
+}
+wrapped type_alias 'type X =' '    Option<' '        Mag>;'
+wrapped type_rename 'use super::{Mag' '    as M3};'
+wrapped type_rename 'pub use crate::model::dyadic::{' '    MagV,' '    Dy' '        as D,' '};'
+wrapped type_rename 'use super::Mag as' '    M;'
+wrapped type_alias 'pub type Pairs<' '    T,' '> = Result<' '    Mag,' '    T,' '> where' '    T: Sized;'
+wrapped type_alias 'pub type V<'"'"'a> =' '    &'"'"'a' '    MagV;'
+wrapped type_alias 'type D' '    = Dy;'
+mkdiff src/mag/zz.rs 'type Pair =' '    (u8,' '        u8);' 'use std::fmt::{' '    Result as FmtResult,' '};' 'type Word = u64;' 'let m = Mag::zero();' 'use super::{' '    Mag,' '    Inner,' '};' > "$t/ok.diff"
+scan --diff-file "$t/ok.diff" >/dev/null || soft "wrapped alias-free lines flagged: $(scan --diff-file "$t/ok.diff")"
 [ "$SOFT" -eq 0 ] || { echo "SELFTEST: $SOFT converter-exemption plant check(s) failed"; exit 1; }
 
 # git modes in a throwaway repo
@@ -328,4 +346,20 @@ echo 9 > tools/sanctioned_rebuild_count_baseline.txt; scan --count-only | grep -
 scan --update-baseline >/dev/null; [ "$(tr -d '[:space:]' < tools/sanctioned_rebuild_count_baseline.txt)" = 2 ] || fail "rebuild baseline not lowered"
 echo 0 > tools/sanctioned_rebuild_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising rebuild baseline allowed"; [ "$(tr -d '[:space:]' < tools/sanctioned_rebuild_count_baseline.txt)" = 0 ] || fail "rebuild baseline raised"
 rm -f tools/sanctioned_rebuild_count_baseline.txt; scan --count-only >/dev/null && fail "missing rebuild baseline passed"
+
+# alias/rename ban on the whole tree (baseline-free, wrapped forms included): any hit fails --count-only and the gate's default run
+echo 0 > tools/sanctioned_rebuild_count_baseline.txt; echo 0 > tools/hidden_copy_count_baseline.txt; rm -rf tests
+printf 'use super::Mag;\ntype Word = u64;\n// type M2 = Mag; and Mag as M\nfn s() { let _x = "type M2 = Mag;"; }\n' > src/x.rs
+scan --count-only >/dev/null || fail "alias-free tree flagged: $(scan --count-only)"
+printf 'type X =\n    Option<\n        Mag>;\n' > src/x.rs
+out="$(scan --count-only)" && fail "wrapped type alias in the tree passed --count-only"
+echo "$out" | grep -q "src/x.rs:1 \[type_alias\]" || fail "wrapped type alias not reported with its first line: $out"
+printf 'use super::{Mag\n    as M3};\n' > src/x.rs
+out="$(scan --count-only)" && fail "wrapped rename in the tree passed --count-only"
+echo "$out" | grep -q "src/x.rs:1 \[type_rename\]" || fail "wrapped rename not reported: $out"
+mkdir -p tests; printf 'pub use crate::model::dyadic::{\n    MagV,\n    Dy\n        as D,\n};\n' > tests/y.rs; printf 'fn a() {}\n' > src/x.rs
+out="$(scan --count-only)" && fail "wrapped pub use rename under tests/ passed --count-only"
+echo "$out" | grep -q "tests/y.rs:3 \[type_rename\]" || fail "rename under tests/ not reported at its line: $out"
+rm -rf tests; printf 'fn a() {}\n' > src/x.rs
+scan --count-only >/dev/null || fail "tree not clean after the alias fixtures: $(scan --count-only)"
 echo "rules_scan selftest: ok"
