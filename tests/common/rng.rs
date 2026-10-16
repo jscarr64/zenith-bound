@@ -21,6 +21,12 @@ impl SplitMix64 {
         z = (z ^ (z >> 27)).wrapping_mul(MUL2);
         z ^ (z >> 31)
     }
+
+    /// A value in `0..n` (`0` when `n == 0`): one draw, widening multiply (no modulo bias to speak of, no division).
+    pub fn below(&mut self, n: u64) -> u64 {
+        let wide = (u128::from(self.next_u64()) * u128::from(n)) >> 64;
+        u64::try_from(wide).unwrap_or(0)
+    }
 }
 
 /// The first output of a generator seeded with `seed` (one-shot mixer, used to derive stream seeds).
