@@ -3,6 +3,7 @@ Generates tests/goldens/mag_ops.txt; run with /usr/bin/python3 (the python3 on P
 """
 
 import os
+import sys
 import mpmath
 from fractions import Fraction
 from mpmath.libmp import from_man_exp, mpf_add, mpf_sub, mpf_mul, mpf_div, mpf_sqrt, fzero
@@ -253,8 +254,13 @@ def binary_pairs(op):
     return pairs
 
 
-def main():
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "goldens", "mag_ops.txt")
+GOLDEN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "goldens")
+GOLDEN_NAME = "mag_ops.txt"
+
+
+def main(path=None):
+    if path is None:
+        path = os.path.join(GOLDEN_DIR, GOLDEN_NAME)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     
     with open(path, "w") as f:
@@ -328,4 +334,13 @@ def main():
     print("rows %d, checked with Fractions %d, skipped (exponents too far apart to check) [window %d] %d" % (line_count, checked, WINDOW, skipped))
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) == 3 and sys.argv[1] == "--check":
+        # Regenerate into DIR (never into tests/goldens) and compare byte for byte with the committed file (scripts/goldlib.py, `--check DIR`).
+        import goldlib
+        os.makedirs(sys.argv[2], exist_ok=True)
+        main(os.path.join(sys.argv[2], GOLDEN_NAME))
+        raise SystemExit(1 if goldlib.check_against(sys.argv[2], GOLDEN_DIR, [GOLDEN_NAME]) else 0)
+    elif len(sys.argv) == 1:
+        main()
+    else:
+        raise SystemExit("usage: /usr/bin/python3 scripts/gen_goldens.py [--check DIR]")
