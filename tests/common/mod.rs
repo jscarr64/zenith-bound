@@ -1,5 +1,9 @@
 //! Shared test support for zenith-bound (checklist item S1): deterministic generator and fixed seeds. Integer-only, no dependencies.
-//! Include it from a test target with `#[path = "../common/mod.rs"] mod common;` (the way tests/mag pulls in tests/model).
+//!
+//! RULE: tests/common is included ONLY by the single harness target (tests/harness/main.rs), as
+//! `#[path = "../common/mod.rs"] mod common;`. No other test target may include it. The crate denies `unused` and `#[allow]` is banned,
+//! so every `pub` item added to common MUST be used by the harness target (its self-tests count), or the build fails with a
+//! `never used` error. Add the item and its use in the same commit.
 pub mod rng;
 pub mod seeds;
 
