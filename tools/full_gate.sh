@@ -31,4 +31,5 @@ run derive-scan "! grep -rPzl --include='*.rs' '#\\[derive\\([^)]*\\b(Clone|Copy
 run pubfn-coverage "tools/pubfn_coverage_selftest.sh && tools/pubfn_coverage.sh"
 run goldens-regen "tools/goldens_regen.sh"
 run wildcard-enum "tools/wildcard_enum_selftest.sh"
+run tightness "tools/tightness_selftest.sh && tools/tightness_check.sh"
 echo done >> "$T/$tag.rc"

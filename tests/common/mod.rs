@@ -11,6 +11,7 @@ pub mod replay;
 pub mod rng;
 pub mod seeds;
 pub mod shrink;
+pub mod tightness;
 
 use core::fmt::Debug;
 
