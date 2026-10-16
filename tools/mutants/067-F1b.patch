@@ -1,0 +1,13 @@
+diff --git a/src/mag/mod.rs b/src/mag/mod.rs
+index 746cd54..eb253ce 100644
+--- a/src/mag/mod.rs
++++ b/src/mag/mod.rs
+@@ -64,7 +64,7 @@ impl Mag {
+     /// representable and this returns [`BoundError::Representation`] without rounding.
+     pub fn finite(mant: u64, exp: i64) -> Result<Mag, BoundError> {
+         match NonZeroU64::new(mant) {
+-            None if exp == 0 => Ok(Mag::zero()),
++            None if exp != 0 => Ok(Mag::zero()),
+             None => Err(BoundError::Representation),
+             Some(nonzero) => {
+                 // A nonzero `u64` has at most 63 leading zeros, so the shift below drops only
