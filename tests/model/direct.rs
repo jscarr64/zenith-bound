@@ -90,7 +90,7 @@ fn isqrt(n: u128) -> u128 {
 fn parts(x: &MagV) -> Option<(i128, u128)> {
     match x {
         MagV::Finite { exp, mant } if *mant != 0 => Some((i128::from(*exp), u128::from(*mant))),
-        _ => None,
+        MagV::Finite { .. } | MagV::Infinity => None,
     }
 }
 

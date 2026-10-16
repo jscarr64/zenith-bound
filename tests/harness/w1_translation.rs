@@ -78,7 +78,7 @@ struct Rule {
 fn base_finite(_a: &Val, _b: &Val, out: &Out) -> Result<(), String> {
     match out {
         Out::Finite { .. } => Ok(()),
-        other => Err(format!(
+        other @ (Out::Zero | Out::Infinity) => Err(format!(
             "finite nonzero operands near exponent 0 must give a finite nonzero result, the operation gave {:?}",
             other
         )),

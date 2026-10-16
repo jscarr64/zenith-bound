@@ -722,7 +722,11 @@ impl BallDesc {
         };
         let rad = match self.radius {
             RadiusClass::RandomMag => format!("mag({:016x},e{})", self.rad_mant, self.rad_exp),
-            _ => String::from(self.radius.tag()),
+            RadiusClass::Zero
+            | RadiusClass::OneUlp
+            | RadiusClass::HalfUlp
+            | RadiusClass::Huge
+            | RadiusClass::Infinity => String::from(self.radius.tag()),
         };
         format!("{}~r={}", mid, rad)
     }
