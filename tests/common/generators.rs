@@ -587,16 +587,17 @@ pub fn draw_precision(rng: &mut SplitMix64, source: &PrecSource) -> Result<u32, 
     match source {
         PrecSource::Schedule => {
             let i = usize::try_from(rng.below(41)).map_err(|_| String::from("schedule index"))?;
-            PS.get(i)
-                .copied()
-                .ok_or_else(|| String::from("schedule index out of range"))
+            match PS.get(i) {
+                Some(&v) => Ok(v),
+                None => Err(String::from("schedule index out of range")),
+            }
         }
         PrecSource::Fast => {
             let i = usize::try_from(rng.below(18)).map_err(|_| String::from("fast index"))?;
-            PS_FAST
-                .get(i)
-                .copied()
-                .ok_or_else(|| String::from("fast index out of range"))
+            match PS_FAST.get(i) {
+                Some(&v) => Ok(v),
+                None => Err(String::from("fast index out of range")),
+            }
         }
         PrecSource::Uniform => {
             let v = u32::try_from(rng.below(u64::from(MAX_PREC)))

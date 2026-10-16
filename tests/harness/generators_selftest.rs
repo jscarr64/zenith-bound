@@ -208,8 +208,8 @@ fn exponent_band_counts_are_pinned_for_the_fixed_seed() -> Result<(), String> {
     expect_eq("digest of the values", &digest, &EXP_DIGEST_MAG)?;
     // statistical sanity, independent of the pin: each band within 2.5 percentage points of its weight
     for (i, (band, pct)) in EXP_MIX.iter().enumerate() {
-        let got = u64::try_from(counts.get(i).copied().unwrap_or(0))
-            .map_err(|_| String::from("count"))?;
+        let got =
+            u64::try_from(counts.get(i).map_or(0, |&c| c)).map_err(|_| String::from("count"))?;
         let want = u64::try_from(N).map_err(|_| String::from("N"))? * pct / 100;
         if got.abs_diff(want) * 40 > u64::try_from(N).map_err(|_| String::from("N"))? {
             return Err(format!(

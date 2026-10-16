@@ -183,10 +183,9 @@ pub fn parse_row(line: &str) -> Result<GoldRow, String> {
             want
         ));
     }
-    let get = |i: usize| {
-        f.get(i)
-            .copied()
-            .ok_or_else(|| format!("field {} missing", i))
+    let get = |i: usize| match f.get(i) {
+        Some(&s) => Ok(s),
+        None => Err(format!("field {} missing", i)),
     };
     let prec: u32 = canon_dec("prec", get(1)?)?;
     let rm = RoundingMode::parse(get(2)?)
