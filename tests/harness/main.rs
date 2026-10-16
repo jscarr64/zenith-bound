@@ -3,6 +3,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+mod ball_goldens_selftest;
 mod generators_selftest;
 mod goldens_selftest;
 mod replay_selftest;
