@@ -37,6 +37,15 @@ pub fn check_tight(rad: u128, r_ref: u128, tau: u64) -> Result<(), String> {
     }
 }
 
+/// The zero-based index of the p99 element among `n` sorted samples: `ceil(99 n / 100) - 1`. `Err` for `n == 0` (no sample) or when `99 n` overflows.
+pub fn p99_rank(n: usize) -> Result<usize, String> {
+    n.checked_mul(99)
+        .ok_or_else(|| format!("p99_rank: 99 * {} overflows usize", n))?
+        .div_ceil(100)
+        .checked_sub(1)
+        .ok_or_else(|| String::from("p99_rank: no samples"))
+}
+
 /// The statistics of one `(op, prec)` cell, all ratios in q16.
 #[derive(Debug, PartialEq, Eq)]
 pub struct CellStat {
@@ -100,14 +109,14 @@ impl TightnessLog {
             let last = n
                 .checked_sub(1)
                 .ok_or_else(|| String::from("stats: empty cell"))?;
-            let p99_rank = (n * 99).div_ceil(100).saturating_sub(1);
+            let p99_at = p99_rank(n)?;
             out.push(CellStat {
                 op: String::from(op.as_str()),
                 prec: *prec,
                 count: u64::try_from(n).map_err(|_| String::from("stats: count"))?,
                 min: at(0)?,
                 median: at(last / 2)?,
-                p99: at(p99_rank)?,
+                p99: at(p99_at)?,
                 max: at(last)?,
             });
         }

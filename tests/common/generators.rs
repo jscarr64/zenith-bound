@@ -66,7 +66,8 @@ impl ExpDomain {
 
     /// True when `v` is inside the domain or exactly one tick outside it (`min - 1`, `max + 1`): the raw values a draw may return.
     pub fn in_raw_range(&self, v: i64) -> bool {
-        v >= self.min.saturating_sub(1) && v <= self.max.saturating_add(1)
+        self.min.checked_sub(1).is_none_or(|lo| v >= lo)
+            && self.max.checked_add(1).is_none_or(|hi| v <= hi)
     }
 
     /// The edge table, in this fixed order: `min-1 .. min+3`, `max+1 .. max-3`, then `subnormal-1 .. subnormal+1`.
@@ -555,7 +556,7 @@ pub fn draw_mantissa_with(
             TOP | (1u64 << bit)
         }
         MantPattern::TieAtP => tie,
-        MantPattern::TieMinus1 => tie.saturating_sub(1).max(TOP),
+        MantPattern::TieMinus1 => tie.checked_sub(1).map_or(TOP, |t| t.max(TOP)),
         MantPattern::TiePlus1 => tie + 1,
         MantPattern::Uniform => aux | TOP,
     };
