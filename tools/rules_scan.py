@@ -22,7 +22,7 @@ like library code, and every pattern below applies to every scanned path.
 Flagged on added lines only (comments and string literals are ignored):
   .clone(  .clone_from(  Clone::clone  .to_vec(  .cloned(  .copied(  .to_owned(  derive(..Clone|Copy..)
   impl Clone|Copy for  unsafe  #[allow / #![allow  unwrap(  expect(  panic!  unreachable!  todo!
-  unimplemented!  f32  f64  core::arch / std::arch / target_feature / mul_add / is_x86_feature_detected
+  unimplemented!  type X = ..Mag|MagV|Dy..  Mag|MagV|Dy as X  f32  f64  core::arch / std::arch / target_feature / mul_add / is_x86_feature_detected
 (`assert!`, `assert_eq!`, `assert_ne!`, `assert_matches!` and their `debug_` forms ARE flagged, as are `unwrap_or_default(`, `unwrap_unchecked(`, `unwrap_err(`, `unwrap_err_unchecked(` and `expect_err(`. A `#[derive(` that spans several lines is flagged when a following added line of the same block names Clone or Copy.)
 
 ALLOWLIST: tools/rules_allowlist.txt, one `path:hash<TAB>reason` per line; the key is printed as allow-key=
@@ -48,6 +48,16 @@ scope as the clone patterns; no test exemption) that
       fn body (`Inner::Finite { exp, mant } => Mag::from_canonical(*exp, *mant)`).
 Heuristic, text-based: arguments that are computed (`exp + 1`, `mant.checked_add(1)`) are not bare field reads, so
 `successor`-style code does not count. A copy routed through intermediate `let` bindings is not seen. The count is
+ratcheted against tools/hidden_copy_count_baseline.txt (starts at 0, may only go down; --update-baseline lowers it).
+Rule (a), the name, always applies. There is no allowlist for this count.
+CONVERTER EXEMPTION (rules (b) and (c) only; closed): a fn is a conversion, not a copy, only when its file is under tests/, it
+has no `self`/`Self`/generics, EVERY named type in its signature (Option, Result, Vec, Box, String aside) is one of Mag, MagV,
+Dy, and the argument type set and the return type set are disjoint: `fn from_magv(m: &MagV) -> Result<Mag, String>` and
+`fn from_magv(m: &MagV) -> Option<Dy>`, the two real ones. Under src/, benches/ and examples/ there is no exemption. A type
+alias or a rename of Mag, MagV or Dy (`type M2 = Mag;`, `type V = MagV;`, `use x::Mag as M;`, `{Dy as D}`) is flagged anywhere by
+the baseline-free labels type_alias and type_rename (any hit fails), and a wrapper or holder type (`struct W(Mag)`, `Pair`)
+is not in the set, so none of them can make "no named type shared" true.
+
 SANCTIONED-REBUILD COUNT (O18-C, DECIDED): a `Mag` may be rebuilt from the two scalar integers of another `Mag` with
 `Mag::from_canonical(exp, mant)` while every method keeps its `&Mag` signature. The count is the number of
 `Mag::from_canonical(` / `Self::from_canonical(` call sites under src/ that are not the definition and whose arguments take a
@@ -55,11 +65,6 @@ part of another value (`x.get()` on a NonZero mantissa, `x.exp`, `x.mant`, `x.ex
 arguments are computed or constant (`Mag::finite`, `min_pos`, `max_finite`, `pack`, `succ`, `place_pow2`) are not counted.
 Expected 2 (add_up, sub_lower). Same ratchet against tools/sanctioned_rebuild_count_baseline.txt: it may only go down
 (--update-baseline lowers it); a third rebuild fails the gate until Jeff approves a baseline raise (CODEOWNERS covers tools/).
-
-A fn whose parameters name only other types than its return type (`fn from_magv(m: &MagV) -> Result<Mag, String>`, a
-conversion between the model and the library type, no `self`, no generics) is not a same-type copy, so rules (b) and (c) do not
-apply to it; rule (a), the name, always applies. There is no allowlist for this count. The count is
-ratcheted against tools/hidden_copy_count_baseline.txt (starts at 0, may only go down; --update-baseline lowers it).
 """
 import hashlib, os, re, subprocess, sys, collections
 
@@ -81,6 +86,8 @@ PATTERNS = [
     ("to_owned", re.compile(r"\.to_owned\(")),
     ("derive_clone", re.compile(r"#\[derive\([^)]*\b(?:Clone|Copy)\b")),
     ("impl_clone", re.compile(r"\bimpl(?:<[^>]*>)?\s+(?:Clone|Copy)\s+for\b")),
+    ("type_alias", re.compile(r"\btype\s+\w+\s*(?:<[^>]*>)?\s*=[^;]*\b(?:Mag|MagV|Dy)\b")),
+    ("type_rename", re.compile(r"\b(?:Mag|MagV|Dy)\s+as\s+\w+")),
     ("unsafe", re.compile(r"\bunsafe\b")),
     ("allow", re.compile(r"#!?\[allow\b|^\s*#!?\[.*\ballow\(")),
     ("unwrap", re.compile(r"\bunwrap\(")),
@@ -296,18 +303,22 @@ def pattern_bound_names(body):
     return names
 
 
-WRAPPER_TYPES = {"Option", "Result", "Vec", "Box", "String", "Rc", "Arc", "Cow", "Ok", "Err", "Some"}
+WRAPPER_TYPES = {"Option", "Result", "Vec", "Box", "String", "Ok", "Err", "Some"}
+CONVERTER_TYPES = {"Mag", "MagV", "Dy"}
 TYPE_NAME = re.compile(r"\b[A-Z]\w*")
 
 
-def converts_between_types(sig):
-    """True when the signature takes values of some named type(s) and returns only other named type(s), e.g.
-    `fn from_magv(m: &MagV) -> Result<Mag, String>`: that converts, it cannot be a copy of its argument. Conservative: a
-    `self` receiver, `Self`, generics, a missing return type or an argument/return type name in common all answer False."""
-    sig = sig.strip()
-    if sig.startswith("<") or re.search(r"\bself\b|\bSelf\b", sig):
+def converts_between_types(sig, rel):
+    """True only for the two real model/library converters. The exemption is closed: the file is under tests/, there is no
+    `self`, `Self` or generics, a return type exists, EVERY named type in the signature (Option, Result, Vec, Box, String
+    aside) is one of Mag, MagV, Dy, and the argument type set and the return type set are disjoint
+    (`fn from_magv(m: &MagV) -> Result<Mag, String>`, `fn from_magv(m: &MagV) -> Option<Dy>`). Under src/ benches/ examples/
+    there is no exemption at all. Aliases and renames of Mag/MagV/Dy are banned by the type_alias / type_rename scan labels, and
+    a wrapper or holder type is not in the set, so `type M2 = Mag`, `use Mag as M`, `struct W(Mag)` or `-> Pair` never exempt."""
+    if not rel.startswith("tests/"):
         return False
-    if not sig.startswith("("):
+    sig = sig.strip()
+    if sig.startswith("<") or re.search(r"\bself\b|\bSelf\b", sig) or not sig.startswith("("):
         return False
     close = match_close(sig, 0)
     if close < 0 or "->" not in sig[close + 1:]:
@@ -315,13 +326,13 @@ def converts_between_types(sig):
     ret = sig[close + 1:].split("->", 1)[1].split(" where ")[0]
     args = set(TYPE_NAME.findall(sig[:close + 1])) - WRAPPER_TYPES
     rets = set(TYPE_NAME.findall(ret)) - WRAPPER_TYPES
-    return bool(args) and bool(rets) and not (args & rets)
+    return bool(args) and bool(rets) and (args | rets) <= CONVERTER_TYPES and not (args & rets)
 
 
-def hidden_copy_reason(name, body, sig=""):
+def hidden_copy_reason(name, body, sig="", rel=""):
     if COPY_NAME.match(name):
         return "fn named %s" % name
-    if converts_between_types(sig):
+    if converts_between_types(sig, rel):
         return None
     bound = pattern_bound_names(body)
     for m in CTOR.finditer(body):
@@ -395,7 +406,7 @@ def hidden_copy_sites_in(base):
                 close = match_close(text, i)
                 if close < 0:
                     continue
-                reason = hidden_copy_reason(m.group(1), text[i + 1:close], text[m.end():i])
+                reason = hidden_copy_reason(m.group(1), text[i + 1:close], text[m.end():i], rel)
                 if reason:
                     sites.append((rel, text.count("\n", 0, m.start()) + 1, m.group(1), reason))
     return sites

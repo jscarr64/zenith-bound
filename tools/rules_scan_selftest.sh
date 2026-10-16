@@ -173,6 +173,52 @@ clean_hc_at tests/model/direct.rs "comment and string" 'fn f() -> MagV { // MagV
   let _s = "fn dup(x: &MagV)"; zero() }'
 hidden >/dev/null || fail "tests fixtures left a flag behind: $(hidden)"
 
+# Rusty's six converter-exemption evasions (green3 review A2 A3 A4 A5 A25 A31): a field-by-field copy of a Mag/MagV must be flagged
+# even when the type is renamed, aliased or wrapped. Soft-fail so every plant is reported in one run.
+SOFT=0
+soft() { echo "SELFTEST FAIL: $*"; SOFT=$((SOFT + 1)); }
+plant_hc() { # plant_hc <id> <path> <rust source>: exactly one hidden-copy site expected at <path>
+  mkdir -p "$(dirname "$hc/$2")"; printf '%s\n' "$3" > "$hc/$2"
+  out="$(hidden)"; rc=$?
+  if [ $rc -eq 0 ] || ! echo "$out" | grep -q "hidden_copy_count 1\$" || ! echo "$out" | grep -q "^$2:"; then
+    soft "plant $1 not flagged by the hidden-copy count: $(echo "$out" | tr '\n' ' ')"
+  fi
+  rm -f "$hc/$2"
+}
+INNER='match &m.inner { Inner::Finite { exp, mant } => Mag::from_canonical(*exp, *mant), Inner::Infinity => Mag::infinity() }'
+plant_hc A2 src/mag/zz.rs "type M2 = Mag; pub fn twin(m: &M2) -> Mag { $INNER }"
+plant_hc A3 src/mag/zz.rs "type M2 = Mag; pub fn twin(m: &Mag) -> M2 { $INNER }"
+plant_hc A4 src/mag/zz.rs "use super::Mag as M; pub fn twin(m: &Mag) -> M { match &m.inner { Inner::Finite { exp, mant } => M::from_canonical(*exp, *mant), Inner::Infinity => M::infinity() } }"
+plant_hc A5 src/mag/zz.rs "pub struct W(pub Mag); pub fn twin(w: &W) -> Mag { match &w.0.inner { Inner::Finite { exp, mant } => Mag::from_canonical(*exp, *mant), Inner::Infinity => Mag::infinity() } }"
+plant_hc A25 tests/model/zz.rs "use super::dyadic::MagV; type V = MagV; pub fn again(x: &V) -> Option<MagV> { Some(MagV::Finite { exp: x.exp()?, mant: x.mant()? }) }"
+plant_hc A31 src/mag/zz.rs "pub struct Pair(pub Mag, pub Mag); pub fn twin(m: &Mag) -> Pair { match &m.inner { Inner::Finite { exp, mant } => Pair(Mag::from_canonical(*exp, *mant), Mag::zero()), Inner::Infinity => Pair(Mag::infinity(), Mag::zero()) } }"
+# no exemption at all under src/, even for a real converter; under tests/ only when every named type is Mag, MagV or Dy
+plant_hc S1 src/mag/zz.rs 'pub fn from_magv(m: &MagV) -> Result<Mag, String> { match m { MagV::Finite { exp, mant } => Mag::finite(*mant, *exp).map_err(|e| format!("{:?}", e)), MagV::Infinity => Ok(Mag::infinity()) } }'
+plant_hc T1 tests/mag/zz.rs 'pub fn from_magv(m: &MagV) -> Result<Mag, BoundError> { match m { MagV::Finite { exp, mant } => Mag::finite(*mant, *exp), MagV::Infinity => Ok(Mag::infinity()) } }'
+plant_hc T2 tests/mag/zz.rs 'pub fn from_w(m: &W) -> Result<Mag, String> { match m { W::Finite { exp, mant } => Mag::finite(*mant, *exp).map_err(|e| format!("{:?}", e)), W::Infinity => Ok(Mag::infinity()) } }'
+plant_hc T3 tests/mag/zz.rs 'pub fn conv(m: &MagV) -> Result<Pair, String> { match m { MagV::Finite { exp, mant } => Ok(Pair::new(*mant, *exp)), MagV::Infinity => Ok(Pair::inf()) } }'
+# the aliasing and renaming of Mag/MagV/Dy is banned outright (rules scan label, no baseline, any hit fails)
+while IFS='|' read -r name line; do
+  mkdiff src/mag/zz.rs "$line" > "$t/d.diff"
+  out="$(scan --diff-file "$t/d.diff")" && { soft "not flagged: $name: $line"; continue; }
+  echo "$out" | grep -q "\[$name\]" || soft "wrong pattern label for $name: $out"
+done <<'CASES'
+type_alias|type M2 = Mag;
+type_alias|pub type V = MagV;
+type_alias|type D = Dy;
+type_alias|pub(crate) type Pairs = Vec<(Mag, Mag)>;
+type_alias|type R = Result<Mag, String>;
+type_alias|type Output = Mag;
+type_alias|type V<'a> = &'a MagV;
+type_rename|use super::Mag as M;
+type_rename|use crate::model::dyadic::{Dy as D, MagV};
+type_rename|use crate::model::dyadic::{MagV, Dy as D};
+type_rename|use zenith_bound::mag::Mag as Magnitude;
+CASES
+mkdiff src/mag/zz.rs 'type Pair = (u8, u8);' 'use std::fmt::Result as FmtResult;' 'use super::Mag;' 'let m = Mag::zero(); // type M2 = Mag; use x::Mag as M' 'let s = "type M2 = Mag; Mag as M";' 'type Word = u64;' 'impl Magnitude for X {}' > "$t/ok.diff"
+scan --diff-file "$t/ok.diff" >/dev/null || soft "alias-free lines flagged: $(scan --diff-file "$t/ok.diff")"
+[ "$SOFT" -eq 0 ] || { echo "SELFTEST: $SOFT converter-exemption plant check(s) failed"; exit 1; }
+
 # git modes in a throwaway repo
 g="$t/repo"; mkdir -p "$g/src" "$g/tools"; cd "$g" || exit 1
 git init -q . && git config user.email a@b && git config user.name t
