@@ -11,6 +11,8 @@
 
 mod add;
 mod cmp;
+mod lower;
+mod mul;
 mod round;
 mod ulp;
 
@@ -137,11 +139,6 @@ impl Mag {
     }
 
     /// Placeholder: zero for every input.
-    pub fn mul_up(&self, _other: &Mag) -> Mag {
-        Mag::wrong_up()
-    }
-
-    /// Placeholder: zero for every input.
     pub fn div_up(&self, _other: &Mag) -> Mag {
         Mag::wrong_up()
     }
@@ -153,11 +150,6 @@ impl Mag {
 
     /// Placeholder: `Infinity` for every input.
     pub fn sub_lower(&self, _other: &Mag) -> Mag {
-        Mag::wrong_down()
-    }
-
-    /// Placeholder: `Infinity` for every input.
-    pub fn mul_lower(&self, _other: &Mag) -> Mag {
         Mag::wrong_down()
     }
 
