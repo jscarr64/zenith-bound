@@ -10,4 +10,5 @@ mod replay_selftest;
 mod rng_selftest;
 mod seeds_selftest;
 mod shrink_selftest;
+mod tightness_selftest;
 mod w1_translation;
