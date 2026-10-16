@@ -4,6 +4,9 @@
 mod common;
 
 mod ball_goldens_selftest;
+mod fuzz_mag;
+mod fuzz_mag_props;
+mod fuzz_mag_props_selftest;
 mod generators_selftest;
 mod goldens_selftest;
 mod replay_selftest;
