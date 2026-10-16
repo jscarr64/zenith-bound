@@ -79,25 +79,25 @@ pub fn pred(m: &MagV) -> Option<MagV> {
 }
 
 pub fn cmp_dy(m: &MagV, exact: &Dy) -> Option<Ordering> {
-    Dy::from_magv(m).map(|cand| cand.cmp(exact))
+    Dy::from_magv(m)?.cmp(exact)
 }
 
 pub fn cmp_quotient(m: &MagV, num: &Dy, den: &Dy) -> Option<Ordering> {
     let cand = Dy::from_magv(m)?;
     let prod = cand.mul(den);
-    Some(prod.cmp(num))
+    prod.cmp(num)
 }
 
 pub fn cmp_sqrt(m: &MagV, x: &Dy) -> Option<Ordering> {
     let cand = Dy::from_magv(m)?;
     let sq = cand.mul(&cand);
-    Some(sq.cmp(x))
+    sq.cmp(x)
 }
 
 pub fn cmp_minus(m: &MagV, a: &Dy, b: &Dy) -> Option<Ordering> {
     let cand = Dy::from_magv(m)?;
     let sum = cand.add(b)?;
-    Some(sum.cmp(a))
+    sum.cmp(a)
 }
 
 pub fn check_up(

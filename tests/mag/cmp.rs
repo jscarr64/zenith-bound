@@ -1,12 +1,12 @@
 //! CONTRACT 14.5, 2.1; oracle: dyadic-rational model (tests/model)
 
-use crate::convert::{ctx, dy_of, from_magv};
+use crate::convert::{ctx, dcmp, dy_of, from_magv};
 use crate::model::dyadic::MagV;
 use crate::model::sets::{extreme_exponents, magv_set, mid_exponents};
 
 fn check_pair(a: &MagV, b: &MagV) -> Result<(), String> {
     let got = from_magv(a).cmp(&from_magv(b));
-    let want = dy_of(a)?.cmp(&dy_of(b)?);
+    let want = dcmp(&dy_of(a)?, &dy_of(b)?)?;
     if got == want {
         Ok(())
     } else {

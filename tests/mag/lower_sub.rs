@@ -1,6 +1,6 @@
 //! CONTRACT 14.2, 3.2, 2.3; oracle: dyadic-rational model (tests/model)
 
-use crate::convert::{ctx, dy_of, from_magv, to_magv};
+use crate::convert::{ctx, dcmp, dy_of, from_magv, to_magv};
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{check_down, cmp_minus, pred, zero_mag};
 use crate::model::sets::{extreme_exponents, magv_set, mid_exponents};
@@ -10,7 +10,7 @@ pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
     let da = dy_of(a)?;
     let db = dy_of(b)?;
 
-    if da.cmp(&db) != Ordering::Greater {
+    if dcmp(&da, &db)? != Ordering::Greater {
         check_down(r, true, &|_m| Some(Ordering::Less))
     } else {
         match cmp_minus(r, &da, &db) {

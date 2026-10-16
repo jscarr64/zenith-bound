@@ -45,13 +45,13 @@ impl Dy {
     pub fn add(&self, other: &Dy) -> Option<Dy> {
         if self.is_zero() {
             return Some(Dy {
-                n: other.n.shl(0),
+                n: other.n.add(&Nat::zero()),
                 e: other.e,
             });
         }
         if other.is_zero() {
             return Some(Dy {
-                n: self.n.shl(0),
+                n: self.n.add(&Nat::zero()),
                 e: self.e,
             });
         }
@@ -64,14 +64,8 @@ impl Dy {
         let d1 = self.e - lowest;
         let d2 = other.e - lowest;
 
-        let shift1 = match usize::try_from(d1) {
-            Ok(v) => v,
-            Err(_) => return None,
-        };
-        let shift2 = match usize::try_from(d2) {
-            Ok(v) => v,
-            Err(_) => return None,
-        };
+        let shift1 = usize::try_from(d1).ok()?;
+        let shift2 = usize::try_from(d2).ok()?;
 
         let n1_shifted = self.n.shl(shift1);
         let n2_shifted = other.n.shl(shift2);
@@ -80,44 +74,32 @@ impl Dy {
         Some(Dy { n: sum, e: lowest })
     }
 
-    pub fn cmp(&self, other: &Dy) -> Ordering {
+    pub fn cmp(&self, other: &Dy) -> Option<Ordering> {
         if self.is_zero() && other.is_zero() {
-            return Ordering::Equal;
+            return Some(Ordering::Equal);
         }
         if self.is_zero() {
-            return Ordering::Less;
+            return Some(Ordering::Less);
         }
         if other.is_zero() {
-            return Ordering::Greater;
+            return Some(Ordering::Greater);
         }
 
-        let top1 = match i128::try_from(self.n.bit_len()) {
-            Ok(v) => v + self.e,
-            Err(_) => 0,
-        };
-        let top2 = match i128::try_from(other.n.bit_len()) {
-            Ok(v) => v + other.e,
-            Err(_) => 0,
-        };
+        let top1 = i128::from(self.n.bit_len()) + self.e;
+        let top2 = i128::from(other.n.bit_len()) + other.e;
 
         match top1.cmp(&top2) {
             Ordering::Equal => {
                 let d = self.e - other.e;
                 if d >= 0 {
-                    let shift = match usize::try_from(d) {
-                        Ok(v) => v,
-                        Err(_) => return Ordering::Equal,
-                    };
-                    self.n.shl(shift).cmp(&other.n)
+                    let shift = usize::try_from(d).ok()?;
+                    Some(self.n.shl(shift).cmp(&other.n))
                 } else {
-                    let shift = match usize::try_from(-d) {
-                        Ok(v) => v,
-                        Err(_) => return Ordering::Equal,
-                    };
-                    self.n.cmp(&other.n.shl(shift))
+                    let shift = usize::try_from(-d).ok()?;
+                    Some(self.n.cmp(&other.n.shl(shift)))
                 }
             }
-            ord => ord,
+            ord => Some(ord),
         }
     }
 }

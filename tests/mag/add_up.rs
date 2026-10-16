@@ -1,5 +1,5 @@
 //! CONTRACT 14.1, 14.3, 14.6, 2.3; oracle: dyadic-rational model (tests/model)
-use crate::convert::{ctx, dy_of, from_magv, to_magv};
+use crate::convert::{ctx, dcmp, dy_of, from_magv, to_magv};
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{check_up, cmp_dy, succ};
 use crate::model::sets::{extreme_exponents, magv_set, mid_exponents};
@@ -13,7 +13,7 @@ pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
         Some(exact) => check_up(r, da.is_zero() && db.is_zero(), &|m| cmp_dy(m, &exact)),
         None => {
             // exponent gap above the model's limit; both operands nonzero; CONTRACT 14.3: the result is the larger operand plus one unit in its last place = succ(larger)
-            let larger = match da.cmp(&db) {
+            let larger = match dcmp(&da, &db)? {
                 Ordering::Less => b,
                 _ => a,
             };

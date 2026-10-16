@@ -6,11 +6,13 @@ pub struct Nat {
 }
 
 fn lo(x: u128) -> u64 {
-    u64::try_from(x & u128::from(u64::MAX)).unwrap_or_default()
+    let [b0, b1, b2, b3, b4, b5, b6, b7, _, _, _, _, _, _, _, _] = x.to_le_bytes();
+    u64::from_le_bytes([b0, b1, b2, b3, b4, b5, b6, b7])
 }
 
 fn hi(x: u128) -> u64 {
-    u64::try_from(x >> 64).unwrap_or_default()
+    let [_, _, _, _, _, _, _, _, b8, b9, b10, b11, b12, b13, b14, b15] = x.to_le_bytes();
+    u64::from_le_bytes([b8, b9, b10, b11, b12, b13, b14, b15])
 }
 
 fn add_limb_at(limbs: &mut Vec<u64>, pos: usize, x: u64) {
@@ -51,14 +53,22 @@ impl Nat {
         self.limbs.is_empty()
     }
 
-    pub fn bit_len(&self) -> usize {
-        match self.limbs.last() {
-            None => 0,
-            Some(top) => {
-                let lz = usize::try_from(top.leading_zeros()).unwrap_or_default();
-                self.limbs.len() * 64 - lz
+    pub fn bit_len(&self) -> u64 {
+        let mut total: u64 = 0;
+        let mut top_seen = false;
+        for limb in self.limbs.iter().rev() {
+            if !top_seen {
+                let mut t = *limb;
+                while t != 0 {
+                    total += 1;
+                    t >>= 1;
+                }
+                top_seen = true;
+            } else {
+                total += 64;
             }
         }
+        total
     }
 
     pub fn shl(&self, bits: usize) -> Nat {
@@ -67,8 +77,10 @@ impl Nat {
         }
         let limb_shift = bits / 64;
         let mut limbs: Vec<u64> = vec![0; limb_shift];
-        let sh = u32::try_from(bits % 64).unwrap_or_default();
-        let factor: u128 = 1u128 << sh;
+        let mut factor: u128 = 1;
+        for _ in 0..(bits % 64) {
+            factor *= 2;
+        }
         let mut carry: u128 = 0;
         for limb in self.limbs.iter() {
             let v = u128::from(*limb) * factor + carry;
@@ -86,8 +98,8 @@ impl Nat {
         let mut carry = 0u64;
         let mut result = Vec::with_capacity(max_len);
         for i in 0..max_len {
-            let a = self.limbs.get(i).copied().unwrap_or(0);
-            let b = other.limbs.get(i).copied().unwrap_or(0);
+            let a = self.limbs.get(i).map_or(0, |v| *v);
+            let b = other.limbs.get(i).map_or(0, |v| *v);
             let s = u128::from(a) + u128::from(b) + u128::from(carry);
             result.push(lo(s));
             carry = hi(s);

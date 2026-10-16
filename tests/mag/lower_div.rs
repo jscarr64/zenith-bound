@@ -9,7 +9,9 @@ use core::cmp::Ordering;
 pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
     let da = dy_of(a)?;
     let db = dy_of(b)?;
-    if cmp_quotient(&max_mag(), &da, &db) == Some(Ordering::Less) {
+    let over = cmp_quotient(&max_mag(), &da, &db)
+        .ok_or_else(|| String::from("model cannot align max_mag"))?;
+    if over == Ordering::Less {
         return Ok(());
     }
     check_down(r, da.is_zero(), &|m| cmp_quotient(m, &da, &db))

@@ -4,6 +4,7 @@ use crate::convert::{dy_of, from_magv, to_magv};
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{check_down, cmp_dy};
 use crate::model::sets::{extreme_exponents, magv_set, mid_exponents};
+use core::cmp::Ordering;
 
 pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
     let da = dy_of(a)?;
@@ -11,7 +12,9 @@ pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
     let exact = da.mul(&db);
 
     // overflow of a round-down operation is an open contract question (O7): skip those pairs
-    if cmp_dy(&crate::model::oracle::max_mag(), &exact) == Some(std::cmp::Ordering::Less) {
+    let over = cmp_dy(&crate::model::oracle::max_mag(), &exact)
+        .ok_or_else(|| String::from("model cannot align max_mag"))?;
+    if over == Ordering::Less {
         return Ok(());
     }
 

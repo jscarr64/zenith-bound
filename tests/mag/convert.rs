@@ -1,4 +1,5 @@
 use crate::model::dyadic::{Dy, MagV};
+use core::cmp::Ordering;
 use zenith_bound::mag::Mag;
 
 pub fn to_magv(m: &Mag) -> MagV {
@@ -27,4 +28,9 @@ pub fn dy_of(m: &MagV) -> Result<Dy, String> {
 
 pub fn ctx(op: &str, args: &[&MagV], r: Result<(), String>) -> Result<(), String> {
     r.map_err(|e| format!("{}{:?}: {}", op, args, e))
+}
+
+pub fn dcmp(a: &Dy, b: &Dy) -> Result<Ordering, String> {
+    a.cmp(b)
+        .ok_or_else(|| String::from("model cannot compare the two values"))
 }
