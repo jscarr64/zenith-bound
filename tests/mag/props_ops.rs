@@ -1,4 +1,4 @@
-//! CONTRACT 14.1-14.6, 2.3, 2.4, 3.2, 3.3; oracles: (1) independent u128 integer oracle (tests/model/direct.rs), (2) the dyadic-rational model (the per-op `verify` functions), (3) metamorphic relations; seeded splitmix64, replay with ZB_PROP_SEED/ZB_PROP_CASES
+//! CONTRACT 14.1-14.6, 2.3, 2.4, 3.2, 3.3, 3.4; oracles: (1) independent u128 integer oracle (tests/model/direct.rs), (2) the dyadic-rational model (the per-op `verify` functions), (3) metamorphic relations; seeded splitmix64, replay with ZB_PROP_SEED/ZB_PROP_CASES
 
 use crate::model::direct;
 use crate::model::draw::{draw_mag, draw_partner};

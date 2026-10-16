@@ -1,4 +1,4 @@
-//! Error type of zenith-bound (minimal; the variant set is an open item, see CONTRACT O11).
+//! Error type of zenith-bound (minimal; the variant set is an open item, see CONTRACT O11-W).
 
 /// Why a value could not be built.
 #[derive(Debug)]
