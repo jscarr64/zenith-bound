@@ -28,13 +28,13 @@ impl ShrinkCase for Syn {
     fn with_exponents(&self, exponents: &[i64]) -> Self {
         Syn {
             exps: [
-                exponents.first().copied().unwrap_or(0),
-                exponents.get(1).copied().unwrap_or(0),
+                exponents.first().map_or(0, |&x| x),
+                exponents.get(1).map_or(0, |&x| x),
             ],
             prec: self.prec,
             mants: [
-                self.mants.first().copied().unwrap_or(0),
-                self.mants.get(1).copied().unwrap_or(0),
+                self.mants.first().map_or(0, |&x| x),
+                self.mants.get(1).map_or(0, |&x| x),
             ],
         }
     }
@@ -44,13 +44,13 @@ impl ShrinkCase for Syn {
     fn with_prec(&self, prec: u32) -> Self {
         Syn {
             exps: [
-                self.exps.first().copied().unwrap_or(0),
-                self.exps.get(1).copied().unwrap_or(0),
+                self.exps.first().map_or(0, |&x| x),
+                self.exps.get(1).map_or(0, |&x| x),
             ],
             prec,
             mants: [
-                self.mants.first().copied().unwrap_or(0),
-                self.mants.get(1).copied().unwrap_or(0),
+                self.mants.first().map_or(0, |&x| x),
+                self.mants.get(1).map_or(0, |&x| x),
             ],
         }
     }
@@ -60,13 +60,13 @@ impl ShrinkCase for Syn {
     fn with_mantissas(&self, mantissas: &[u64]) -> Self {
         Syn {
             exps: [
-                self.exps.first().copied().unwrap_or(0),
-                self.exps.get(1).copied().unwrap_or(0),
+                self.exps.first().map_or(0, |&x| x),
+                self.exps.get(1).map_or(0, |&x| x),
             ],
             prec: self.prec,
             mants: [
-                mantissas.first().copied().unwrap_or(0),
-                mantissas.get(1).copied().unwrap_or(0),
+                mantissas.first().map_or(0, |&x| x),
+                mantissas.get(1).map_or(0, |&x| x),
             ],
         }
     }
@@ -74,15 +74,15 @@ impl ShrinkCase for Syn {
 
 /// Fails iff the exponent gap is at least 70, the precision at least 5, and the first mantissa has its top bit.
 fn gap_fails(c: &Syn) -> bool {
-    let e0 = c.exps.first().copied().unwrap_or(0);
-    let e1 = c.exps.get(1).copied().unwrap_or(0);
-    let m0 = c.mants.first().copied().unwrap_or(0);
+    let e0 = c.exps.first().map_or(0, |&x| x);
+    let e1 = c.exps.get(1).map_or(0, |&x| x);
+    let m0 = c.mants.first().map_or(0, |&x| x);
     e1.abs_diff(e0) >= 70 && c.prec >= 5 && m0 & TOP != 0
 }
 
 /// Fails iff the first exponent is at least 1000.
 fn high_fails(c: &Syn) -> bool {
-    c.exps.first().copied().unwrap_or(0) >= 1000
+    c.exps.first().map_or(0, |&x| x) >= 1000
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn exponent_translation_halves_and_stops_at_the_boundary() -> Result<(), String>
         &high_fails,
         SHRINK_STEP_CAP,
     )?;
-    expect_eq("e0 minimal", &out.case.exps.first().copied(), &Some(1000))?;
+    expect_eq("e0 minimal", &out.case.exps.first(), &Some(&1000))?;
     expect_eq("prec reduced to 1", &out.case.prec, &1)?;
     expect_eq("evaluations (pinned)", &out.evaluations, &EVALS_HIGH)?;
     if !is_locally_minimal(&out.case, &high_fails) {
