@@ -122,21 +122,25 @@ fn every_row_parses_is_sorted_and_verifies() -> Result<(), String> {
     }
     expect_eq("recomputed rows", &recomputed, &RECOMPUTED)?;
     expect_eq("structural-only rows", &structural, &STRUCTURAL)?;
-    let counts: Vec<usize> = per_op.values().copied().collect();
-    expect_eq(
-        "rows per op (add sub mul div sqrt)",
-        &counts.as_slice(),
-        &PER_OP.as_slice(),
-    )?;
+    let counts: Vec<&usize> = per_op.values().collect();
+    let want_counts: Vec<&usize> = PER_OP.iter().collect();
+    expect_eq("rows per op (add sub mul div sqrt)", &counts, &want_counts)?;
     // every (op, prec) cell carries the same operand sets under all six modes
     for op in OPS.iter() {
         for p in PREC_LIST.iter() {
             let mut n: Option<usize> = None;
             for rm in RoundingMode::all() {
-                let c = per_cell
-                    .get(&(op_index(op), *p, rm.index()))
-                    .copied()
-                    .ok_or_else(|| format!("no rows for {} prec {} {}", op.name(), p, rm.name()))?;
+                let c = match per_cell.get(&(op_index(op), *p, rm.index())) {
+                    Some(&c) => c,
+                    None => {
+                        return Err(format!(
+                            "no rows for {} prec {} {}",
+                            op.name(),
+                            p,
+                            rm.name()
+                        ))
+                    }
+                };
                 if c == 0 {
                     return Err(String::from("empty cell"));
                 }
