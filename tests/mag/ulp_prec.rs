@@ -58,7 +58,7 @@ fn ulp_mag_uses_the_full_prec_and_overflows_only_at_max_exp_prec_zero() -> Resul
         for &prec in PRECS.iter() {
             let mag_exp = ulp_field(pre_round_exp, prec)?;
             let want = placed(mag_exp)?;
-            let got = to_magv(&Mag::ulp_mag(pre_round_exp, prec));
+            let got = to_magv(&Mag::ulp_mag(pre_round_exp, prec))?;
             if got != want {
                 return Err(format!(
                     "ulp_mag({pre_round_exp}, {prec}) expected {want:?}, got {got:?}"
@@ -82,7 +82,7 @@ fn half_ulp_prec_zero_is_two_to_the_mid_exp_minus_one() -> Result<(), String> {
         for &prec in PRECS.iter() {
             let mag_exp = half_field(mid_exp, prec)?;
             let want = placed(mag_exp)?;
-            let got = to_magv(&Mag::half_ulp(mid_exp, prec));
+            let got = to_magv(&Mag::half_ulp(mid_exp, prec))?;
             if got != want {
                 return Err(format!(
                     "half_ulp({mid_exp}, {prec}) expected {want:?}, got {got:?}"
