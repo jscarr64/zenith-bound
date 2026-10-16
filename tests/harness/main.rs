@@ -6,6 +6,7 @@ mod common;
 mod ball_goldens_selftest;
 mod generators_selftest;
 mod goldens_selftest;
+mod grid_digests;
 mod replay_selftest;
 mod rng_selftest;
 mod seeds_selftest;
