@@ -3,8 +3,9 @@
 
 use crate::model::direct;
 use crate::model::draw::{draw_mag, draw_partner, draw_raw};
+use crate::model::dyadic::Dy;
 use crate::model::rng::run_cases;
-use crate::support::from_magv;
+use crate::support::{dcmp, from_magv};
 use core::cmp::Ordering;
 use zenith_bound::mag::Mag;
 
@@ -168,6 +169,52 @@ fn prop_constructor_matches_the_rule() -> Result<(), String> {
     })
 }
 
+/// Independent value oracle: `a_mant * 2^a_exp == b_mant * 2^b_exp` (the common `-64` of clause 1.1 cancels), decided with u128 integers only.
+fn same_value(a_mant: u64, a_exp: i64, b_mant: u64, b_exp: i64) -> bool {
+    if a_mant == 0 || b_mant == 0 {
+        return a_mant == 0 && b_mant == 0;
+    }
+    let (hi_mant, hi_exp, lo_mant, lo_exp) = if a_exp >= b_exp {
+        (a_mant, a_exp, b_mant, b_exp)
+    } else {
+        (b_mant, b_exp, a_mant, a_exp)
+    };
+    let gap = i128::from(hi_exp) - i128::from(lo_exp);
+    match u32::try_from(gap) {
+        // the larger-exponent mantissa is >= 1, so a gap of 64 or more gives a value >= 2^64 > any u64 mantissa
+        Ok(g) if g < 64 => (u128::from(hi_mant) << g) == u128::from(lo_mant),
+        _ => false,
+    }
+}
+
+/// Checks that a constructed `Mag` denotes exactly `mant * 2^(exp - 64)`, with the u128 oracle and with the dyadic model.
+fn check_value(m: &Mag, mant: u64, exp: i64) -> Result<(), String> {
+    let (got_exp, got_mant) = match (m.exp(), m.mant()) {
+        (Some(e), Some(n)) => (e, n),
+        other => {
+            return Err(format!(
+                "mant={:#x}, exp={}: constructed Mag has accessors {:?}, expected a finite value",
+                mant, exp, other
+            ))
+        }
+    };
+    if !same_value(mant, exp, got_mant, got_exp) {
+        return Err(format!(
+            "mant={:#x}, exp={}: constructed Mag (exp {}, mant {:#x}) is not the same value (u128 oracle)",
+            mant, exp, got_exp, got_mant
+        ));
+    }
+    let want = Dy::from_mag(exp, mant);
+    let got = Dy::from_mag(got_exp, got_mant);
+    if dcmp(&want, &got)? != Ordering::Equal {
+        return Err(format!(
+            "mant={:#x}, exp={}: constructed Mag (exp {}, mant {:#x}) is not the same value (dyadic model)",
+            mant, exp, got_exp, got_mant
+        ));
+    }
+    Ok(())
+}
+
 #[test]
 fn prop_constructor_is_value_preserving() -> Result<(), String> {
     run_cases("prop_constructor_is_value_preserving", CASES, &|rng| {
@@ -186,6 +233,8 @@ fn prop_constructor_is_value_preserving() -> Result<(), String> {
         let mag2 = Mag::finite(shifted_mant, shifted_exp);
         match (mag1, mag2) {
             (Ok(m1), Ok(m2)) => {
+                check_value(&m1, mant, exp)?;
+                check_value(&m2, shifted_mant, shifted_exp)?;
                 if m1 != m2 || m1.exp() != m2.exp() || m1.mant() != m2.mant() {
                     return Err(format!(
                         "mant={:#x}, exp={} vs shifted_mant={:#x}, shifted_exp={}: values differ",

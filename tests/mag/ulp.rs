@@ -228,7 +228,7 @@ fn smaller_than_half_ulp_near_i64_min_matches_model_and_is_false_below_the_range
                     if got != want {
                         return Err(format!("smaller_than_half_ulp(Finite {{ exp: {}, mant: {} }}, {}, {}) expected {}, got {}", exp, mant, mid_exp, p, want, got));
                     }
-                    if h < i128::from(i64::MIN) - 1 && got {
+                    if h < i128::from(i64::MIN) && got {
                         return Err(format!("smaller_than_half_ulp(Finite {{ exp: {}, mant: {} }}, {}, {}) must be false: the threshold 2^{} is below every nonzero Mag", exp, mant, mid_exp, p, h));
                     }
                 }
