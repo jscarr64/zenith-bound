@@ -31,6 +31,13 @@ impl Dy {
         }
     }
 
+    pub fn pow2(e: i128) -> Dy {
+        Dy {
+            n: Nat::from_u64(1),
+            e,
+        }
+    }
+
     pub fn is_zero(&self) -> bool {
         self.n.is_zero()
     }
