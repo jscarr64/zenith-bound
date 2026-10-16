@@ -1,0 +1,2 @@
+# Pinned oracle for scripts/gen_goldens.py (dev only). Installed on Pop from the Ubuntu package python3-mpmath (pip has no SSL there); run with /usr/bin/python3.
+mpmath==1.2.1
