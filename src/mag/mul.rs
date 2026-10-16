@@ -1,9 +1,9 @@
 //! `mul_up` and the shared product used by `mul_lower`.
 
-use super::round::loose;
-use super::round::norm_u128;
+use super::round::norm;
 use super::round::settle;
 use super::Mag;
+use core::num::NonZeroU128;
 use core::num::NonZeroU64;
 
 impl Mag {
@@ -26,17 +26,17 @@ impl Mag {
     }
 }
 
+/// Product of two canonical finite nonzero values.
 pub(super) fn mul_parts(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64, up: bool) -> Mag {
-    let prod = match u128::from(ma.get()).checked_mul(u128::from(mb.get())) {
-        Some(prod) => prod,
-        None => return loose(up),
-    };
-    let scale = match i128::from(ea)
-        .checked_add(i128::from(eb))
-        .and_then(|sum| sum.checked_sub(128))
-    {
-        Some(scale) => scale,
-        None => return loose(up),
-    };
-    settle(norm_u128(prod, scale, false, up), up)
+    settle(mul_checked(ea, ma, eb, mb, up), up)
+}
+
+fn mul_checked(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64, up: bool) -> Option<Mag> {
+    // `ma * mb < 2^128` and both factors are nonzero, so the product is nonzero and the checked
+    // multiply cannot fail; |ea + eb - 128| < 2^66, so the exponent steps cannot fail either.
+    let prod = NonZeroU128::from(ma).checked_mul(NonZeroU128::from(mb))?;
+    let scale = i128::from(ea)
+        .checked_add(i128::from(eb))?
+        .checked_sub(128)?;
+    norm(prod, scale, false, up)
 }
