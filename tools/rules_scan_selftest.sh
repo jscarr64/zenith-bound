@@ -40,6 +40,17 @@ panic|panic!("no");
 unreachable|unreachable!();
 todo|todo!();
 unimplemented|unimplemented!();
+unwrap_variant|let v = r.unwrap_or_default();
+unwrap_variant|let v = r.unwrap_unchecked();
+unwrap_variant|let e = r.unwrap_err();
+unwrap_variant|let e = r.unwrap_err_unchecked();
+unwrap_variant|let e = r.expect_err("x");
+assert|assert!(a == b);
+assert|assert_eq!(a, b);
+assert|assert_ne!(a, b);
+assert|assert_matches!(a, Some(_));
+assert|debug_assert!(a);
+assert|debug_assert_eq!(a, b);
 f32|let a: f32 = 1.0;
 f64|let a = 1.0_f64; let b: f64 = 2.0;
 hwfloat|let r = a.mul_add(b, c);
@@ -57,6 +68,25 @@ mkdiff tests/props.rs 'let y = x.clone();' > "$t/p.diff"
 out="$(scan --diff-file "$t/p.diff")" && fail "clone not flagged in test path: tests/props.rs"
 echo "$out" | grep -q "\[clone\]" || fail "wrong pattern label for clone in tests/props.rs: $out"
 
+# the assert family and the unwrap variants are banned in test code too
+for p in tests/props.rs tests/model/mod.rs benches/b.rs examples/e.rs; do
+  mkdiff $p 'assert!(x);' > "$t/p.diff"
+  out="$(scan --diff-file "$t/p.diff")" && fail "assert not flagged in test/bench/example path: $p"
+  echo "$out" | grep -q "\[assert\]" || fail "wrong pattern label for assert in $p: $out"
+  mkdiff $p 'let v = r.unwrap_or_default();' > "$t/p.diff"
+  out="$(scan --diff-file "$t/p.diff")" && fail "unwrap_or_default not flagged in test/bench/example path: $p"
+  echo "$out" | grep -q "\[unwrap_variant\]" || fail "wrong pattern label for unwrap_or_default in $p: $out"
+done
+
+# a derive spanning several lines is flagged when a following line of the block names Clone or Copy
+for names in 'Clone,' 'Copy,' 'Debug, Clone,'; do
+  mkdiff tests/props.rs '#[derive(' '    Debug,' "    $names" ')]' 'struct A;' > "$t/p.diff"
+  out="$(scan --diff-file "$t/p.diff")" && fail "multi-line derive with $names not flagged"
+  echo "$out" | grep -q "\[derive_clone\]" || fail "wrong pattern label for multi-line derive with $names: $out"
+done
+mkdiff tests/props.rs '#[derive(' '    Debug,' '    PartialEq,' ')]' 'struct A;' 'let c = Clone;' > "$t/p.diff"
+scan --diff-file "$t/p.diff" >/dev/null || fail "multi-line derive without Clone/Copy flagged: $(scan --diff-file "$t/p.diff")"
+
 mkdiff tests/props.rs 'let a: f64 = 1.0;' > "$t/p.diff"
 out="$(scan --diff-file "$t/p.diff")" && fail "f64 not flagged in test path: tests/props.rs"
 echo "$out" | grep -q "\[f64\]" || fail "wrong pattern label for f64 in tests/props.rs: $out"
@@ -65,8 +95,8 @@ mkdiff tests/props.rs 'panic!("x");' > "$t/p.diff"
 out="$(scan --diff-file "$t/p.diff")" && fail "panic not flagged in test path: tests/props.rs"
 echo "$out" | grep -q "\[panic\]" || fail "wrong pattern label for panic in tests/props.rs: $out"
 
-# not flagged: comment, string, removed line, context line, deny attr, unwrap_or, expect_err_x, unwrap_or_default, assert_eq
-mkdiff $LIB '// x.clone() unsafe unwrap() f64' '/// doc: panic! #[allow]' 'let s = "x.clone() unwrap() f32";' '#![forbid(unsafe_code)]' 'let v = r.unwrap_or(0);' 'let v = r.expect_err_x;' 'let v = r.unwrap_or_default();' 'let r = assert_eq!(a, b);' > "$t/ok.diff"
+# not flagged: comment, string, removed line, context line, deny attr, unwrap_or, unwrap_or_else, expect_err_x, assertion helpers without the macro bang
+mkdiff $LIB '// x.clone() unsafe unwrap() f64' '/// doc: panic! #[allow]' 'let s = "x.clone() unwrap() f32";' '#![forbid(unsafe_code)]' 'let v = r.unwrap_or(0);' 'let v = r.expect_err_x;' 'let v = r.unwrap_or_else(f);' 'let r = assert_eq_x(a, b);' 'let s = "assert!(x) unwrap_or_default()";' > "$t/ok.diff"
 scan --diff-file "$t/ok.diff" >/dev/null || fail "comment/string/benign lines flagged: $(scan --diff-file "$t/ok.diff")"
 for p in README.md docs/CONTRACT.md scripts/gen.py tools/t.py; do
   mkdiff $p 'let y = x.clone(); unsafe {} r.unwrap(); let a: f64 = 1.0;' > "$t/p.diff"

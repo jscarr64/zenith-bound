@@ -14,6 +14,8 @@ mod lower_sqrt;
 mod lower_sub;
 mod model_selftest;
 mod mul_up;
+mod props_ops;
+mod props_ord;
 mod sqrt_up;
 mod support;
 mod ulp;

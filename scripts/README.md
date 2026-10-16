@@ -10,6 +10,6 @@ Run it with **`/usr/bin/python3`**:
 
 On Pop the `python3` on `PATH` (`/usr/local/bin/python3`) has no mpmath. mpmath 1.2.1 is the Ubuntu package (`python3-mpmath`) and is visible only to `/usr/bin/python3`. The script refuses to run with any other mpmath version. `requirements.lock` records the version; do not `pip install` it (Pop's pip has no TLS).
 
-The output is deterministic (fixed operand sets, a fixed xorshift seed, order-preserving de-duplication), so regenerating must leave `tests/goldens/mag_ops.txt` byte-identical; the full gate regenerates it and fails on any difference.
+The output is deterministic (fixed operand sets, a fixed xorshift seed, order-preserving de-duplication), so regenerating must leave `tests/goldens/mag_ops.txt` byte-identical (a gate step that regenerates and diffs it is planned, shared-harness item S8; it does not exist yet).
 
 Operand sets: binary rows use four mantissas and eleven exponents (including `i64::MIN`, `i64::MAX` and their neighbours) plus a wide block of twelve mantissas at the exponent extremes; unary rows use twelve mantissas (the same list as `tests/model/sets.rs`) and perfect or near-perfect squares. Round-down overflow rows expect `Finite{i64::MAX, u64::MAX}`; round-up overflow rows expect `inf`.

@@ -21,7 +21,7 @@ Flagged on added lines only (comments and string literals are ignored):
   .clone(  .clone_from(  Clone::clone  .to_vec(  .cloned(  .to_owned(  derive(..Clone|Copy..)
   impl Clone|Copy for  unsafe  #[allow / #![allow  unwrap(  expect(  panic!  unreachable!  todo!
   unimplemented!  f32  f64  core::arch / std::arch / target_feature / mul_add / is_x86_feature_detected
-(`assert!`, `assert_eq!` and `debug_assert!` are NOT flagged, as in zenith-float's scan.)
+(`assert!`, `assert_eq!`, `assert_ne!`, `assert_matches!` and their `debug_` forms ARE flagged, as are `unwrap_or_default(`, `unwrap_unchecked(`, `unwrap_err(`, `unwrap_err_unchecked(` and `expect_err(`. A `#[derive(` that spans several lines is flagged when a following added line of the same block names Clone or Copy.)
 
 ALLOWLIST: tools/rules_allowlist.txt, one `path:hash<TAB>reason` per line; the key is printed as allow-key=
 for every flagged site (hash = sha1 of the added line with whitespace collapsed). The file starts EMPTY.
@@ -63,6 +63,8 @@ PATTERNS = [
     ("unreachable", re.compile(r"\bunreachable!")),
     ("todo", re.compile(r"\btodo!")),
     ("unimplemented", re.compile(r"\bunimplemented!")),
+    ("unwrap_variant", re.compile(r"\bunwrap_or_default\(|\bunwrap_unchecked\(|\bunwrap_err\(|\bunwrap_err_unchecked\(|\bexpect_err\(")),
+    ("assert", re.compile(r"\b(?:debug_)?assert(?:_eq|_ne)?!|\bassert_matches!")),
     ("f32", re.compile(r"\bf32\b|\d_?f32\b")),
     ("f64", re.compile(r"\bf64\b|\d_?f64\b")),
     ("hwfloat", re.compile(r"\b(?:core|std)::arch\b|\btarget_feature\b|\bmul_add\b|\bis_x86_feature_detected\b")),
@@ -70,6 +72,8 @@ PATTERNS = [
 STR = re.compile(r'"(?:\\.|[^"\\])*"')
 REF_SUM = re.compile(r"\b(?:add_ref|sub_ref|mul_ref|div_ref)\(")
 DEF_EXCLUSION = re.compile(r"\bfn\s+(add_ref|sub_ref|mul_ref|div_ref)\b")
+DERIVE_OPEN = re.compile(r"#\[derive\((?![^)]*\)\])")
+DERIVE_NAME = re.compile(r"\b(?:Clone|Copy)\b")
 
 
 def is_rust(path):
@@ -118,11 +122,24 @@ def load_allow():
 
 def scan_diff(text):
     allow, hits = load_allow(), []
+    derive_path, derive_next = None, 0
     for path, n, content in parse_diff(text):
         if not is_rust(path):
             continue
         code = strip(content)
         key = "%s:%s" % (path, hashlib.sha1(" ".join(content.split()).encode()).hexdigest()[:12])
+        if derive_path == path and n == derive_next:
+            if DERIVE_NAME.search(code) and key not in allow:
+                hits.append((path, n, "derive_clone", " ".join(content.split()), key))
+            if ")]" in code:
+                derive_path = None
+            else:
+                derive_next = n + 1
+        else:
+            derive_path = None
+        if DERIVE_OPEN.search(code):
+            derive_path = path
+            derive_next = n + 1
         for label, rx in PATTERNS:
             if rx.search(code) and key not in allow:
                 hits.append((path, n, label, " ".join(content.split()), key))

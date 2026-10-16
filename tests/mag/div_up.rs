@@ -53,7 +53,7 @@ fn div_up_infinity_numerator_gives_infinity() -> Result<(), String> {
         }
         let r = to_magv(&Mag::infinity().div_up(&from_magv(x)?));
         if !matches!(r, MagV::Infinity) {
-            return Err("div_up(infinity, nonzero) must be infinity".to_string());
+            return Err(String::from("div_up(infinity, nonzero) must be infinity"));
         }
     }
     Ok(())

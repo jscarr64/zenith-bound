@@ -1,4 +1,5 @@
 //! CONTRACT 1.3, 14.1, 14.2, 14.3, 14.4; oracle: mpmath.libmp directed rounding (scripts/gen_goldens.py -> tests/goldens/mag_ops.txt); the model checkers are validated against the goldens (accepts them, rejects perturbed ones)
+use crate::model::direct;
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{max_mag, min_pos_mag, pred, succ};
 use crate::support::{from_magv, to_magv};
@@ -227,6 +228,47 @@ fn golden_file_has_all_eight_ops() -> Result<(), String> {
         let prefix = format!("{} ", op);
         if !GOLDEN.lines().any(|l| l.starts_with(prefix.as_str())) {
             return Err(format!("missing {}", op));
+        }
+    }
+    Ok(())
+}
+
+fn direct_result(op: &str, args: &[MagV]) -> Result<MagV, String> {
+    let a = args
+        .first()
+        .ok_or_else(|| String::from("missing argument a"))?;
+    let r = match op {
+        "sqrt_up" => direct::sqrt_up(a),
+        "sqrt_lower" => direct::sqrt_lower(a),
+        _ => {
+            let b = args
+                .get(1)
+                .ok_or_else(|| String::from("missing argument b"))?;
+            match op {
+                "add_up" => direct::add_up(a, b),
+                "mul_up" => direct::mul_up(a, b),
+                "mul_lower" => direct::mul_lower(a, b),
+                "sub_lower" => direct::sub_lower(a, b),
+                "div_up" => direct::div_up(a, b),
+                "div_lower" => direct::div_lower(a, b),
+                _ => return Err(format!("unknown op {}", op)),
+            }
+        }
+    };
+    r.ok_or_else(|| format!("direct oracle failed on {} {:?}", op, args))
+}
+
+#[test]
+fn direct_integer_oracle_matches_every_mpmath_golden() -> Result<(), String> {
+    for line in GOLDEN.lines() {
+        if let Some(row) = parse_row(line)? {
+            let got = direct_result(&row.op, &row.args)?;
+            if got != row.want {
+                return Err(format!(
+                    "{}: direct oracle gave {:?}, mpmath golden is {:?}",
+                    line, got, row.want
+                ));
+            }
         }
     }
     Ok(())

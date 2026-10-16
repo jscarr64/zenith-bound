@@ -257,3 +257,60 @@ fn smaller_than_half_ulp_zero_is_true_and_infinity_is_false() -> Result<(), Stri
     }
     Ok(())
 }
+
+/// CONTRACT 14.7 with prec = 0 (outside 8.1 but total): ulp_mag(e, 0) is 2^e, i.e. Finite { exp: e + 1, mant: 2^63 }, and a result above the i64 exponent range is Infinity (3.3).
+#[test]
+fn ulp_mag_prec_zero_is_two_to_the_pre_round_exp_and_overflows_at_i64_max() -> Result<(), String> {
+    let finite_cases: [(i64, i64); 7] = [
+        (i64::MIN, i64::MIN + 1),
+        (i64::MIN + 1, i64::MIN + 2),
+        (-1, 0),
+        (0, 1),
+        (1, 2),
+        (i64::MAX - 2, i64::MAX - 1),
+        (i64::MAX - 1, i64::MAX),
+    ];
+    for (e, want_exp) in finite_cases.iter() {
+        let r = to_magv(&Mag::ulp_mag(*e, 0));
+        let want = MagV::Finite {
+            exp: *want_exp,
+            mant: TWO63,
+        };
+        if r != want {
+            return Err(format!("ulp_mag({},0) expected {:?}, got {:?}", e, want, r));
+        }
+    }
+    let r = to_magv(&Mag::ulp_mag(i64::MAX, 0));
+    if r != MagV::Infinity {
+        return Err(format!(
+            "ulp_mag(i64::MAX,0) expected Infinity, got {:?}",
+            r
+        ));
+    }
+    Ok(())
+}
+
+/// CONTRACT 14.7 with prec = 0: half_ulp(m, 0) is 2^(m - 1), i.e. Finite { exp: m, mant: 2^63 }; at m = i64::MIN that is exactly the smallest positive Mag (no underflow), and no exponent overflows.
+#[test]
+fn half_ulp_prec_zero_is_two_to_the_mid_exp_minus_one() -> Result<(), String> {
+    let mids: [i64; 7] = [i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX];
+    for m in mids.iter() {
+        let r = to_magv(&Mag::half_ulp(*m, 0));
+        let want = MagV::Finite {
+            exp: *m,
+            mant: TWO63,
+        };
+        if r != want {
+            return Err(format!(
+                "half_ulp({},0) expected {:?}, got {:?}",
+                m, want, r
+            ));
+        }
+    }
+    if to_magv(&Mag::half_ulp(i64::MIN, 0)) != min_pos_mag() {
+        return Err(String::from(
+            "half_ulp(i64::MIN,0) must be the smallest positive Mag",
+        ));
+    }
+    Ok(())
+}
