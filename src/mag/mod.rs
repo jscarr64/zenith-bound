@@ -8,6 +8,11 @@
 //! Fields are private. Values are built only with [`Mag::finite`], [`Mag::zero`] and
 //! [`Mag::infinity`]. `Mag` is not `Clone`, `Copy` or `Hash`. Ordering is a total order:
 //! zero is least, `Infinity` is greatest, and canonical finite values compare by `(exp, mant)`.
+//!
+//! Round-up operations return the least representable `Mag` at or above the exact result
+//! (CONTRACT 14.1). Round-down operations return the greatest `Mag` at or below it, or zero
+//! when that result is not representable (CONTRACT 14.2, 3.2). Exponent overflow is
+//! `Infinity` on the way up and the largest finite `Mag` on the way down (CONTRACT 3.3).
 
 mod add;
 mod cmp;
@@ -128,15 +133,5 @@ impl Mag {
             Inner::Finite { exp, mant } if *mant != 0 => Some((*exp, *mant)),
             _ => None,
         }
-    }
-
-    /// Placeholder until `sub_lower` is implemented: `Infinity`.
-    fn wrong_down() -> Mag {
-        Mag::infinity()
-    }
-
-    /// Placeholder: `Infinity` for every input.
-    pub fn sub_lower(&self, _other: &Mag) -> Mag {
-        Mag::wrong_down()
     }
 }
