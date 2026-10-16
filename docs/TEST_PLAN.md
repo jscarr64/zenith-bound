@@ -542,12 +542,11 @@ No other conflicts found: her items 1 (grep rule instead of `trybuild`), 2, 4 (s
 
 
 
-## 19. Schedule: SUPERSEDED figures (rate-based generic sizing, not observed pace); observed re-baseline pending
+## 19. Schedule: SUPERSEDED figures (rate-based generic sizing, not observed pace); observed-pace re-baseline in 19.1
 
 **SUPERSEDED, rate-based generic sizing, not observed pace.** Every figure in this section (the table, the assumptions, the critical-path range, the ship-date impact, the Rusty-offer saving) is the first generic estimate and is kept only for the record. Do not plan against it.
 
-**Re-baseline: pending (no new numbers here).** Jeff has made two statements, recorded here as his claims and attributed to him: (1) all the crates and all of Accumath were built in under 60 days; (2) wide-range testing adds at most 1 to 2 days. They were relayed to me by the dispatching agent on 2026-10-15 at about 11:04 PM CT; I have not seen them from him and have not checked them against any record. A separate analysis worker (agent `sand-subagent-baae46b9-9527-db32-50be-8302b8ba2e51`) is computing a re-baseline from observed commit timestamps and will report separately. When it does, its figures replace the superseded ones in a later commit. What does not change is the scope in sections 8 to 11, the exit criteria and the checklist.
-
+**Re-baseline: see 19.1 (end of this section).** The observed-pace re-baseline replaces the superseded figures as the planning basis. The old figures (79 to 141 working days gross, and everything derived from them below) stay here only for the record. What does not change is the scope in sections 8 to 11, the exit criteria and the checklist. Jeff's two statements (relayed to me by the dispatching agent on 2026-10-15 at about 11:04 PM CT, not seen from him, not checked against any record) are addressed in 19.1: (1) all the crates and all of Accumath were built in under 60 days; (2) wide-range testing adds at most 1 to 2 days.
 
 Jeff discounts AI timeline estimates (PLAN Part G) so read these as sizes with stated assumptions. Unit: **working days for one agent**, ranges, plus review. Nothing here was measured; I have not run the existing suite, so I have no timing basis from this repo.
 
@@ -580,6 +579,65 @@ Jeff discounts AI timeline estimates (PLAN Part G) so read these as sizes with s
 - Done **in parallel** (a test-building agent per level running red-first alongside implementation, the shared infrastructure first), only the tail sits on the critical path: golden regeneration and diffs, mutation runs, review fixes, deep runs and the defects they find. I estimate the tail at 25% to 35% of the incremental effort (about 15 to 51 days) plus the defect allowance (about 8 to 29 days): **about 23 to 80 working days added to the critical path, roughly 5 to 16 weeks**, about 2 to 5 days less with Rusty's option.
 - zenith-bound must finish before ship. I have **not** converted the baseline (PLAN Part G, about 201 to 356 runs) into days or checked whether it already has slack, so I cannot say whether 2 January 2027 survives. If it had none, the ship date moves by the amount above.
 - **Levers, in order:** (1) start S0 to S9 now (they do not depend on the zf pin); (2) author tests per level in parallel with implementation; (3) Harper builds the shared harness (D1 resolved; Rusty's offer was not taken); (4) if time compresses, hold L0 and L1 at full scope and run L2 to L4 at a **floor**: containment (P1), rounding (P4/P5), the edge tables, PS-fast goldens, the failure rule, and the top 30 catalog mutants per level, with no deep tier. I estimate the floor saves 25% to 35% of L2 to L4 gross (about 10 to 25 days). The floor is a scope choice recorded in the level's exit commit, not a silent cut.
+
+### 19.1 Observed-pace re-baseline (2026-10-15)
+
+Tags: **O** = observed, with the source commit or file; **E** = estimated or assumed. A third mark, **[U]**, means *I could not reproduce or check the figure from the files named as its source*; it is carried as relayed by the dispatching agent. Times are CT (UTC-5). Commit times below were read with `git show -s --format=%ci` on 2026-10-15; I checked each against the hash.
+
+**Source-file caveat (read first).** The re-baseline was to be copied from the scratch analysis at `/tmp/zb-estimate-scratch` (`est.py` reproduces the tables) and the logs in `/tmp/zb-baseline-logs`. On 2026-10-15 at about 11:10 PM CT that scratch directory held only `bench.py` (a timing script for mpmath goldens), `scripts/gen_goldens.py`, `scripts/requirements.lock` and `tests/goldens/mag_ops.txt`. **There is no `est.py` and no table file**, and a search of `/tmp` and `/home/jsc64` (outside `MathWorks`) found none. So every figure marked **[U]** below is not reproducible from the source of truth and must not be treated as checked. Figures marked **O** with a commit or file were re-derived by me from git or from those files.
+
+**What was observed (L0, this repo), `[O]`.**
+
+| Commit | Time (CT) | What | Tag |
+|---|---|---|---|
+| `b869482` | 21:11 | tooling: rules scan, full gate, CODEOWNERS | O, git |
+| `2a26270` | 21:39 | CONTRACT numbering, L0 clauses 6 to 15, O1 to O10 | O, git (the dispatch said 21:14; git says 21:39:17) |
+| `3c217f2` | 21:39 | RED tests for integer-only `Mag` ops, model, mpmath goldens | O, git |
+| `0eec0fe` | 21:56 | review fix 1 | O, git |
+| `a748d1b` | 22:04 | review fix 2 | O, git |
+| `814e942` | 22:08 | review fix 3 | O, git |
+| `1faec8c` | 22:12 | decided `Mag` rules | O, git |
+| `581f677` | 22:15 | review nits (end of the first review round) | O, git |
+| `09edb9e` | 22:48 | goldens widened, round-down overflow, `Fraction` self-check | O, git |
+| `078533b` | 22:51 | `Mag` built only through constructors | O, git |
+| `fc5cbd3` | 23:03 | splitmix64, generators, `u128` oracle | O, git |
+| `ba7c7dd` | 23:03 | whole-range differential and metamorphic tests | O, git |
+| `e09ab26` | 23:04 | red `Mag` stub | O, git |
+
+- **Output by `e09ab26`:** 78 `#[test]` fns under `tests/` (counted by me per file at `e09ab26`: 4+5+7+6+3+5+2+2+2+3+4+4+15+5+3+8) and 20,954 golden rows in `tests/goldens/mag_ops.txt` (20,958 lines, 4 comment lines; same count in the scratch copy). O, `e09ab26` and the scratch file.
+- **Elapsed:** about 2 h from a 21:02 start to 23:04, which is 2.03 h. The 23:04 end is O (`e09ab26`). The **21:02 start is not in git** (the earliest commit in the list is 21:11) and is [U]. At 78 fns in about 2 h that is about 39 test fns/h for L0a authoring, `E` (derived from the two figures above, not separately measured).
+- **Review round: 35.8 min**, from `3c217f2` (21:39:53) to `581f677` (22:15:39) = 35 min 46 s. O, git (I recomputed it; it matches).
+- **Rework share: 49 percent in zb L0a and 28 percent in zf.** [U]: not reproduced; I do not know how "rework" was defined (the share of commits that are review fixes, or of lines changed, or of time). Do not quote these two figures without the definition.
+- **Gate cost now: about 3 s**, because no green code exists yet. O, `/tmp/zb-baseline-logs/base1.rc` (`total_s=3`; `build-debug` and `build-release` exit 101, clippy 101, the scans 0). This is the **red** gate, not the cost of a green gate.
+
+**zf comparison, `[U]`.** 15 oracle commits over 6.9 h, about 7.7 test fns/h; zf gate 23.5 to 35.5 min. I could not find the zf data in the scratch files and did not recompute it. For scale only: 7.7 fns/h is about one fifth of the 39 fns/h derived above for L0a; I have not explained the gap.
+
+**Rate-based testing-only estimate, `[U]` and `E`.** Testing only, one agent, at 13.4 active hours/day:
+
+| Case | Hours | Days at 13.4 h/day | Tag |
+|---|---|---|---|
+| Low | 66.6 | 5.0 | E, [U] |
+| Expected | 199 | 14.9 | E, [U] |
+| High | 610 | 45.5 | E, [U] |
+
+I checked the division only: 66.6/13.4 = 4.97, 199/13.4 = 14.85, 610/13.4 = 45.52, so the day columns follow from the hour columns. The hours themselves and the **assumptions behind them** were not available to me (they were in `est.py`), so the assumptions are **not listed here** and must be added from `est.py` when it is found. Until then the three rows are a relayed estimate, not a result of this plan.
+
+**Dated schedule, single agent, sequential, `E` and `[U]`.**
+
+| Case | Last testing day | Against 2 January 2027 | Tag |
+|---|---|---|---|
+| Expected | 2026-11-25 | 22 weekdays of slack | E, [U] |
+| High | 2027-02-12 | misses 2 Jan by 41 calendar days | E, [U] |
+
+What I could check: 2027-02-12 minus 2027-01-02 is 41 calendar days, which matches. Weekdays from 2026-11-26 to 2027-01-02 are 27 by plain count, 23 with 26-27 Nov and 24-25 Dec excluded, and 22 if 1 Jan is also excluded; so "22" matches only when 1 Jan is a holiday, which differs from the section 19 body count (it counts Fri 1 Jan). **Mismatch to resolve:** 14.9 active days from 2026-10-16 is about 15 weekdays (to about 5 Nov), not 25 Nov; the stated expected last day of 25 Nov therefore includes other assumptions (calendar-day slippage, review turnaround, or a different start) that I could not see. Treat the dates as relayed.
+
+**zf pin dependency, `E` and `[U]`.** The zenith-float pin (section 15) must land by **2026-12-18** (expected case) or **2026-11-06** (high case) for the pin-dependent tests to go green inside the schedule above. **No ETA for the pin exists** (as relayed; sections 15 and 18 record none that I found). I could not reproduce the two dates.
+
+**What the data cannot tell (O, by construction).** (1) Implementation time: `src/mag` is not yet implemented (`e09ab26` is a deliberately wrong red stub). (2) Review turnaround: the one observed round was 35.8 min; it says nothing about Rusty or Cassie on a real queue. (3) Green-gate cost: the 3 s gate is red. (4) Mutant cost: no mutants have run (the runner commit `75d0a0a`, which is not on this branch, has a manifest with 0 mutants per its message). (5) L1 to L4 effort: only L0a has been timed; L0b and above have different oracles (mpmath at many precisions, section 9) and cost more per op.
+
+**Jeff's claims against this data.** *Claim (2), "wide-range testing adds at most 1 to 2 days"*: the observed pace supports it **for L0a authoring only** (78 test fns and 20,954 golden rows in about 2 h of authoring, observed). It does **not** support it for L1 to L4, and not for L0b: none of those has been built or timed, the data cannot tell their effort, and the rate-based range above (5.0 to 45.5 days testing-only, [U]) is the only figure on the page for them. *Claim (1), "all the crates and all of Accumath built in under 60 days"*: I have no record of it in these files and have not checked it; it does not change the arithmetic above.
+
+**Where this leaves the plan.** The old 79 to 141 working-day figures remain SUPERSEDED. The levers in the section 19 body (start S0 to S9 now; author per level in parallel with implementation; Harper builds the shared harness; floor scope for L2 to L4 if time compresses) are unchanged. The dated schedule is only as good as the [U] figures; the first action is to find or rerun `est.py` and fill in the assumptions row.
 
 ## 20. Risks
 
