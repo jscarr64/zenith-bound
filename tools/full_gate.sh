@@ -11,6 +11,7 @@
 # The rules are the zero-clone, no-unwrap/expect/panic/unreachable/todo/unimplemented (test code included), no-allow, no-unsafe,
 # no-float rules.
 set -u
+export PYTHONNOUSERSITE=1
 T=${T:-/tmp/zb-gate-logs}; mkdir -p "$T"
 cd "${REPO:-$(cd "$(dirname "$0")/.." && pwd)}" || exit 2
 tag=${1:?usage: tools/full_gate.sh TAG}; : > "$T/$tag.rc"
