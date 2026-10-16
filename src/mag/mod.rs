@@ -1,7 +1,17 @@
-//! Red stub for the integer-only `Mag` (L0): every operation is total and deliberately wrong.
-//! The fields are private; values are built only through `Mag::finite`, `Mag::zero` and `Mag::infinity`.
+//! Integer-only magnitude, an upper bound on a nonnegative real.
+//!
+//! A finite nonzero value with exponent `exp` and mantissa `mant` (top bit set) denotes
+//! `mant * 2^(exp - 64)`, so the value lies in `[2^(exp - 1), 2^exp)` (CONTRACT 1.2).
+//! The canonical zero is `exp == 0`, `mant == 0`, and it is the only finite value whose
+//! mantissa is below `2^63` (CONTRACT 2.1). `Infinity` means that no finite bound exists.
+//!
+//! Fields are private. Values are built only with [`Mag::finite`], [`Mag::zero`] and
+//! [`Mag::infinity`]. `Mag` is not `Clone`, `Copy` or `Hash`. Ordering is a total order:
+//! zero is least, `Infinity` is greatest, and canonical finite values compare by `(exp, mant)`.
+
+mod cmp;
+
 use crate::error::BoundError;
-use core::cmp::Ordering;
 
 #[derive(Debug)]
 enum Inner {
@@ -9,28 +19,13 @@ enum Inner {
     Infinity,
 }
 
-/// An upper bound on a nonnegative real (`Infinity`: no finite bound).
+/// Upper bound on a nonnegative real, or `Infinity` when no finite bound exists.
 #[derive(Debug)]
 pub struct Mag {
     inner: Inner,
 }
 
 impl Mag {
-    /// Wrong on purpose: the canonical zero.
-    fn wrong_up() -> Mag {
-        Mag::zero()
-    }
-
-    /// Wrong on purpose: `Infinity`.
-    fn wrong_down() -> Mag {
-        Mag::infinity()
-    }
-
-    /// Stub: always the canonical zero, whatever the input (the real constructor normalises or rejects).
-    pub fn finite(_mant: u64, _exp: i64) -> Result<Mag, BoundError> {
-        Ok(Mag::zero())
-    }
-
     /// The canonical zero (`exp == 0`, `mant == 0`).
     pub fn zero() -> Mag {
         Mag {
@@ -38,14 +33,38 @@ impl Mag {
         }
     }
 
-    /// The infinite bound.
+    /// The infinite bound: every finite `Mag` is strictly smaller.
     pub fn infinity() -> Mag {
         Mag {
             inner: Inner::Infinity,
         }
     }
 
-    /// The exponent of a finite value, `None` for `Infinity`.
+    /// Builds the finite magnitude denoted by `mant * 2^(exp - 64)`.
+    ///
+    /// A mantissa in `1..2^63` is normalised by a left shift of `lz` leading zeros, and the
+    /// exponent becomes `exp - lz`. That adjustment is exact. `mant == 0` is accepted only
+    /// together with `exp == 0`. If `exp - lz` would be below `i64::MIN`, the value is not
+    /// representable and this returns [`BoundError::Representation`] without rounding.
+    pub fn finite(mant: u64, exp: i64) -> Result<Mag, BoundError> {
+        if mant == 0 {
+            if exp == 0 {
+                Ok(Mag::zero())
+            } else {
+                Err(BoundError::Representation)
+            }
+        } else {
+            let shift = mant.leading_zeros();
+            let adjusted = i128::from(exp)
+                .checked_sub(i128::from(shift))
+                .ok_or(BoundError::Representation)?;
+            let exp = i64::try_from(adjusted).map_err(|_| BoundError::Representation)?;
+            let mant = mant.checked_shl(shift).ok_or(BoundError::Representation)?;
+            Ok(Mag::from_canonical(exp, mant))
+        }
+    }
+
+    /// Exponent of a finite value. `None` for `Infinity`.
     pub fn exp(&self) -> Option<i64> {
         match &self.inner {
             Inner::Finite { exp, .. } => Some(*exp),
@@ -53,7 +72,7 @@ impl Mag {
         }
     }
 
-    /// The mantissa of a finite value, `None` for `Infinity`.
+    /// Mantissa of a finite value. `None` for `Infinity`.
     pub fn mant(&self) -> Option<u64> {
         match &self.inner {
             Inner::Finite { mant, .. } => Some(*mant),
@@ -71,79 +90,74 @@ impl Mag {
         matches!(&self.inner, Inner::Infinity)
     }
 
-    /// Stub: rounds up to zero.
+    fn from_canonical(exp: i64, mant: u64) -> Mag {
+        Mag {
+            inner: Inner::Finite { exp, mant },
+        }
+    }
+
+    /// Placeholder until `add_up` is implemented: the canonical zero.
+    fn wrong_up() -> Mag {
+        Mag::zero()
+    }
+
+    /// Placeholder until the round-down operations are implemented: `Infinity`.
+    fn wrong_down() -> Mag {
+        Mag::infinity()
+    }
+
+    /// Placeholder: zero for every input.
     pub fn add_up(&self, _other: &Mag) -> Mag {
         Mag::wrong_up()
     }
 
-    /// Stub: rounds up to zero.
+    /// Placeholder: zero for every input.
     pub fn mul_up(&self, _other: &Mag) -> Mag {
         Mag::wrong_up()
     }
 
-    /// Stub: rounds up to zero.
+    /// Placeholder: zero for every input.
     pub fn div_up(&self, _other: &Mag) -> Mag {
         Mag::wrong_up()
     }
 
-    /// Stub: rounds up to zero.
+    /// Placeholder: zero for every input.
     pub fn sqrt_up(&self) -> Mag {
         Mag::wrong_up()
     }
 
-    /// Stub: rounds down to `Infinity`.
+    /// Placeholder: `Infinity` for every input.
     pub fn sub_lower(&self, _other: &Mag) -> Mag {
         Mag::wrong_down()
     }
 
-    /// Stub: rounds down to `Infinity`.
+    /// Placeholder: `Infinity` for every input.
     pub fn mul_lower(&self, _other: &Mag) -> Mag {
         Mag::wrong_down()
     }
 
-    /// Stub: rounds down to `Infinity`.
+    /// Placeholder: `Infinity` for every input.
     pub fn div_lower(&self, _other: &Mag) -> Mag {
         Mag::wrong_down()
     }
 
-    /// Stub: rounds down to `Infinity`.
+    /// Placeholder: `Infinity` for every input.
     pub fn sqrt_lower(&self) -> Mag {
         Mag::wrong_down()
     }
 
-    /// Stub: zero.
+    /// Placeholder: zero.
     pub fn ulp_mag(_pre_round_exp: i64, _prec: u32) -> Mag {
         Mag::wrong_up()
     }
 
-    /// Stub: zero.
+    /// Placeholder: zero.
     pub fn half_ulp(_mid_exp: i64, _prec: u32) -> Mag {
         Mag::wrong_up()
     }
 
-    /// Stub: always false.
+    /// Placeholder: always false.
     pub fn smaller_than_half_ulp(&self, _mid_exp: i64, _prec: u32) -> bool {
         false
-    }
-}
-
-impl PartialEq for Mag {
-    fn eq(&self, other: &Mag) -> bool {
-        self.cmp(other) == Ordering::Equal
-    }
-}
-
-impl Eq for Mag {}
-
-impl PartialOrd for Mag {
-    fn partial_cmp(&self, other: &Mag) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Mag {
-    /// Stub: always `Less` (violates reflexivity and antisymmetry).
-    fn cmp(&self, _other: &Mag) -> Ordering {
-        Ordering::Less
     }
 }
