@@ -12,7 +12,7 @@
 #   dropped, did not compile in Rusty's own tree (he replaced them by the `b` variants): F1, A5, L8, L16, R4, U2, S8, N4
 #   not applicable, the code they mutate is gone since 706c452 / 7ec49d0: R12 (round.rs `NonZeroU128::new(m)?`, was an equivalent mutant), S10 (sqrt.rs `None => NonZeroU128::MIN` constant arm, was dead code)
 # Adapted to the current text with the same intent (the old text moved): R9 (`let m = m.get() | 1;`), S2/S3 (the shift in p64/p63), S4/S5 (the scale constants next to p64()/p63()),
-#   N3 (`NonZeroU128::new((numerator / divisor) | 1)?`), N9 (norm(.., sticky, true); it did not compile in Rusty's tree because of norm_u128, it builds now), N9b (norm(.., !sticky, ..)).
+#   N3 (`NonZeroU128::new((numerator / divisor) | 1)?`), N9 (norm(.., sticky, up || true), i.e. `up` forced true; written with `up ||` so the parameter stays used under the deny(unused); it did not compile in Rusty's tree because of norm_u128), N9b (norm(.., !sticky, ..)).
 # Rusty's own labels: live = expected to be killable; dead / equiv = expected to survive (L12, R11, U12, U13, N12; their survival must be argued in EQUIVALENT.txt).
 # Rows are in Rusty's order: mut.py, mut_b.py, mut_c.py. Spence adds Mag-specific mutants below, with the next free NNN.
 src/mag/mod.rs:Mag::finite	001-F2	001-F2.patch	mag
