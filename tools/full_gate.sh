@@ -30,4 +30,5 @@ run no-clone-scan "! grep -rn --include='*.rs' -E '\.clone\(|\.clone_from\(|\.to
 run derive-scan "! grep -rPzl --include='*.rs' '#\\[derive\\([^)]*\\b(Clone|Copy)\\b' src tests benches examples build.rs 2>/dev/null"
 run pubfn-coverage "tools/pubfn_coverage_selftest.sh && tools/pubfn_coverage.sh"
 run goldens-regen "tools/goldens_regen.sh"
+run wildcard-enum "tools/wildcard_enum_selftest.sh"
 echo done >> "$T/$tag.rc"
