@@ -34,7 +34,7 @@ Not timed: `golden::mag_ops_match_mpmath_goldens` (needs real Mag) and every oth
 
 Arithmetic from the 100,000,000 rows (not separately measured): about 3.9 ns per draw in debug, about 0.8 ns per draw in release.
 
-## tests/common_selftest (S1 self-tests)
+## tests/harness (S1 self-tests; was tests/common_selftest)
 
 10 tests: debug 0.031 to 0.032 s wall (test binary), release 0.003 s wall. Not broken down per test.
 
