@@ -112,10 +112,41 @@ printf '%s\tproof + Jeff approval\n' "$key" > "$t/tools/rules_allowlist.txt"
 scan --diff-file "$t/d.diff" >/dev/null || fail "allowlisted site still flagged"
 : > "$t/tools/rules_allowlist.txt"
 
+# hidden-copy count: fn bodies under src/ that rebuild a value from the fields of another value of its type
+hc="$t/hc"; mkdir -p "$hc/src" "$hc/tools"
+hidden() { RULES_SCAN_ROOT="$hc" "$here/rules_scan.sh" --hidden-copies; }
+flagged_hc() { # flagged_hc <label> <rust source>: exactly one site expected
+  printf '%s\n' "$2" > "$hc/src/x.rs"
+  out="$(hidden)" && fail "hidden copy not flagged: $1"
+  echo "$out" | grep -q "hidden_copy_count 1\$" || fail "hidden copy count is not 1 for $1: $out"
+}
+clean_hc() { # clean_hc <label> <rust source>
+  printf '%s\n' "$2" > "$hc/src/x.rs"
+  out="$(hidden)" || fail "false hidden-copy flag: $1: $out"
+}
+flagged_hc "replicate by name" 'impl M { fn replicate(&self) -> M { M::zero() } }'
+flagged_hc "copy by name" 'fn copy_of(x: &M) -> M { M::zero() }'
+flagged_hc "dup by name" 'fn dup(x: &M) -> M { M::zero() }'
+flagged_hc "old replicate body, renamed (pattern-bound fields)" 'impl M { fn again(&self) -> M { match &self.inner { Inner::Infinity => M::infinity(), Inner::Finite { exp, mant } => M::from_canonical(*exp, *mant) } } }'
+flagged_hc "field reads in a call" 'fn again(x: &M) -> M { M::from_canonical(x.exp, x.mant) }'
+flagged_hc "accessor reads in a call" 'fn again(x: &M) -> Option<M> { M::finite(x.mant()?, x.exp()?).ok() }'
+flagged_hc "struct literal from another value" 'fn again(x: &P) -> P { Self { a: x.a, b: x.b } }'
+flagged_hc "struct literal from pattern-bound names" 'fn again(x: &P) -> P { let P { a, b } = x; P { a: *a, b: *b } }'
+clean_hc "computed args" 'fn next(x: &M) -> M { M::from_canonical(x.exp, x.mant + 1) }'
+clean_hc "one field" 'fn up(x: &M) -> M { M::from_canonical(x.exp, TOP) }'
+clean_hc "plain params" 'fn successor(exp: i64, mant: u64) -> M { M::from_canonical(exp, mant) }'
+clean_hc "pattern-bound but modified" 'fn f(x: &M) -> M { match &x.inner { Inner::Finite { exp, mant } => M::from_canonical(exp.max(0), *mant & 1), _ => M::zero() } }'
+clean_hc "type definition and match pattern" 'struct P { a: u8, b: u8 }
+fn f(x: &P) -> bool { matches!(x, P { a: 0, .. }) }
+fn g(x: &Inner) -> Option<(i64, u64)> { match x { Inner::Finite { exp, mant } if *mant != 0 => Some((*exp, *mant)), _ => None } }'
+clean_hc "comment and string" 'fn f() -> M { // M::from_canonical(x.exp, x.mant) and fn replicate
+  let _s = "M::from_canonical(x.exp, x.mant)"; M::zero() }'
+: > "$hc/src/x.rs"; hidden >/dev/null || fail "empty tree flagged"
+
 # git modes in a throwaway repo
 g="$t/repo"; mkdir -p "$g/src" "$g/tools"; cd "$g" || exit 1
 git init -q . && git config user.email a@b && git config user.name t
-cp "$t/tools/rules_allowlist.txt" tools/; echo 0 > tools/clone_count_baseline.txt; echo 0 > tools/ref_sum_count_baseline.txt
+cp "$t/tools/rules_allowlist.txt" tools/; echo 0 > tools/clone_count_baseline.txt; echo 0 > tools/ref_sum_count_baseline.txt; echo 0 > tools/hidden_copy_count_baseline.txt
 printf 'fn a() {}\n' > src/x.rs; git add -A; git commit -qm base; base=$(git rev-parse HEAD)
 export RULES_SCAN_ROOT="$g"; unset RULES_SCAN_SKIP_COUNT
 scan "$base..HEAD" >/dev/null || fail "empty range flagged"
@@ -155,4 +186,16 @@ echo 9 > tools/ref_sum_count_baseline.txt; scan --count-only | grep -qi "lower t
 scan --update-baseline >/dev/null; [ "$(tr -d '[:space:]' < tools/ref_sum_count_baseline.txt)" = 5 ] || fail "ref baseline not lowered"
 echo 0 > tools/ref_sum_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising ref baseline allowed"; [ "$(tr -d '[:space:]' < tools/ref_sum_count_baseline.txt)" = 0 ] || fail "ref baseline raised"
 rm -f tools/ref_sum_count_baseline.txt; scan --count-only >/dev/null && fail "missing ref baseline passed"
+echo 0 > tools/ref_sum_count_baseline.txt
+
+# hidden-copy baseline: counts fn bodies, may only go down
+printf 'fn replicate(x: &S) -> S { S::new() }\nfn again(x: &S) -> S { S::new(x.a, x.b) }\n' > src/x.rs; git add -A; git commit -qm hc
+echo 2 > tools/hidden_copy_count_baseline.txt
+scan --count-only | grep -q "hidden-copy count 2 == baseline" || fail "hidden-copy count should be 2: $(scan --count-only)"
+echo 1 > tools/hidden_copy_count_baseline.txt; scan --count-only | grep -q "hidden-copy count 2 is ABOVE" || fail "hidden-copy count above baseline not reported"
+scan --count-only >/dev/null && fail "hidden-copy count above baseline passed"
+echo 9 > tools/hidden_copy_count_baseline.txt; scan --count-only | grep -qi "hidden-copy count 2 is below baseline" || fail "no hint to lower hidden-copy baseline"
+scan --update-baseline >/dev/null; [ "$(tr -d '[:space:]' < tools/hidden_copy_count_baseline.txt)" = 2 ] || fail "hidden-copy baseline not lowered"
+echo 0 > tools/hidden_copy_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising hidden-copy baseline allowed"; [ "$(tr -d '[:space:]' < tools/hidden_copy_count_baseline.txt)" = 0 ] || fail "hidden-copy baseline raised"
+rm -f tools/hidden_copy_count_baseline.txt; scan --count-only >/dev/null && fail "missing hidden-copy baseline passed"
 echo "rules_scan selftest: ok"

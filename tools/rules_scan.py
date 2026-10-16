@@ -10,7 +10,8 @@ Usage:
   tools/rules_scan.sh --staged             # git diff --cached
   tools/rules_scan.sh --working            # git diff HEAD (staged + unstaged; new files must be staged)
   tools/rules_scan.sh --diff-file F        # a saved unified diff (used by the self-test)
-  tools/rules_scan.sh --count-only         # only the clone-count and *_ref-count baseline checks
+  tools/rules_scan.sh --count-only         # only the clone-count, *_ref-count and hidden-copy-count baseline checks
+  tools/rules_scan.sh --hidden-copies      # list the hidden-copy sites of src/ (no baseline needed; RULES_SCAN_ROOT picks the tree)
   tools/rules_scan.sh --update-baseline    # lower the baselines to the current counts (never raises them)
 
 SCANNED PATHS: every .rs file under src/ tests/ benches/ examples/ (any depth) and build.rs. There is NO
@@ -35,6 +36,18 @@ REF COUNT: total uses of `add_ref(` `sub_ref(` `mul_ref(` `div_ref(` (borrowed-b
 sanctioned only where both operands are still live; mul_ref/div_ref only when absolutely necessary, each
 use listed with its reason for Jeff), definitions (`fn add_ref` etc.) excluded. Same ratchet against
 tools/ref_sum_count_baseline.txt (starts at 0): it may only go down; --update-baseline lowers it.
+
+HIDDEN-COPY COUNT: a `Mag` (or any type) has no Clone/Copy, but rebuilding it from the fields of another value of
+the same type is a clone in effect. The count is the number of fn bodies under src/ (tests, benches and examples
+are not counted) that
+  (a) are NAMED copy, replicate, dup or duplicate (also copy_*, replicate_*, dup_*, duplicate_*), or
+  (b) call a constructor (`Self {..}`, `Type {..}`, `Type::f(..)`, `Self::f(..)`; Some/Ok/Err excluded) whose arguments are
+      two or more bare field reads of ONE value (`x.exp`, `x.mant()`, `*x.mant`, `a: x.a, b: x.b`), or
+  (c) call such a constructor with two or more arguments that are bare names bound by a struct pattern of the same
+      fn body (`Inner::Finite { exp, mant } => Mag::from_canonical(*exp, *mant)`).
+Heuristic, text-based: arguments that are computed (`exp + 1`, `mant.checked_add(1)`) are not bare field reads, so
+`successor`-style code does not count. A copy routed through intermediate `let` bindings is not seen. The count is
+ratcheted against tools/hidden_copy_count_baseline.txt (starts at 0, may only go down; --update-baseline lowers it).
 """
 import hashlib, os, re, subprocess, sys, collections
 
@@ -194,6 +207,165 @@ def ref_sum_count():
     return total
 
 
+FN_DECL = re.compile(r"\bfn\s+([A-Za-z_]\w*)")
+COPY_NAME = re.compile(r"^(?:copy|replicate|dup|duplicate)(?:_\w+)?$")
+CTOR = re.compile(r"\b((?:Self|[A-Z]\w*)(?:::\w+)*)\s*([({])")
+NOT_CTOR = {"Some", "Ok", "Err", "Box", "Vec", "Option", "Result"}
+BAD_PREV = {"struct", "enum", "impl", "for", "trait", "union", "mod", "type", "where", "dyn", "use"}
+FIELD_READ = re.compile(r"^\*?\(?\*?(\w+)\.(\w+)(?:\(\))?\??\)?$")
+BARE_NAME = re.compile(r"^[A-Za-z_]\w*$")
+
+
+def blank_code(text):
+    """text without comments, string and char literals (newlines kept, so line numbers stay)"""
+    text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+    text = re.sub(r'"(?:\\.|[^"\\])*"', '""', text, flags=re.S)
+    text = re.sub(r"'(?:\\.|[^'\\\n])'", "''", text)
+    return re.sub(r"//[^\n]*", "", text)
+
+
+def match_close(text, i):
+    """index of the bracket closing the one at text[i], or -1"""
+    pairs = {"(": ")", "{": "}", "[": "]"}
+    stack = []
+    for j in range(i, len(text)):
+        c = text[j]
+        if c in pairs:
+            stack.append(pairs[c])
+        elif c in ")}]":
+            if not stack or stack.pop() != c:
+                return -1
+            if not stack:
+                return j
+    return -1
+
+
+def split_top(s):
+    out, depth, cur = [], 0, []
+    for c in s:
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        if c == "," and depth == 0:
+            out.append("".join(cur))
+            cur = []
+        else:
+            cur.append(c)
+    out.append("".join(cur))
+    return [x.strip() for x in out if x.strip()]
+
+
+def norm_arg(a):
+    a = re.sub(r"^(?:\*|&mut\s+|&)+", "", a.strip()).strip()
+    return a
+
+
+def pattern_bound_names(body):
+    """names bound by `Path { a, f: b, .. }` struct patterns (a brace group followed by =>, =, |, if or else)"""
+    names = set()
+    for m in CTOR.finditer(body):
+        if m.group(2) != "{" or m.group(1).split("::")[0] in NOT_CTOR:
+            continue
+        close = match_close(body, m.end() - 1)
+        if close < 0:
+            continue
+        after = body[close + 1:].lstrip()
+        if not (after.startswith("=>") or re.match(r"=(?!=)", after) or after.startswith("|") or re.match(r"(?:if|else)\b", after)):
+            continue
+        for item in split_top(body[m.end():close]):
+            if item == "..":
+                continue
+            item = item.split(":", 1)[1].strip() if ":" in item else item
+            item = re.sub(r"^(?:ref\s+|mut\s+)+", "", item)
+            if BARE_NAME.match(item) and item != "_":
+                names.add(item)
+    return names
+
+
+def hidden_copy_reason(name, body):
+    if COPY_NAME.match(name):
+        return "fn named %s" % name
+    bound = pattern_bound_names(body)
+    for m in CTOR.finditer(body):
+        path, opener = m.group(1), m.group(2)
+        if path.split("::")[0] in NOT_CTOR:
+            continue
+        prev = re.findall(r"[A-Za-z_]\w*\s*$", body[:m.start()])
+        if prev and prev[0].strip() in BAD_PREV:
+            continue
+        close = match_close(body, m.end() - 1)
+        if close < 0:
+            continue
+        if opener == "{":
+            after = body[close + 1:].lstrip()
+            if after.startswith("=>") or re.match(r"=(?!=)", after) or after.startswith("|") or re.match(r"(?:if|else)\b", after):
+                continue
+        args = []
+        for item in split_top(body[m.end():close]):
+            if opener == "{":
+                item = item.split(":", 1)[1].strip() if ":" in item else item
+            args.append(norm_arg(item))
+        bases = collections.defaultdict(set)
+        for a in args:
+            fr = FIELD_READ.match(a)
+            if fr:
+                bases[fr.group(1)].add(fr.group(2))
+        for base, fields in bases.items():
+            if len(fields) >= 2:
+                return "%s(..) rebuilt from fields %s of `%s`" % (path, "/".join(sorted(fields)), base)
+        got = {a for a in args if BARE_NAME.match(a) and a in bound}
+        if len(got) >= 2:
+            return "%s(..) rebuilt from pattern-bound %s" % (path, "/".join(sorted(got)))
+    return None
+
+
+def hidden_copy_sites():
+    """[(relpath, line, fn name, reason)] for every flagged fn body under src/"""
+    sites = []
+    base = os.path.join(ROOT, "src")
+    for dp, dn, fn in os.walk(base):
+        dn[:] = sorted(x for x in dn if x not in ("target", ".git"))
+        for f in sorted(fn):
+            if not f.endswith(".rs"):
+                continue
+            path = os.path.join(dp, f)
+            rel = os.path.relpath(path, ROOT)
+            text = blank_code(open(path, errors="replace").read())
+            for m in FN_DECL.finditer(text):
+                i = m.end()
+                depth = 0
+                while i < len(text):
+                    c = text[i]
+                    if c in "([":
+                        depth += 1
+                    elif c in ")]":
+                        depth -= 1
+                    elif c == ";" and depth == 0:
+                        i = -1
+                        break
+                    elif c == "{" and depth == 0:
+                        break
+                    i += 1
+                if i < 0 or i >= len(text):
+                    continue
+                close = match_close(text, i)
+                if close < 0:
+                    continue
+                reason = hidden_copy_reason(m.group(1), text[i + 1:close])
+                if reason:
+                    sites.append((rel, text.count("\n", 0, m.start()) + 1, m.group(1), reason))
+    return sites
+
+
+def hidden_copy_count():
+    return len(hidden_copy_sites())
+
+
+def hidden_baseline_path():
+    return os.path.join(ROOT, "tools", "hidden_copy_count_baseline.txt")
+
+
 def baseline_path():
     return os.path.join(ROOT, "tools", "clone_count_baseline.txt")
 
@@ -249,11 +421,40 @@ def ref_count_check(update=False):
     return 0
 
 
+def hidden_count_check(update=False):
+    cur = hidden_copy_count()
+    try:
+        base = int(open(hidden_baseline_path()).read().split()[0])
+    except (OSError, ValueError, IndexError):
+        print("rules_scan: missing or unreadable tools/hidden_copy_count_baseline.txt")
+        return 1
+    if cur > base:
+        print("rules_scan: hidden-copy count %d is ABOVE the baseline %d (it may only go down)" % (cur, base))
+        for rel, line, name, reason in hidden_copy_sites():
+            print("  %s:%d fn %s: %s" % (rel, line, name, reason))
+        return 1
+    if cur < base:
+        if update:
+            open(hidden_baseline_path(), "w").write("%d\n" % cur)
+            print("rules_scan: hidden-copy baseline lowered %d -> %d" % (base, cur))
+        else:
+            print("rules_scan: hidden-copy count %d is below baseline %d: lower the baseline (rules_scan.sh --update-baseline)" % (cur, base))
+        return 0
+    print("rules_scan: hidden-copy count %d == baseline" % cur)
+    return 0
+
+
 def both_count_checks(update=False):
-    return max(count_check(update), ref_count_check(update))
+    return max(count_check(update), ref_count_check(update), hidden_count_check(update))
 
 
 def main(argv):
+    if "--hidden-copies" in argv:
+        sites = hidden_copy_sites()
+        for rel, line, name, reason in sites:
+            print("%s:%d fn %s: %s" % (rel, line, name, reason))
+        print("rules_scan: hidden_copy_count %d" % len(sites))
+        return 1 if sites else 0
     if "--count-only" in argv:
         return both_count_checks()
     if "--update-baseline" in argv:
