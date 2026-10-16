@@ -1,7 +1,8 @@
 //! `sqrt_up` and `sqrt_lower` by an integer square root, exponent parity first.
 
 use super::round::loose;
-use super::round::norm;
+use super::round::norm_u128;
+use super::round::settle;
 use super::Mag;
 
 impl Mag {
@@ -70,7 +71,7 @@ fn sqrt_parts(mag: &Mag, up: bool) -> Mag {
         Some(scale) => scale,
         None => return loose(up),
     };
-    norm(root, scale, sticky, up)
+    settle(norm_u128(root, scale, sticky, up), up)
 }
 
 /// Floor of the square root of `n`. The result always fits in `u128` and, for every

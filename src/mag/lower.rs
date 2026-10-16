@@ -1,7 +1,8 @@
 //! Round-down products and differences.
 
 use super::mul::mul_parts;
-use super::round::norm;
+use super::round::norm_u128;
+use super::round::settle;
 use super::Mag;
 use core::cmp::Ordering;
 
@@ -67,7 +68,7 @@ fn sub_parts(ea: i64, ma: u64, eb: i64, mb: u64) -> Mag {
         Some(scale) => scale,
         None => return Mag::zero(),
     };
-    norm(diff, scale, false, false)
+    settle(norm_u128(diff, scale, false, false), false)
 }
 
 /// Difference when `other` sits at least 64 exponents below `self`.
@@ -119,5 +120,5 @@ fn sub_wide(ea: i64, ma: u64, gap: i128, mb: u64) -> Mag {
         Some(scale) => scale,
         None => return Mag::zero(),
     };
-    norm(diff, scale, false, false)
+    settle(norm_u128(diff, scale, false, false), false)
 }

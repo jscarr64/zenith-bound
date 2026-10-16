@@ -1,7 +1,8 @@
 //! `div_up` and `div_lower` on a 128/64 division with a sticky remainder.
 
 use super::round::loose;
-use super::round::norm;
+use super::round::norm_u128;
+use super::round::settle;
 use super::Mag;
 
 impl Mag {
@@ -64,5 +65,5 @@ fn div_parts(num: &Mag, den: &Mag, up: bool) -> Mag {
         Some(scale) => scale,
         None => return loose(up),
     };
-    norm(quot, scale, sticky, up)
+    settle(norm_u128(quot, scale, sticky, up), up)
 }

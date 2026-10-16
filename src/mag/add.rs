@@ -1,7 +1,8 @@
 //! `add_up`: the least `Mag` at or above the sum of two magnitudes.
 
 use super::round::loose;
-use super::round::norm;
+use super::round::norm_u128;
+use super::round::settle;
 use super::Mag;
 use super::TOP;
 use core::num::NonZeroU64;
@@ -57,7 +58,7 @@ fn add_parts(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64) -> Mag {
         Some(scale) => scale,
         None => return loose(true),
     };
-    norm(sum, scale, false, true)
+    settle(norm_u128(sum, scale, false, true), true)
 }
 
 /// The next `Mag` strictly above the canonical finite value `(exp, mant)`.

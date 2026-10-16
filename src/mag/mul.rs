@@ -1,7 +1,8 @@
 //! `mul_up` and the shared product used by `mul_lower`.
 
 use super::round::loose;
-use super::round::norm;
+use super::round::norm_u128;
+use super::round::settle;
 use super::Mag;
 use core::num::NonZeroU64;
 
@@ -37,5 +38,5 @@ pub(super) fn mul_parts(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64, up: bo
         Some(scale) => scale,
         None => return loose(up),
     };
-    norm(prod, scale, false, up)
+    settle(norm_u128(prod, scale, false, up), up)
 }

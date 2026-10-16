@@ -1,14 +1,21 @@
 //! Normalise a positive dyadic integer to a canonical `Mag`.
 //!
 //! `norm(m, scale, sticky, up)` rounds the real value `m * 2^scale`, plus an unresolved
-//! positive residue when `sticky` is set. The `Mag` exponent field of a 64-bit mantissa
-//! `mant` is `scale + 64` after the significand has been aligned to `[2^63, 2^64)`.
+//! positive residue when `sticky` is set. `m` is a `NonZeroU128`, so the state "no bits at
+//! all" cannot be expressed. The `Mag` exponent field of a 64-bit mantissa `mant` is
+//! `scale + 64` after the significand has been aligned to `[2^63, 2^64)`.
+//!
+//! Exponent arithmetic uses `checked_*` only (CONTRACT 3.1). A step that cannot fail for any
+//! `i64` exponent says so in a comment; the `None` it carries is settled by [`settle`] with the
+//! one sound answer: `Infinity` on the way up, zero on the way down.
 
 use super::Mag;
 use super::TOP;
+use core::num::NonZeroU128;
 
-/// Sound stand-in when a checked arithmetic step cannot be completed.
-/// Round-up overflows to `Infinity`; round-down underflows to zero.
+/// The sound stand-in when no exact result can be formed: `Infinity` on the way up, zero on
+/// the way down. It is also the specified answer for an `Infinity` operand or a zero divisor
+/// (CONTRACT 14.6).
 pub(super) fn loose(up: bool) -> Mag {
     if up {
         Mag::infinity()
@@ -17,14 +24,23 @@ pub(super) fn loose(up: bool) -> Mag {
     }
 }
 
-/// Place an already aligned exponent field, clamping to the `Mag` range.
-pub(super) fn pack(exp: i128, mant: u64, up: bool) -> Mag {
-    if mant == 0 {
-        return if up { Mag::min_pos() } else { Mag::zero() };
+/// `r`, or [`loose`] when a checked step returned `None`. Every operation ends here once.
+pub(super) fn settle(r: Option<Mag>, up: bool) -> Mag {
+    match r {
+        Some(m) => m,
+        None => loose(up),
     }
-    if mant < TOP {
-        return loose(up);
-    }
+}
+
+/// Low 64 bits of `x`. Callers pass a value below `2^64`, so nothing is lost.
+fn low64(x: u128) -> u64 {
+    let [_, _, _, _, _, _, _, _, a, b, c, d, e, f, g, h] = x.to_be_bytes();
+    u64::from_be_bytes([a, b, c, d, e, f, g, h])
+}
+
+/// Place the exponent field `exp` of a mantissa whose top bit is set, clamping to the `Mag`
+/// range (CONTRACT 3.2 to 3.4).
+fn pack(exp: i128, mant: u64, up: bool) -> Mag {
     match i64::try_from(exp) {
         Ok(e) => Mag::from_canonical(e, mant),
         Err(_) => {
@@ -43,82 +59,37 @@ pub(super) fn pack(exp: i128, mant: u64, up: bool) -> Mag {
     }
 }
 
-/// Round `m * 2^scale` toward `+∞` when `up` is set, otherwise toward zero.
-pub(super) fn norm(m: u128, scale: i128, sticky: bool, up: bool) -> Mag {
-    if m == 0 {
-        return if up && sticky {
-            Mag::infinity()
-        } else {
-            Mag::zero()
-        };
-    }
-    let bit_len = match 128u32.checked_sub(m.leading_zeros()) {
-        Some(n) => n,
-        None => return loose(up),
-    };
-    let mut sig = m;
-    let mut scale = scale;
-    let mut sticky = sticky;
-    if bit_len > 64 {
-        let sh = match bit_len.checked_sub(64) {
-            Some(sh) => sh,
-            None => return loose(up),
-        };
-        let (hi, low) = match shr_parts(sig, sh) {
-            Some(parts) => parts,
-            None => return loose(up),
-        };
-        sig = hi;
-        scale = match scale.checked_add(i128::from(sh)) {
-            Some(v) => v,
-            None => return loose(up),
-        };
-        if low {
-            sticky = true;
-        }
-    } else if bit_len < 64 {
-        let sh = match 64u32.checked_sub(bit_len) {
-            Some(sh) => sh,
-            None => return loose(up),
-        };
-        sig = match sig.checked_shl(sh) {
-            Some(v) => v,
-            None => return loose(up),
-        };
-        scale = match scale.checked_sub(i128::from(sh)) {
-            Some(v) => v,
-            None => return loose(up),
-        };
-    }
-    let mut mant = match u64::try_from(sig) {
-        Ok(mant) => mant,
-        Err(_) => return loose(up),
-    };
-    let mut exp = match scale.checked_add(64) {
-        Some(exp) => exp,
-        None => return loose(up),
-    };
-    if up && sticky {
-        if mant == u64::MAX {
-            mant = TOP;
-            exp = match exp.checked_add(1) {
-                Some(exp) => exp,
-                None => return Mag::infinity(),
-            };
-        } else {
-            mant = match mant.checked_add(1) {
-                Some(mant) => mant,
-                None => return Mag::infinity(),
-            };
-        }
-    }
-    pack(exp, mant, up)
+/// [`norm`] for an integer that the caller has shown to be nonzero but whose type does not say
+/// so (a quotient). `None` for zero, which the caller settles.
+pub(super) fn norm_u128(m: u128, scale: i128, sticky: bool, up: bool) -> Option<Mag> {
+    norm(NonZeroU128::new(m)?, scale, sticky, up)
 }
 
-/// Right-shift `m` by `sh` and report whether any shifted-out bit was set.
-fn shr_parts(m: u128, sh: u32) -> Option<(u128, bool)> {
-    let mask = 1u128.checked_shl(sh)?.checked_sub(1)?;
-    let low = (m & mask) != 0;
-    let hi = m.checked_shr(sh)?;
-    Some((hi, low))
+/// Round `m * 2^scale` toward `+∞` when `up` is set, otherwise toward zero.
+pub(super) fn norm(m: NonZeroU128, scale: i128, sticky: bool, up: bool) -> Option<Mag> {
+    // `lz` is in 0..=127. A value with more than 64 bits drops `drop` low bits (at most 64);
+    // a shorter one is shifted left by `add` (at most 63). Both arms of the match are reachable.
+    let lz = m.leading_zeros();
+    let (drop, add) = match 64u32.checked_sub(lz) {
+        Some(drop) => (drop, 0),
+        None => (0, lz.abs_diff(64)),
+    };
+    let m = m.get();
+    let lost = (m & !(u128::MAX << drop)) != 0;
+    // The aligned significand has exactly 64 bits, so its top bit is set and `low64` is exact.
+    let mant = low64((m >> drop) << add);
+    // |scale| < 2^66 for every caller and drop, add <= 64, so these checked steps cannot fail.
+    let exp = scale
+        .checked_add(i128::from(drop))?
+        .checked_sub(i128::from(add))?
+        .checked_add(64)?;
+    if up && (sticky || lost) {
+        match mant.checked_add(1) {
+            Some(next) => Some(pack(exp, next, up)),
+            // mant was u64::MAX: the carry gives 2^63 at the next exponent (reachable).
+            None => Some(pack(exp.checked_add(1)?, TOP, up)),
+        }
+    } else {
+        Some(pack(exp, mant, up))
+    }
 }
