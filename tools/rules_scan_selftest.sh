@@ -56,7 +56,29 @@ f32|let a: f32 = 1.0;
 f64|let a = 1.0_f64; let b: f64 = 2.0;
 hwfloat|let r = a.mul_add(b, c);
 hwfloat|use core::arch::x86_64::_mm_add_pd;
+neg_sub_method|let d = a.sub(&b, p, rm).neg();
+neg_sub_method|let d = a.sub_ref(&b).neg();
+neg_sub_call|let d = neg(a.sub(&b));
+neg_sub_call|let d = Neg::neg(Sub::sub(a, b));
+neg_sub_op|let d = -(b - a);
+neg_sub_op|let d = -(b-a);
+neg_sub_op|let d = x + -(b.exp - a.exp);
+neg_sub_op|return -(b - a);
+neg_sub_op|let d = -a.sub(&b);
+neg_sub_op|let d = -(a.sub(&b));
 CASES
+
+# S9: the neg-of-sub forms are refused in test paths as well, and clean subtractions are not flagged
+for p in tests/props.rs tests/model/mod.rs; do
+  mkdiff $p 'let d = a.sub(&b).neg();' > "$t/p.diff"
+  out="$(scan --diff-file "$t/p.diff")" && fail "neg_sub_method not flagged in test path: $p"
+  echo "$out" | grep -q "\[neg_sub_method\]" || fail "wrong pattern label for neg_sub_method in $p: $out"
+  mkdiff $p 'let d = -(b - a);' > "$t/p.diff"
+  out="$(scan --diff-file "$t/p.diff")" && fail "neg_sub_op not flagged in test path: $p"
+  echo "$out" | grep -q "\[neg_sub_op\]" || fail "wrong pattern label for neg_sub_op in $p: $out"
+done
+mkdiff $LIB 'let d = a.sub(&b, p, rm);' 'let d = x - (a - b);' 'let d = -1 - (a - b);' 'let d = a.sub_lower(&b);' 'let n = x.neg();' 'let d = a.sub(&b).abs();' 'let d = -a;' 'let d = -(a + b);' 'let d = a - -b;' 'fn f(x: u8) -> (u8, u8) { (x - 1, x) }' 'let d = (a - b).neg();' 'let d = neg(a).sub(b);' 'let s = "-(b - a) and a.sub(b).neg()";' '// -(b - a)' 'let d = x.neg().sub(y);' > "$t/negok.diff"
+scan --diff-file "$t/negok.diff" >/dev/null || fail "clean subtraction forms flagged: $(scan --diff-file "$t/negok.diff")"
 
 # the zero-unwrap rule applies to test code and test helpers too
 for p in tests/props.rs tests/model/mod.rs benches/b.rs examples/e.rs; do

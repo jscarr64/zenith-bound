@@ -23,6 +23,8 @@ Flagged on added lines only (comments and string literals are ignored):
   .clone(  .clone_from(  Clone::clone  .to_vec(  .cloned(  .copied(  .to_owned(  derive(..Clone|Copy..)
   impl Clone|Copy for  unsafe  #[allow / #![allow  unwrap(  expect(  panic!  unreachable!  todo!
   unimplemented!  type X = ..Mag|MagV|Dy..  Mag|MagV|Dy as X  f32  f64  core::arch / std::arch / target_feature / mul_add / is_x86_feature_detected
+  neg_sub_method  `.sub(..).neg()` (also .sub_ref)       neg_sub_call  `neg(..sub(..))`       neg_sub_op  `-(b - a)`, `-a.sub(b)`
+    (any a - b written as the negation of b - a: the sign and the directed rounding of the result go wrong, TEST_PLAN section 12; write a.sub(b))
 (`assert!`, `assert_eq!`, `assert_ne!`, `assert_matches!` and their `debug_` forms ARE flagged, as are `unwrap_or_default(`, `unwrap_unchecked(`, `unwrap_err(`, `unwrap_err_unchecked(` and `expect_err(`. A `#[derive(` that spans several lines is flagged when a following added line of the same block names Clone or Copy.)
 
 ALLOWLIST: tools/rules_allowlist.txt, one `path:hash<TAB>reason` per line; the key is printed as allow-key=
@@ -80,6 +82,9 @@ DIRS = ["src", "tests", "benches", "examples"]
 LIB = re.compile(r"^(src|tests|benches|examples)/.*\.rs$")
 BUILD_RS = re.compile(r"^build\.rs$")
 
+# text with balanced parentheses up to two levels deep (no `;`)
+BAL = r"(?:[^();]|\((?:[^();]|\([^();]*\))*\))*"
+
 PATTERNS = [
     ("clone", re.compile(r"\.clone\(")),
     ("clone_from", re.compile(r"\.clone_from\(")),
@@ -103,6 +108,10 @@ PATTERNS = [
     ("f32", re.compile(r"\bf32\b|\d_?f32\b")),
     ("f64", re.compile(r"\bf64\b|\d_?f64\b")),
     ("hwfloat", re.compile(r"\b(?:core|std)::arch\b|\btarget_feature\b|\bmul_add\b|\bis_x86_feature_detected\b")),
+    # a - b written as the negation of b - a (unary minus: the character before it is start of line, an operator, an opening bracket, a comma, `=` or `return`)
+    ("neg_sub_method", re.compile(r"\.sub(?:_ref)?\(" + BAL + r"\)\s*\.neg\(\)")),
+    ("neg_sub_call", re.compile(r"\bneg\(" + BAL + r"\bsub(?:_ref)?\(")),
+    ("neg_sub_op", re.compile(r"(?:^|[(\[{,;=<>!&|+*/%^~?:-]|\breturn)\s*-\s*(?:\(\s*[^()]*[\w\]]\s*-\s*[^()]+\)|\(?\s*[\w.:&*]+\.sub(?:_ref)?\()")),
 ]
 # Aliases and renames of the model/library types, matched on the joined (comment/string-stripped) text so rustfmt wrapping cannot
 # hide them: `type X<..> = ..Mag..;` (where-clause allowed) and `Mag as X` / `{MagV as Mv}` / `pub use ..::Dy as D`.
