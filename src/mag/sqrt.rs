@@ -1,9 +1,21 @@
 //! `sqrt_up` and `sqrt_lower` by an integer square root, exponent parity first.
 
 use super::round::loose;
-use super::round::norm_u128;
+use super::round::norm;
 use super::round::settle;
 use super::Mag;
+use core::num::NonZeroU128;
+use core::num::NonZeroU64;
+
+/// `2^64` and `2^63` as nonzero `u128`, evaluated at compile time (the `None` arm is never taken).
+const P64: NonZeroU128 = match NonZeroU128::new(1u128 << 64) {
+    Some(v) => v,
+    None => NonZeroU128::MIN,
+};
+const P63: NonZeroU128 = match NonZeroU128::new(1u128 << 63) {
+    Some(v) => v,
+    None => NonZeroU128::MIN,
+};
 
 impl Mag {
     /// Least `Mag` at or above `sqrt(self)` (CONTRACT 14.1, 14.4).
@@ -12,11 +24,7 @@ impl Mag {
     /// first so the radicand is a `u128`, then the integer square root is rounded up
     /// when the square is not exact.
     pub fn sqrt_up(&self) -> Mag {
-        if self.is_infinity() {
-            Mag::infinity()
-        } else {
-            sqrt_parts(self, true)
-        }
+        sqrt(self, true)
     }
 
     /// Greatest `Mag` at or below `sqrt(self)` (CONTRACT 14.2, 14.4).
@@ -24,83 +32,34 @@ impl Mag {
     /// `sqrt(Infinity)` and `sqrt(0)` are zero. A nonzero finite value uses the same
     /// integer square root as [`Mag::sqrt_up`], truncated toward zero.
     pub fn sqrt_lower(&self) -> Mag {
-        if self.is_infinity() {
-            Mag::zero()
-        } else {
-            sqrt_parts(self, false)
-        }
+        sqrt(self, false)
     }
 }
 
-fn sqrt_parts(mag: &Mag, up: bool) -> Mag {
-    let Some((exp, mant)) = mag.nonzero() else {
-        return Mag::zero();
-    };
+fn sqrt(mag: &Mag, up: bool) -> Mag {
+    if mag.is_infinity() {
+        return loose(up);
+    }
+    match mag.nonzero() {
+        Some((exp, mant)) => settle(sqrt_checked(exp, mant, up), up),
+        None => Mag::zero(),
+    }
+}
+
+fn sqrt_checked(exp: i64, mant: NonZeroU64, up: bool) -> Option<Mag> {
     let exp = i128::from(exp);
-    let parity = match exp.checked_sub(128).and_then(|adj| adj.checked_rem(2)) {
-        Some(rem) => rem,
-        None => return loose(up),
-    };
-    let (radicand, scale) = if parity == 0 {
-        let radicand = match u128::from(mant.get()).checked_shl(64) {
-            Some(radicand) => radicand,
-            None => return loose(up),
-        };
-        let scale = match exp.checked_sub(128) {
-            Some(scale) => scale,
-            None => return loose(up),
-        };
-        (radicand, scale)
+    // value = mant * 2^(exp - 64). Even exp: N = mant * 2^64 with scale exp - 128. Odd exp:
+    // N = mant * 2^63 with scale exp - 127. Either way `scale` is even, so `scale / 2` is exact.
+    // |exp| < 2^63, so the checked steps cannot fail.
+    let (factor, scale) = if exp.checked_rem_euclid(2)? == 0 {
+        (P64, exp.checked_sub(128)?)
     } else {
-        let radicand = match u128::from(mant.get()).checked_shl(63) {
-            Some(radicand) => radicand,
-            None => return loose(up),
-        };
-        let scale = match exp.checked_sub(127) {
-            Some(scale) => scale,
-            None => return loose(up),
-        };
-        (radicand, scale)
+        (P63, exp.checked_sub(127)?)
     };
-    let root = isqrt(radicand);
-    let sticky = match root.checked_mul(root) {
-        Some(square) => square != radicand,
-        None => true,
-    };
-    let scale = match scale.checked_div(2) {
-        Some(scale) => scale,
-        None => return loose(up),
-    };
-    settle(norm_u128(root, scale, sticky, up), up)
+    // mant < 2^64 and factor <= 2^64, so the product fits in a u128 and is nonzero by type.
+    let radicand = NonZeroU128::from(mant).checked_mul(factor)?;
+    let root = radicand.isqrt();
+    // root < 2^64, so root * root < 2^128 and the checked multiply cannot fail.
+    let sticky = root.get().checked_mul(root.get())? != radicand.get();
+    norm(root, scale.checked_div(2)?, sticky, up)
 }
-
-/// Floor of the square root of `n`. The result always fits in `u128` and, for every
-/// `n`, its square fits in `u128` as well (`(2^64 - 1)^2 < 2^128`).
-fn isqrt(n: u128) -> u128 {
-    if n < 2 {
-        return n;
-    }
-    let mut lo = 1u128;
-    let mut hi = SQRT_EXCLUSIVE_HI;
-    loop {
-        let Some(width) = hi.checked_sub(lo) else {
-            return lo;
-        };
-        if width <= 1 {
-            return lo;
-        }
-        let Some(half) = width.checked_shr(1) else {
-            return lo;
-        };
-        let Some(mid) = lo.checked_add(half) else {
-            return lo;
-        };
-        match mid.checked_mul(mid) {
-            Some(square) if square <= n => lo = mid,
-            _ => hi = mid,
-        }
-    }
-}
-
-/// Exclusive upper bound on `isqrt` of any `u128` (`2^64`).
-const SQRT_EXCLUSIVE_HI: u128 = 0x1_0000_0000_0000_0000;
