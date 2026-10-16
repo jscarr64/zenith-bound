@@ -16,6 +16,7 @@ mod model_selftest;
 mod mul_up;
 mod props_ops;
 mod props_ord;
+mod review_rows;
 mod sqrt_up;
 mod support;
 mod ulp;
