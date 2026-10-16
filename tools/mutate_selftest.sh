@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Self-test for tools/mutate.sh: a tiny fixture crate (a toy function and a toy suite) is generated under /tmp at run time as its own git repo.
+# Proves the runner KILLS a real mutant, reports a surviving mutant as SURVIVED (exit nonzero), accepts it only when documented as
+# equivalent, flags a non-building mutant and a non-applying patch as INVALID, counts a timeout as a kill, passes with 0 mutants,
+# and ALWAYS removes its worktree. The repo under test is never touched.
+set -u
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/mutate-selftest.XXXXXX)"; trap 'rm -rf "$t"' EXIT
+fail() { echo "SELFTEST FAIL: $*"; exit 1; }
+r="$t/fix"; mkdir -p "$r/src" "$r/tests" "$r/tools/mutants"; cd "$r" || exit 1
+git init -q . && git config user.email a@b && git config user.name t
+cat > Cargo.toml <<'TOML'
+[package]
+name = "toyfix"
+version = "0.0.0"
+edition = "2021"
+[dependencies]
+TOML
+cat > src/lib.rs <<'RS'
+pub fn add(a: u32, b: u32) -> u32 {
+    a + b
+}
+pub fn is_small(x: u32) -> bool {
+    x < 10
+}
+RS
+cat > tests/toy.rs <<'RS'
+use toyfix::{add, is_small};
+#[test]
+fn add_works() {
+    assert_eq!(add(2, 3), 5);
+}
+#[test]
+fn small_works() {
+    assert!(is_small(9));
+    assert!(!is_small(10));
+}
+RS
+git add -A; git commit -qm fixture
+mk() { # mk <name> <sed-expr>: a patch made by editing src/lib.rs, then reverting
+  sed -i "$2" src/lib.rs; git diff > "tools/mutants/$1.patch"; git checkout -q src/lib.rs
+}
+mk 001-add-mul 's/a + b/a * b/'                 # killed: add(2,3) becomes 6
+mk 002-add-commute 's/a + b/b + a/'             # equivalent: addition commutes, the suite cannot tell
+mk 003-nobuild 's/a + b/a + undefined_name/'    # does not build
+mk 004-hang 's/a + b/loop {}/'                  # never returns: timeout counts as a kill
+printf 'garbage that is not a patch\n' > tools/mutants/005-badpatch.patch
+printf 'src/lib.rs:add\t001-add-mul\t001-add-mul.patch\ttoy\n' > m.killed
+printf 'src/lib.rs:add\t002-add-commute\t002-add-commute.patch\ttoy\n' > m.surv
+printf 'src/lib.rs:add\t003-nobuild\t003-nobuild.patch\ttoy\n' > m.nobuild
+printf 'src/lib.rs:add\t004-hang\t004-hang.patch\ttoy\n' > m.hang
+printf 'src/lib.rs:add\t005-badpatch\t005-badpatch.patch\ttoy\n' > m.bad
+printf '# header only\n' > tools/mutants/EQUIVALENT.txt
+git add -A; git commit -qm mutants
+export MUTATE_REPO="$r" MUTATE_TMP="$t"
+run() { MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@"; }
+leftovers() { git -C "$r" worktree list | grep -c 'zb-mutate\.' ; ls -d "$t"/zb-mutate.* "$t"/zb-mutate-target.* 2>/dev/null | wc -l; }
+setm() { cp "$r/$1" "$r/tools/mutants/manifest.txt"; }
+
+# 0 mutants: header-only manifest passes
+printf '# empty\n' > "$r/tools/mutants/manifest.txt"
+out="$(run)" || fail "empty manifest failed: $out"; echo "$out" | grep -q "0 mutants" || fail "empty manifest: wrong summary: $out"
+
+# a real mutant must be KILLED
+setm m.killed; out="$(run)" || fail "killable mutant not accepted: $out"
+echo "$out" | grep -q "^KILLED 001-add-mul" || fail "killed: wrong report: $out"
+
+# a surviving mutant makes the runner exit nonzero and is reported as SURVIVED
+setm m.surv; out="$(run)" && fail "surviving mutant passed (runner exited 0)"
+echo "$out" | grep -q "^SURVIVED 002-add-commute" || fail "survivor: wrong report: $out"
+# ... unless it is documented as equivalent (reported differently, exit 0)
+printf '002-add-commute\taddition commutes\n' > "$r/tools/mutants/EQUIVALENT.txt"
+out="$(run)" || fail "documented-equivalent survivor failed the run: $out"
+echo "$out" | grep -q "^SURVIVED-EQUIVALENT 002-add-commute" || fail "equivalent: wrong report: $out"
+printf '# header only\n' > "$r/tools/mutants/EQUIVALENT.txt"
+
+# a mutant that does not build and a patch that does not apply are INVALID (nonzero)
+setm m.nobuild; out="$(run)" && fail "non-building mutant passed"; echo "$out" | grep -q "^INVALID 003-nobuild" || fail "nobuild: wrong report: $out"
+setm m.bad; out="$(run)" && fail "non-applying patch passed"; echo "$out" | grep -q "^INVALID 005-badpatch" || fail "badpatch: wrong report: $out"
+
+# a hang is killed by the timeout
+setm m.hang; out="$(MUTATE_TIMEOUT=5s run)" || fail "hanging mutant not accepted as killed: $out"
+echo "$out" | grep -q "^KILLED 004-hang.*timed out" || fail "hang: wrong report: $out"
+
+# --only selects one row; an unknown id is an error
+cat m.killed m.surv > "$r/tools/mutants/manifest.txt"
+out="$(run --only 001-add-mul)" || fail "--only killed row failed: $out"; echo "$out" | grep -q "1 mutants" || fail "--only: wrong count: $out"
+run --only nope >/dev/null 2>&1 && fail "unknown --only id passed"
+
+# every worktree and target dir was removed, in every case above
+n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
+echo "mutate selftest: ok"
