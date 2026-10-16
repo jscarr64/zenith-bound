@@ -3,5 +3,6 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+mod goldens_selftest;
 mod rng_selftest;
 mod seeds_selftest;
