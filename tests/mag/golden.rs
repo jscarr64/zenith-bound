@@ -51,6 +51,12 @@ fn parse_row(line: &str) -> Result<Option<Row>, String> {
     };
 
     let want = next_result(&mut it)?;
+    if let Some(extra) = it.next() {
+        return Err(format!(
+            "unexpected trailing token {:?} after the result of a {} row",
+            extra, op
+        ));
+    }
     Ok(Some(Row {
         op: String::from(op),
         args,
@@ -272,4 +278,155 @@ fn direct_integer_oracle_matches_every_mpmath_golden() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+// ---- L0a-6 trap regressions (TEST_PLAN section 12) -------------------------------------------------------------------------
+// Trap "golden runner second operand" (commit 0eec0fe): a row's arity is fixed by its op (binary: two operands then the result;
+// unary: one operand then the result), and a row with a missing or an extra column is an error, never a silent misparse.
+// Trap "round-down overflow dropped from the goldens": the generator once dropped the rows whose exact result is above the largest
+// Mag and whose correct round-down result is that largest Mag (`i64::MAX`, `u64::MAX`).
+
+const TOP: &str = "9223372036854775808";
+
+/// The first and the last of the specific rows that must stay in the golden file (operands at the extremes).
+const NAMED_OVERFLOW_ROWS: [&str; 2] = [
+    "mul_lower 9223372036854775807 18446744073709551615 9223372036854775807 18446744073709551615 9223372036854775807 18446744073709551615",
+    "div_lower 9223372036854775807 18446744073709551615 -9223372036854775808 9223372036854775808 9223372036854775807 18446744073709551615",
+];
+
+/// Floors on the number of round-down-overflow rows (rows whose result is the largest Mag) at the committed generator output:
+/// 512 `mul_lower` and 617 `div_lower` (1,129 together). Regenerating with a wider operand set may only raise them.
+const MUL_LOWER_MIN_ROWS: usize = 512;
+const DIV_LOWER_MIN_ROWS: usize = 617;
+
+fn is_largest_mag_row(line: &str, op: &str) -> bool {
+    matches!(parse_row(line), Ok(Some(r)) if r.op == op && r.want == max_mag())
+}
+
+fn count_largest_mag_rows(text: &str, op: &str) -> usize {
+    text.lines().filter(|l| is_largest_mag_row(l, op)).count()
+}
+
+fn require_round_down_overflow_rows(text: &str) -> Result<(), String> {
+    for named in NAMED_OVERFLOW_ROWS.iter() {
+        if !text.lines().any(|l| l.trim() == *named) {
+            return Err(format!("golden file lacks the row: {}", named));
+        }
+    }
+    let mul = count_largest_mag_rows(text, "mul_lower");
+    if mul < MUL_LOWER_MIN_ROWS {
+        return Err(format!(
+            "only {} mul_lower rows with the largest Mag as result, need at least {}",
+            mul, MUL_LOWER_MIN_ROWS
+        ));
+    }
+    let div = count_largest_mag_rows(text, "div_lower");
+    if div < DIV_LOWER_MIN_ROWS {
+        return Err(format!(
+            "only {} div_lower rows with the largest Mag as result, need at least {}",
+            div, DIV_LOWER_MIN_ROWS
+        ));
+    }
+    Ok(())
+}
+
+fn without(text: &str, drop: impl Fn(&str) -> bool) -> String {
+    text.lines()
+        .filter(|l| !drop(l))
+        .collect::<Vec<&str>>()
+        .join("\n")
+}
+
+#[test]
+fn golden_file_has_the_round_down_overflow_rows() -> Result<(), String> {
+    require_round_down_overflow_rows(GOLDEN)
+}
+
+#[test]
+fn round_down_overflow_check_rejects_a_golden_file_without_those_rows() -> Result<(), String> {
+    let no_mul = without(GOLDEN, |l| is_largest_mag_row(l, "mul_lower"));
+    let no_div = without(GOLDEN, |l| is_largest_mag_row(l, "div_lower"));
+    let no_named = without(GOLDEN, |l| NAMED_OVERFLOW_ROWS.contains(&l.trim()));
+    let no_both = without(GOLDEN, |l| {
+        is_largest_mag_row(l, "mul_lower") || is_largest_mag_row(l, "div_lower")
+    });
+    for (what, text) in [
+        ("without the mul_lower rows", &no_mul),
+        ("without the div_lower rows", &no_div),
+        ("without the two named rows", &no_named),
+        ("without any round-down-overflow row", &no_both),
+    ] {
+        if require_round_down_overflow_rows(text).is_ok() {
+            return Err(format!("the check accepted a golden file {}", what));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn round_down_overflow_rows_give_the_largest_mag_and_the_library_agrees() -> Result<(), String> {
+    // Every such row is also run against the library by mag_ops_match_mpmath_goldens; here: the rows are real overflows, i.e. the
+    // exact result is above the largest Mag (the named rows are max*max and max/min-positive).
+    for named in NAMED_OVERFLOW_ROWS.iter() {
+        run_line(named)?;
+    }
+    Ok(())
+}
+
+fn expect_rejected(line: &str) -> Result<(), String> {
+    match parse_row(line) {
+        Err(_) => Ok(()),
+        Ok(_) => Err(format!("parse_row accepted the malformed row: {}", line)),
+    }
+}
+
+#[test]
+fn parse_row_accepts_well_formed_rows_of_every_arity() -> Result<(), String> {
+    let binary = format!("add_up 0 {} 0 {} 1 {}", TOP, TOP, TOP);
+    let binary_inf = format!("mul_up 0 {} 0 {} inf", TOP, TOP);
+    let unary = format!("sqrt_up 0 {} 0 {}", TOP, TOP);
+    let unary_inf = format!("sqrt_lower 0 {} inf", TOP);
+    for line in [&binary, &binary_inf, &unary, &unary_inf] {
+        match parse_row(line)? {
+            Some(_) => {}
+            None => return Err(format!("parse_row skipped a data row: {}", line)),
+        }
+    }
+    for line in ["", "   ", "# a comment 1 2 3"] {
+        if parse_row(line)?.is_some() {
+            return Err(format!("parse_row returned a row for: {:?}", line));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn parse_row_rejects_a_stray_second_operand_on_a_unary_row() -> Result<(), String> {
+    // `sqrt_up A B R`: the generator once wrote the binary column layout for a unary op.
+    expect_rejected(&format!("sqrt_up 0 {} 0 {} 0 {}", TOP, TOP, TOP))?;
+    expect_rejected(&format!("sqrt_lower 0 {} 0 {} inf", TOP, TOP))?;
+    expect_rejected(&format!("sqrt_up 0 {} 0 {} 7", TOP, TOP))
+}
+
+#[test]
+fn parse_row_rejects_a_binary_row_missing_its_second_operand() -> Result<(), String> {
+    expect_rejected(&format!("add_up 0 {} 0 {}", TOP, TOP))?;
+    expect_rejected(&format!("mul_lower 0 {} inf", TOP))?;
+    expect_rejected(&format!("div_up 0 {} 1 {}", TOP, TOP))?;
+    expect_rejected(&format!("sub_lower 0 {}", TOP))
+}
+
+#[test]
+fn parse_row_rejects_trailing_tokens() -> Result<(), String> {
+    expect_rejected(&format!("add_up 0 {} 0 {} 1 {} 7", TOP, TOP, TOP))?;
+    expect_rejected(&format!("mul_up 0 {} 0 {} inf 7", TOP, TOP))?;
+    expect_rejected(&format!("sqrt_up 0 {} 1 {} 7", TOP, TOP))?;
+    expect_rejected(&format!("sqrt_lower 0 {} inf inf", TOP))
+}
+
+#[test]
+fn parse_row_rejects_non_numeric_and_unknown_fields() -> Result<(), String> {
+    expect_rejected(&format!("add_up 0 {} 0 {} x {}", TOP, TOP, TOP))?;
+    expect_rejected(&format!("add_up 0 {} 0 {} 1 -{}", TOP, TOP, TOP))?;
+    expect_rejected(&format!("pow_up 0 {} 0 {} 1 {}", TOP, TOP, TOP))
 }
