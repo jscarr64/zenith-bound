@@ -1,4 +1,5 @@
 //! CONTRACT 14.2, 3.2, 2.3; oracle: dyadic-rational model (tests/model)
+//! COVERS: Mag::sub_lower
 
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{check_down, cmp_minus, pred, zero_mag};

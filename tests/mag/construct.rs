@@ -1,4 +1,5 @@
 //! CONTRACT 2.1, 15.4; oracle: the clauses (exact expected values); Mag has private fields and is built only through its constructors
+//! COVERS: Mag::exp, Mag::finite, Mag::infinity, Mag::is_infinity, Mag::is_zero, Mag::mant, Mag::zero, Eq for Mag, PartialEq for Mag
 
 use zenith_bound::mag::Mag;
 

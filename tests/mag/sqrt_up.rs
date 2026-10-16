@@ -1,4 +1,5 @@
 //! CONTRACT 14.1, 14.4, 14.6, 2.3; oracle: dyadic-rational model (tests/model)
+//! COVERS: Mag::sqrt_up
 
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{check_up, cmp_sqrt};

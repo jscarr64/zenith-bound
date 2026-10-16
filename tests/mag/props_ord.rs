@@ -1,4 +1,5 @@
 //! CONTRACT 14.5, 2.1, 15.4; oracles: the integer order (tests/model/direct.rs) and the constructor rule; seeded splitmix64, replay with ZB_PROP_SEED/ZB_PROP_CASES
+//! COVERS: Mag::exp, Mag::finite, Mag::mant, Ord for Mag, PartialEq for Mag, PartialOrd for Mag
 
 use crate::model::direct;
 use crate::model::draw::{draw_mag, draw_partner, draw_raw};

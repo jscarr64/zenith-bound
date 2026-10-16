@@ -1,4 +1,5 @@
 //! CONTRACT 14.7, 1.4, 3.2; oracle: dyadic-rational model (tests/model)
+//! COVERS: Mag::half_ulp, Mag::infinity, Mag::smaller_than_half_ulp, Mag::ulp_mag, Mag::zero
 
 use crate::model::dyadic::{Dy, MagV};
 use crate::model::oracle::{min_pos_mag, TWO63};
