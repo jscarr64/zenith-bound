@@ -1,3 +1,5 @@
+//! Test support: conversions between the library `Mag` and the model `MagV`, and error-context helpers. Not a test module.
+
 use crate::model::dyadic::{Dy, MagV};
 use core::cmp::Ordering;
 use zenith_bound::mag::Mag;

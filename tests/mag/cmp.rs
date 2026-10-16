@@ -1,8 +1,8 @@
 //! CONTRACT 14.5, 2.1; oracle: dyadic-rational model (tests/model); zero least, Infinity greatest (decided 2026-10-15)
 
-use crate::convert::{ctx, dcmp, dy_of, from_magv};
 use crate::model::dyadic::MagV;
 use crate::model::sets::{extreme_exponents, magv_set, mid_exponents};
+use crate::support::{ctx, dcmp, dy_of, from_magv};
 use core::cmp::Ordering;
 use zenith_bound::mag::Mag;
 

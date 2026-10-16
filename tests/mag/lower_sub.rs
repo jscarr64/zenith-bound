@@ -1,9 +1,9 @@
 //! CONTRACT 14.2, 3.2, 2.3; oracle: dyadic-rational model (tests/model)
 
-use crate::convert::{ctx, dcmp, dy_of, from_magv, to_magv};
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{check_down, cmp_minus, pred, zero_mag};
 use crate::model::sets::{extreme_exponents, magv_set, mid_exponents};
+use crate::support::{ctx, dcmp, dy_of, from_magv, to_magv};
 use core::cmp::Ordering;
 
 pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
@@ -12,25 +12,17 @@ pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
 
     if dcmp(&da, &db)? != Ordering::Greater {
         check_down(r, true, &|_m| Some(Ordering::Less))
-    } else {
-        match cmp_minus(r, &da, &db) {
-            None => {
-                // Huge gap: the exact difference is just below a,
-                // so CONTRACT 14.2 gives pred(a)
-                let want = pred(a);
-                match want {
-                    Some(p) => {
-                        if *r == p {
-                            Ok(())
-                        } else {
-                            Err(format!("expected {:?}, got {:?}", p, r))
-                        }
-                    }
-                    None => Err(String::from("no predecessor")),
-                }
-            }
-            Some(_) => check_down(r, false, &|m| cmp_minus(m, &da, &db)),
+    } else if da.far_apart(&db) {
+        // the branch is chosen from the INPUT exponent gap, never from the result:
+        // the exact difference is just below a, so CONTRACT 14.2 gives pred(a)
+        let p = pred(a).ok_or_else(|| String::from("no predecessor"))?;
+        if *r == p {
+            Ok(())
+        } else {
+            Err(format!("expected {:?}, got {:?}", p, r))
         }
+    } else {
+        check_down(r, false, &|m| cmp_minus(m, &da, &db))
     }
 }
 

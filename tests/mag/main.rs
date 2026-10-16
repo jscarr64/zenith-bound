@@ -4,7 +4,6 @@ mod model;
 
 mod add_up;
 mod cmp;
-mod convert;
 mod corners;
 mod div_up;
 mod golden;
@@ -15,4 +14,5 @@ mod lower_sub;
 mod model_selftest;
 mod mul_up;
 mod sqrt_up;
+mod support;
 mod ulp;

@@ -1,3 +1,5 @@
+//! Oracle checkers: a round-up result must be the smallest `Mag` at or above the exact value and a round-down result the largest at or below it, decided by exact comparisons (cross-multiplication for quotients, squares for square roots).
+
 use super::dyadic::{Dy, MagV};
 use core::cmp::Ordering;
 

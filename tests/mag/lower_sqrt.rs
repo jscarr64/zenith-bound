@@ -1,9 +1,9 @@
 //! CONTRACT 14.2, 14.4, 2.3; oracle: dyadic-rational model (tests/model)
 
-use crate::convert::{ctx, dy_of, from_magv, to_magv};
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{check_down, cmp_sqrt};
 use crate::model::sets::{extreme_exponents, magv_set, mid_exponents};
+use crate::support::{ctx, dy_of, from_magv, to_magv};
 
 pub fn verify(a: &MagV, r: &MagV) -> Result<(), String> {
     let da = dy_of(a)?;

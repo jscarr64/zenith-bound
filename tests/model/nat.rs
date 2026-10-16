@@ -1,3 +1,5 @@
+//! `Nat`: a minimal arbitrary-precision natural number (little-endian `u64` limbs), just enough for exact add, mul, shift and compare. Integer-only; every operation is total.
+
 use core::cmp::Ordering;
 
 #[derive(Debug, PartialEq, Eq)]

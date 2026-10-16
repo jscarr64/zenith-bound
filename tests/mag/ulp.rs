@@ -1,14 +1,16 @@
 //! CONTRACT 14.7, 1.4, 3.2; oracle: dyadic-rational model (tests/model)
 
-use crate::convert::{dcmp, dy_of, to_magv};
 use crate::model::dyadic::{Dy, MagV};
 use crate::model::oracle::{min_pos_mag, TWO63};
+use crate::model::sets::mantissas;
+use crate::support::{dcmp, dy_of, to_magv};
 use core::cmp::Ordering;
 use zenith_bound::mag::Mag;
 
 const PRECS: [u32; 10] = [1, 2, 3, 4, 24, 53, 64, 65, 113, 127];
 const EXPS: [i64; 11] = [-1000, -65, -64, -1, 0, 1, 2, 63, 64, 65, 1000];
-const MANTS: [u64; 3] = [TWO63, TWO63 + 1, u64::MAX];
+/// The three mantissas CONTRACT 1.4 names for its boundary set.
+const CONTRACT_MANTS: [u64; 3] = [TWO63, TWO63 + 1, u64::MAX];
 
 #[test]
 fn ulp_mag_is_two_to_the_pre_round_exp_minus_prec() -> Result<(), String> {
@@ -129,7 +131,7 @@ fn smaller_than_half_ulp_matches_model_on_boundary_grid() -> Result<(), String> 
         for p in PRECS.iter() {
             let h = mid_exp - i64::from(*p) - 1;
             for exp in (h - 2)..=(h + 2) {
-                for &mant in MANTS.iter() {
+                for &mant in mantissas().iter() {
                     let x = Mag::Finite { exp, mant };
                     let want = dcmp(
                         &dy_of(&MagV::Finite { exp, mant })?,
@@ -151,7 +153,7 @@ fn smaller_than_half_ulp_contract_1_4_boundary_set() -> Result<(), String> {
     let mid_exp = 10;
     let prec = 4;
     for exp in 3..=8 {
-        for &mant in MANTS.iter() {
+        for &mant in CONTRACT_MANTS.iter() {
             let x = Mag::Finite { exp, mant };
             let want = exp <= 5;
             let got = x.smaller_than_half_ulp(mid_exp, prec);
@@ -217,7 +219,7 @@ fn smaller_than_half_ulp_near_i64_min_matches_model_and_is_false_below_the_range
                 i64::MIN + 64,
                 i64::MIN + 130,
             ] {
-                for &mant in MANTS.iter() {
+                for &mant in mantissas().iter() {
                     let x = Mag::Finite { exp, mant };
                     let want =
                         dcmp(&dy_of(&MagV::Finite { exp, mant })?, &Dy::pow2(h))? == Ordering::Less;

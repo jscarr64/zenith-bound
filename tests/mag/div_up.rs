@@ -1,9 +1,9 @@
 //! CONTRACT 14.1, 14.4, 2.3, 3.2, 3.3; oracle: dyadic-rational model (tests/model)
 
-use crate::convert::{ctx, dy_of, from_magv, to_magv};
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{check_up, cmp_quotient};
 use crate::model::sets::{extreme_exponents, magv_set, mid_exponents};
+use crate::support::{ctx, dy_of, from_magv, to_magv};
 use zenith_bound::mag::Mag;
 
 pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {

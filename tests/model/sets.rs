@@ -1,3 +1,5 @@
+//! Operand sets shared by all op tests: mantissas, exponent grids and the xorshift generator that seeds the random mantissas. Zero is a member of every set.
+
 use super::dyadic::MagV;
 use super::oracle::TWO63;
 

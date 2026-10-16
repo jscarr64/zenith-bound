@@ -1,7 +1,7 @@
 //! CONTRACT 1.3, 14.1, 14.2, 14.3, 14.4; oracle: mpmath.libmp directed rounding (scripts/gen_goldens.py -> tests/goldens/mag_ops.txt); the model checkers are validated against the goldens (accepts them, rejects perturbed ones)
-use crate::convert::{from_magv, to_magv};
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{max_mag, min_pos_mag, pred, succ};
+use crate::support::{from_magv, to_magv};
 use core::str::SplitWhitespace;
 
 const GOLDEN: &str = include_str!("../goldens/mag_ops.txt");

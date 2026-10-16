@@ -1,9 +1,9 @@
 //! CONTRACT 1.3, 14.1, 2.3, 2.4, 3.2, 3.3; oracle: dyadic-rational model (tests/model)
 
-use crate::convert::{ctx, dy_of, from_magv, to_magv};
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{check_up, cmp_dy};
 use crate::model::sets::{extreme_exponents, magv_set, mid_exponents};
+use crate::support::{ctx, dy_of, from_magv, to_magv};
 use zenith_bound::mag::Mag;
 
 pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
@@ -60,5 +60,24 @@ fn mul_up_infinity_operand_gives_infinity_even_for_zero() -> Result<(), String> 
         return Err("Infinity * Infinity != Infinity".to_string());
     }
 
+    Ok(())
+}
+
+#[test]
+fn mul_up_is_commutative() -> Result<(), String> {
+    let mut set = magv_set(&mid_exponents());
+    set.push(MagV::Infinity);
+    for a in set.iter() {
+        for b in set.iter() {
+            let ab = to_magv(&from_magv(a).mul_up(&from_magv(b)));
+            let ba = to_magv(&from_magv(b).mul_up(&from_magv(a)));
+            if ab != ba {
+                return Err(format!(
+                    "mul_up({:?}, {:?}) = {:?} but swapped gives {:?}",
+                    a, b, ab, ba
+                ));
+            }
+        }
+    }
     Ok(())
 }

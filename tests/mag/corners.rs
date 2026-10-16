@@ -1,8 +1,8 @@
 //! CONTRACT 14.6 (Infinity and zero-divisor rules), 14.2 (round-down overflow), 3.2, 3.3, 2.3, 2.4; oracle: the rules stated in the clauses (exact expected values)
-use crate::convert::{from_magv, to_magv};
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{max_mag, min_pos_mag, zero_mag};
 use crate::model::sets::{magv_set, mid_exponents};
+use crate::support::{from_magv, to_magv};
 use zenith_bound::mag::Mag;
 
 fn check_is(op: &str, args: &[&MagV], got: &Mag, want: &MagV) -> Result<(), String> {

@@ -1,3 +1,5 @@
+//! `MagV` (the model of a `Mag`) and `Dy`, a nonnegative dyadic rational `n * 2^e` with an `i128` exponent. Comparisons that the model cannot decide return `None`, which tests turn into a failure.
+
 use super::nat::Nat;
 use core::cmp::Ordering;
 
@@ -42,6 +44,11 @@ impl Dy {
         self.n.is_zero()
     }
 
+    /// True when both values are nonzero and their exponents differ by more than MAX_ALIGN.
+    pub fn far_apart(&self, other: &Dy) -> bool {
+        !self.is_zero() && !other.is_zero() && (self.e - other.e).abs() > MAX_ALIGN
+    }
+
     pub fn mul(&self, other: &Dy) -> Dy {
         Dy {
             n: self.n.mul(&other.n),
@@ -63,7 +70,7 @@ impl Dy {
             });
         }
 
-        if (self.e - other.e).abs() > MAX_ALIGN {
+        if self.far_apart(other) {
             return None;
         }
 
