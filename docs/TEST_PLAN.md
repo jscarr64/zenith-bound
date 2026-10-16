@@ -593,7 +593,7 @@ Everything in the second column is **Cassie's claim from a read-only pass agains
 
 ## 19. Schedule: SUPERSEDED figures (rate-based generic sizing, not observed pace); observed-pace re-baseline in 19.1
 
-**Note (2026-10-16 8:26 AM CT, Jeff via Paul): the 2 January 2027 date cited in this section is no longer a constraint, and there are no scope cuts; the "floor" scope and every "against 2 January" comparison below are superseded (see `docs/REPLAN-2026-10-16.md` section 0).**
+**Note (2026-10-16 8:27 AM CT, Jeff via Paul: full scope and the 2 January 2027 date are both goals): there are no scope cuts, so the "floor" scope below (lever 4) is not to be used to save time; the 2 January comparisons stay as estimates (see `docs/REPLAN-2026-10-16.md` section 0).**
 
 **SUPERSEDED, rate-based generic sizing, not observed pace.** Every figure in this section (the table, the assumptions, the critical-path range, the ship-date impact, the Rusty-offer saving) is the first generic estimate and is kept only for the record. Do not plan against it.
 

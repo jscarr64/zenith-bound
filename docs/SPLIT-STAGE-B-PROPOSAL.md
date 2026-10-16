@@ -1,6 +1,6 @@
 # Proposal: freeze zenith-float signatures only for the functions L1 v1 calls (split of Stage B)
 
-**Note (2026-10-16 8:26 AM CT, Jeff via Paul: full scope, no cuts, 2 Jan 2027 is not a constraint): this split is kept only where it improves quality or parallelism, not to cut corners. Dates in section 7 are informational.**
+**Note (2026-10-16 8:27 AM CT, Jeff via Paul: "We will meet both scope and date no problem"): full scope and the 2 Jan 2027 date are both goals. This split is a schedule lever and must not cut quality or scope.**
 
 Status: **PROPOSAL, not decided.** Nothing here is a ruling. Written 2026-10-16 (CT) on branch `spence/zb-stageb-docs`, docs only.
 This is lever 4 of `docs/REPLAN-2026-10-16.md` section 6 ("Split Stage B"); it follows the staged pin that Paul ruled (DECIDED 2026-10-16, Paul under Jeff's delegation; PLAN C1 and the L0/L1 gates now say so).
