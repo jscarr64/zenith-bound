@@ -11,7 +11,7 @@ Usage:
   tools/rules_scan.sh --working            # git diff HEAD (staged + unstaged; new files must be staged)
   tools/rules_scan.sh --diff-file F        # a saved unified diff (used by the self-test)
   tools/rules_scan.sh --count-only         # only the clone-count, *_ref-count and hidden-copy-count baseline checks
-  tools/rules_scan.sh --hidden-copies      # list the hidden-copy sites of src/ (no baseline needed; RULES_SCAN_ROOT picks the tree)
+  tools/rules_scan.sh --hidden-copies      # list the hidden-copy sites of src/ tests/ benches/ examples/ (no baseline needed; RULES_SCAN_ROOT picks the tree)
   tools/rules_scan.sh --update-baseline    # lower the baselines to the current counts (never raises them)
 
 SCANNED PATHS: every .rs file under src/ tests/ benches/ examples/ (any depth) and build.rs. There is NO
@@ -38,8 +38,8 @@ use listed with its reason for Jeff), definitions (`fn add_ref` etc.) excluded. 
 tools/ref_sum_count_baseline.txt (starts at 0): it may only go down; --update-baseline lowers it.
 
 HIDDEN-COPY COUNT: a `Mag` (or any type) has no Clone/Copy, but rebuilding it from the fields of another value of
-the same type is a clone in effect. The count is the number of fn bodies under src/ (tests, benches and examples
-are not counted) that
+the same type is a clone in effect. The count is the number of fn bodies under src/, tests/, benches/ and examples/ (the same
+scope as the clone patterns; no test exemption) that
   (a) are NAMED copy, replicate, dup or duplicate (also copy_*, replicate_*, dup_*, duplicate_*), or
   (b) call a constructor (`Self {..}`, `Type {..}`, `Type::f(..)`, `Self::f(..)`; Some/Ok/Err excluded) whose arguments are
       two or more bare field reads of ONE value (`x.exp`, `x.mant()`, `*x.mant`, `a: x.a, b: x.b`), or
@@ -47,6 +47,9 @@ are not counted) that
       fn body (`Inner::Finite { exp, mant } => Mag::from_canonical(*exp, *mant)`).
 Heuristic, text-based: arguments that are computed (`exp + 1`, `mant.checked_add(1)`) are not bare field reads, so
 `successor`-style code does not count. A copy routed through intermediate `let` bindings is not seen. The count is
+A fn whose parameters name only other types than its return type (`fn from_magv(m: &MagV) -> Result<Mag, String>`, a
+conversion between the model and the library type, no `self`, no generics) is not a same-type copy, so rules (b) and (c) do not
+apply to it; rule (a), the name, always applies. There is no allowlist for this count. The count is
 ratcheted against tools/hidden_copy_count_baseline.txt (starts at 0, may only go down; --update-baseline lowers it).
 """
 import hashlib, os, re, subprocess, sys, collections
@@ -284,9 +287,33 @@ def pattern_bound_names(body):
     return names
 
 
-def hidden_copy_reason(name, body):
+WRAPPER_TYPES = {"Option", "Result", "Vec", "Box", "String", "Rc", "Arc", "Cow", "Ok", "Err", "Some"}
+TYPE_NAME = re.compile(r"\b[A-Z]\w*")
+
+
+def converts_between_types(sig):
+    """True when the signature takes values of some named type(s) and returns only other named type(s), e.g.
+    `fn from_magv(m: &MagV) -> Result<Mag, String>`: that converts, it cannot be a copy of its argument. Conservative: a
+    `self` receiver, `Self`, generics, a missing return type or an argument/return type name in common all answer False."""
+    sig = sig.strip()
+    if sig.startswith("<") or re.search(r"\bself\b|\bSelf\b", sig):
+        return False
+    if not sig.startswith("("):
+        return False
+    close = match_close(sig, 0)
+    if close < 0 or "->" not in sig[close + 1:]:
+        return False
+    ret = sig[close + 1:].split("->", 1)[1].split(" where ")[0]
+    args = set(TYPE_NAME.findall(sig[:close + 1])) - WRAPPER_TYPES
+    rets = set(TYPE_NAME.findall(ret)) - WRAPPER_TYPES
+    return bool(args) and bool(rets) and not (args & rets)
+
+
+def hidden_copy_reason(name, body, sig=""):
     if COPY_NAME.match(name):
         return "fn named %s" % name
+    if converts_between_types(sig):
+        return None
     bound = pattern_bound_names(body)
     for m in CTOR.finditer(body):
         path, opener = m.group(1), m.group(2)
@@ -322,9 +349,15 @@ def hidden_copy_reason(name, body):
 
 
 def hidden_copy_sites():
-    """[(relpath, line, fn name, reason)] for every flagged fn body under src/"""
+    """[(relpath, line, fn name, reason)] for every flagged fn body under src/ tests/ benches/ examples/ (no exemption)"""
     sites = []
-    base = os.path.join(ROOT, "src")
+    for d in DIRS:
+        sites.extend(hidden_copy_sites_in(os.path.join(ROOT, d)))
+    return sites
+
+
+def hidden_copy_sites_in(base):
+    sites = []
     for dp, dn, fn in os.walk(base):
         dn[:] = sorted(x for x in dn if x not in ("target", ".git"))
         for f in sorted(fn):
@@ -353,7 +386,7 @@ def hidden_copy_sites():
                 close = match_close(text, i)
                 if close < 0:
                     continue
-                reason = hidden_copy_reason(m.group(1), text[i + 1:close])
+                reason = hidden_copy_reason(m.group(1), text[i + 1:close], text[m.end():i])
                 if reason:
                     sites.append((rel, text.count("\n", 0, m.start()) + 1, m.group(1), reason))
     return sites

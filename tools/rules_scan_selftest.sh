@@ -143,6 +143,35 @@ fn g(x: &Inner) -> Option<(i64, u64)> { match x { Inner::Finite { exp, mant } if
 clean_hc "comment and string" 'fn f() -> M { // M::from_canonical(x.exp, x.mant) and fn replicate
   let _s = "M::from_canonical(x.exp, x.mant)"; M::zero() }'
 : > "$hc/src/x.rs"; hidden >/dev/null || fail "empty tree flagged"
+# the same rules apply under tests/ benches/ examples/ (no test exemption); one fixture file at a time
+flagged_hc_at() { # flagged_hc_at <path> <label> <rust source>: exactly one site expected
+  mkdir -p "$(dirname "$hc/$1")"; printf '%s\n' "$3" > "$hc/$1"
+  out="$(hidden)" && fail "hidden copy not flagged in $1: $2"
+  echo "$out" | grep -q "hidden_copy_count 1\$" || fail "hidden copy count is not 1 in $1 for $2: $out"
+  echo "$out" | grep -q "^$1:" || fail "hidden copy site is not reported under $1 for $2: $out"
+  rm -f "$hc/$1"
+}
+clean_hc_at() { # clean_hc_at <path> <label> <rust source>
+  mkdir -p "$(dirname "$hc/$1")"; printf '%s\n' "$3" > "$hc/$1"
+  out="$(hidden)" || fail "false hidden-copy flag in $1: $2: $out"
+  rm -f "$hc/$1"
+}
+DUP='fn dup(x: &MagV) -> MagV { match x { MagV::Finite { exp, mant } => MagV::Finite { exp: *exp, mant: *mant }, MagV::Infinity => MagV::Infinity } }'
+for d in tests/model/direct.rs tests/mag/support.rs benches/b.rs examples/e.rs; do
+  flagged_hc_at "$d" "dup-style helper by name" "$DUP"
+  flagged_hc_at "$d" "same helper renamed (pattern-bound fields)" 'fn again(x: &MagV) -> MagV { match x { MagV::Finite { exp, mant } => MagV::Finite { exp: *exp, mant: *mant }, MagV::Infinity => MagV::Infinity } }'
+done
+flagged_hc_at tests/model/direct.rs "field reads in a call" 'fn again(x: &MagV) -> MagV { MagV::new(x.exp, x.mant) }'
+flagged_hc_at tests/model/direct.rs "same type behind Option/Result" 'fn again(x: &MagV) -> Option<MagV> { MagV::mk(x.exp, x.mant).ok() }'
+flagged_hc_at tests/model/direct.rs "copy of a model value through Result with a pattern" 'fn again(m: &MagV) -> Result<MagV, String> { match m { MagV::Finite { exp, mant } => Ok(MagV::from_parts(*exp, *mant)), MagV::Infinity => Ok(MagV::Infinity) } }'
+flagged_hc_at tests/mag/support.rs "a converter still counts when it is named dup" 'fn dup(m: &MagV) -> Result<Mag, String> { Mag::zero() }'
+flagged_hc_at tests/model/direct.rs "a method on the type (self receiver) is not a converter" 'impl MagV { fn again(&self) -> Mag { match self { MagV::Finite { exp, mant } => Mag::from_parts(*exp, *mant), MagV::Infinity => Mag::infinity() } } }'
+clean_hc_at tests/mag/support.rs "model to library converter (other types in and out)" 'pub fn from_magv(m: &MagV) -> Result<Mag, String> { match m { MagV::Finite { exp, mant } => Mag::finite(*mant, *exp).map_err(|e| format!("{:?}", e)), MagV::Infinity => Ok(Mag::infinity()) } }'
+clean_hc_at tests/model/dyadic.rs "model to dyadic converter" 'pub fn from_magv(m: &MagV) -> Option<Dy> { match m { MagV::Finite { exp, mant } => Some(Dy::from_mag(*exp, *mant)), MagV::Infinity => None } }'
+clean_hc_at tests/model/direct.rs "from-parts rebuild with computed arguments" 'fn f(a: i128, m: u128) -> Option<MagV> { Some(MagV::Finite { exp: i64::try_from(a).ok()?, mant: u64::try_from(m).ok()? }) }'
+clean_hc_at tests/model/direct.rs "comment and string" 'fn f() -> MagV { // MagV::new(x.exp, x.mant) and fn dup
+  let _s = "fn dup(x: &MagV)"; zero() }'
+hidden >/dev/null || fail "tests fixtures left a flag behind: $(hidden)"
 
 # git modes in a throwaway repo
 g="$t/repo"; mkdir -p "$g/src" "$g/tools"; cd "$g" || exit 1
@@ -201,5 +230,10 @@ scan --count-only >/dev/null && fail "hidden-copy count above baseline passed"
 echo 9 > tools/hidden_copy_count_baseline.txt; scan --count-only | grep -qi "hidden-copy count 2 is below baseline" || fail "no hint to lower hidden-copy baseline"
 scan --update-baseline >/dev/null; [ "$(tr -d '[:space:]' < tools/hidden_copy_count_baseline.txt)" = 2 ] || fail "hidden-copy baseline not lowered"
 echo 0 > tools/hidden_copy_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising hidden-copy baseline allowed"; [ "$(tr -d '[:space:]' < tools/hidden_copy_count_baseline.txt)" = 0 ] || fail "hidden-copy baseline raised"
+# the hidden-copy count includes tests/: a dup-style helper there raises the count above a 0 baseline
+printf 'fn a() {}\n' > src/x.rs; mkdir -p tests; printf 'fn dup(x: &MagV) -> MagV { match x { MagV::Finite { exp, mant } => MagV::Finite { exp: *exp, mant: *mant }, MagV::Infinity => MagV::Infinity } }\n' > tests/m.rs; git add -A; git commit -qm hct
+echo 0 > tools/hidden_copy_count_baseline.txt
+scan --count-only | grep -q "hidden-copy count 1 is ABOVE" || fail "hidden copy in tests/ not counted: $(scan --count-only)"
+scan --count-only >/dev/null && fail "hidden copy in tests/ passed a 0 baseline"
 rm -f tools/hidden_copy_count_baseline.txt; scan --count-only >/dev/null && fail "missing hidden-copy baseline passed"
 echo "rules_scan selftest: ok"
