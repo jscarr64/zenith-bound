@@ -593,6 +593,8 @@ Everything in the second column is **Cassie's claim from a read-only pass agains
 
 ## 19. Schedule: SUPERSEDED figures (rate-based generic sizing, not observed pace); observed-pace re-baseline in 19.1
 
+**Note (2026-10-16 8:26 AM CT, Jeff via Paul): the 2 January 2027 date cited in this section is no longer a constraint, and there are no scope cuts; the "floor" scope and every "against 2 January" comparison below are superseded (see `docs/REPLAN-2026-10-16.md` section 0).**
+
 **SUPERSEDED, rate-based generic sizing, not observed pace.** Every figure in this section (the table, the assumptions, the critical-path range, the ship-date impact, the Rusty-offer saving) is the first generic estimate and is kept only for the record. Do not plan against it.
 
 **Re-baseline: see 19.1 (end of this section).** The observed-pace re-baseline replaces the superseded figures as the planning basis. The old figures (79 to 141 working days gross, and everything derived from them below) stay here only for the record. What does not change is the scope in sections 8 to 11, the exit criteria and the checklist. Jeff's two statements (relayed to me by the dispatching agent on 2026-10-15 at about 11:04 PM CT, not seen from him, not checked against any record) are addressed in 19.1: (1) all the crates and all of Accumath were built in under 60 days; (2) wide-range testing adds at most 1 to 2 days.
