@@ -11,6 +11,7 @@
 # The rules are the zero-clone, no-unwrap/expect/panic/unreachable/todo/unimplemented (test code included), no-allow, no-unsafe,
 # no-float rules.
 set -u
+# PYTHONNOUSERSITE=1: a stray ~/.local mpmath (e.g. 1.3.0) must not shadow the pinned system mpmath 1.2.1 that the golden generators require.
 export PYTHONNOUSERSITE=1
 T=${T:-/tmp/zb-gate-logs}; mkdir -p "$T"
 cd "${REPO:-$(cd "$(dirname "$0")/.." && pwd)}" || exit 2
