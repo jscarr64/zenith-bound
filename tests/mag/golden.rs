@@ -100,12 +100,12 @@ fn run_line(line: &str) -> Result<(), String> {
                 .args
                 .first()
                 .ok_or_else(|| String::from("missing argument a"))?;
-            let b = row
-                .args
-                .get(1)
-                .ok_or_else(|| String::from("missing argument b"))?;
             let got_and_want: (MagV, MagV) = match row.op.as_str() {
                 "add_up" | "mul_up" | "mul_lower" | "sub_lower" | "div_up" | "div_lower" => {
+                    let b = row
+                        .args
+                        .get(1)
+                        .ok_or_else(|| String::from("missing argument b"))?;
                     let ma = from_magv(a);
                     let mb = from_magv(b);
                     let r = match row.op.as_str() {
