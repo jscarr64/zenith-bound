@@ -59,7 +59,7 @@ pub fn config(default_cases: u64) -> Result<PropConfig, String> {
             .parse::<u64>()
             .map_err(|_| format!("ZB_PROP_CASES is not a number: {}", text))?,
         Err(std::env::VarError::NotPresent) => default_cases,
-        Err(_) => return Err("ZB_PROP_CASES is not a number".to_string()),
+        Err(_) => return Err(String::from("ZB_PROP_CASES is not a number")),
     };
 
     let seed = match std::env::var("ZB_PROP_SEED") {
@@ -71,7 +71,7 @@ pub fn config(default_cases: u64) -> Result<PropConfig, String> {
                 .map_err(|_| format!("ZB_PROP_SEED is not a number: {}", text))?,
         },
         Err(std::env::VarError::NotPresent) => DEFAULT_SEED,
-        Err(_) => return Err("ZB_PROP_SEED is not a number".to_string()),
+        Err(_) => return Err(String::from("ZB_PROP_SEED is not a number")),
     };
 
     Ok(PropConfig { seed, cases })

@@ -44,20 +44,20 @@ fn mul_up_infinity_operand_gives_infinity_even_for_zero() -> Result<(), String> 
         // x * Infinity
         let r1 = to_magv(&from_magv(x)?.mul_up(&Mag::infinity()));
         if r1 != MagV::Infinity {
-            return Err("x * Infinity != Infinity".to_string());
+            return Err(String::from("x * Infinity != Infinity"));
         }
 
         // Infinity * x
         let r2 = to_magv(&Mag::infinity().mul_up(&from_magv(x)?));
         if r2 != MagV::Infinity {
-            return Err("Infinity * x != Infinity".to_string());
+            return Err(String::from("Infinity * x != Infinity"));
         }
     }
 
     // Infinity * Infinity
     let r3 = to_magv(&Mag::infinity().mul_up(&Mag::infinity()));
     if r3 != MagV::Infinity {
-        return Err("Infinity * Infinity != Infinity".to_string());
+        return Err(String::from("Infinity * Infinity != Infinity"));
     }
 
     Ok(())

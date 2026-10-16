@@ -39,7 +39,7 @@ fn sqrt_up_infinity_gives_infinity() -> Result<(), String> {
     let a = MagV::Infinity;
     let r = to_magv(&from_magv(&a)?.sqrt_up());
     if r != MagV::Infinity {
-        return Err("sqrt_up(Infinity) != Infinity".to_string());
+        return Err(String::from("sqrt_up(Infinity) != Infinity"));
     }
     Ok(())
 }
