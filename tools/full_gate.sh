@@ -23,4 +23,5 @@ run no-float-scan "! grep -rn --include='*.rs' -E '\bf32\b|\bf64\b|\bmul_add\b|c
 run no-panic-scan "! grep -rn --include='*.rs' -E '\bunwrap\(|\bexpect\(|\bpanic!|\bunreachable!|\btodo!|\bunimplemented!' src tests benches examples build.rs 2>/dev/null | grep -vE ':[0-9]+:\s*(//|\*)'"
 run no-clone-scan "! grep -rn --include='*.rs' -E '\.clone\(|\.clone_from\(|\.to_vec\(|\.cloned\(|\.to_owned\(|Clone::clone|derive\([^)]*(Clone|Copy)|impl(<[^>]*>)?\s+(Clone|Copy)\s+for' src tests benches examples build.rs 2>/dev/null | grep -vE ':[0-9]+:\s*(//|\*)'"
 run pubfn-coverage "tools/pubfn_coverage_selftest.sh && tools/pubfn_coverage.sh"
+run goldens-regen "tools/goldens_regen.sh"
 echo done >> "$T/$tag.rc"
