@@ -21,9 +21,9 @@ fn check_is(op: &str, args: &[&MagV], got: &Mag, want: &MagV) -> Result<(), Stri
 
 #[test]
 fn round_up_ops_with_an_infinity_operand_give_infinity() -> Result<(), String> {
-    let inf = Mag::Infinity;
+    let inf = Mag::infinity();
     for x in magv_set(&mid_exponents()).iter() {
-        let x_mag = &from_magv(x);
+        let x_mag = &from_magv(x)?;
         check_is(
             "add_up",
             &[x, &MagV::Infinity],
@@ -90,9 +90,9 @@ fn round_up_ops_with_an_infinity_operand_give_infinity() -> Result<(), String> {
 
 #[test]
 fn div_up_by_zero_is_infinity_including_zero_over_zero() -> Result<(), String> {
-    let zero = Mag::Finite { exp: 0, mant: 0 };
+    let zero = Mag::zero();
     for x in magv_set(&mid_exponents()).iter() {
-        let x_mag = &from_magv(x);
+        let x_mag = &from_magv(x)?;
         check_is(
             "div_up",
             &[x, &MagV::Finite { exp: 0, mant: 0 }],
@@ -105,9 +105,9 @@ fn div_up_by_zero_is_infinity_including_zero_over_zero() -> Result<(), String> {
 
 #[test]
 fn round_down_ops_with_an_infinity_operand_give_zero() -> Result<(), String> {
-    let inf = Mag::Infinity;
+    let inf = Mag::infinity();
     for x in magv_set(&mid_exponents()).iter() {
-        let x_mag = &from_magv(x);
+        let x_mag = &from_magv(x)?;
         check_is(
             "mul_lower",
             &[x, &MagV::Infinity],
@@ -170,9 +170,9 @@ fn round_down_ops_with_an_infinity_operand_give_zero() -> Result<(), String> {
 
 #[test]
 fn div_lower_by_zero_is_zero() -> Result<(), String> {
-    let zero = Mag::Finite { exp: 0, mant: 0 };
+    let zero = Mag::zero();
     for x in magv_set(&mid_exponents()).iter() {
-        let x_mag = &from_magv(x);
+        let x_mag = &from_magv(x)?;
         check_is(
             "div_lower",
             &[x, &MagV::Finite { exp: 0, mant: 0 }],
@@ -185,8 +185,8 @@ fn div_lower_by_zero_is_zero() -> Result<(), String> {
 
 #[test]
 fn round_down_overflow_is_the_largest_finite_mag() -> Result<(), String> {
-    let big = from_magv(&max_mag());
-    let tiny = from_magv(&min_pos_mag());
+    let big = from_magv(&max_mag())?;
+    let tiny = from_magv(&min_pos_mag())?;
     let max = max_mag();
     let min = min_pos_mag();
     check_is("mul_lower", &[&max, &max], &big.mul_lower(&big), &max)?;
@@ -197,8 +197,8 @@ fn round_down_overflow_is_the_largest_finite_mag() -> Result<(), String> {
 #[test]
 fn round_up_overflow_is_infinity_and_round_up_underflow_is_the_smallest_positive_mag(
 ) -> Result<(), String> {
-    let big = from_magv(&max_mag());
-    let tiny = from_magv(&min_pos_mag());
+    let big = from_magv(&max_mag())?;
+    let tiny = from_magv(&min_pos_mag())?;
     let max = max_mag();
     let min = min_pos_mag();
     check_is("add_up", &[&max, &max], &big.add_up(&big), &MagV::Infinity)?;

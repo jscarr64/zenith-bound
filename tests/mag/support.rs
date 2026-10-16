@@ -5,22 +5,17 @@ use core::cmp::Ordering;
 use zenith_bound::mag::Mag;
 
 pub fn to_magv(m: &Mag) -> MagV {
-    match m {
-        Mag::Finite { exp, mant } => MagV::Finite {
-            exp: *exp,
-            mant: *mant,
-        },
-        Mag::Infinity => MagV::Infinity,
+    match (m.exp(), m.mant()) {
+        (Some(exp), Some(mant)) => MagV::Finite { exp, mant },
+        _ => MagV::Infinity,
     }
 }
 
-pub fn from_magv(m: &MagV) -> Mag {
+pub fn from_magv(m: &MagV) -> Result<Mag, String> {
     match m {
-        MagV::Finite { exp, mant } => Mag::Finite {
-            exp: *exp,
-            mant: *mant,
-        },
-        MagV::Infinity => Mag::Infinity,
+        MagV::Finite { exp, mant } => Mag::finite(*mant, *exp)
+            .map_err(|e| format!("Mag::finite({}, {}) failed: {:?}", mant, exp, e)),
+        MagV::Infinity => Ok(Mag::infinity()),
     }
 }
 

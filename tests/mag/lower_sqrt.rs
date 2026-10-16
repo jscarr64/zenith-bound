@@ -11,7 +11,7 @@ pub fn verify(a: &MagV, r: &MagV) -> Result<(), String> {
 }
 
 fn check_one(a: &MagV) -> Result<(), String> {
-    let r = to_magv(&from_magv(a).sqrt_lower());
+    let r = to_magv(&from_magv(a)?.sqrt_lower());
     verify(a, &r)
 }
 

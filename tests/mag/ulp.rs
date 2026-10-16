@@ -3,7 +3,7 @@
 use crate::model::dyadic::{Dy, MagV};
 use crate::model::oracle::{min_pos_mag, TWO63};
 use crate::model::sets::mantissas;
-use crate::support::{dcmp, dy_of, to_magv};
+use crate::support::{dcmp, dy_of, from_magv, to_magv};
 use core::cmp::Ordering;
 use zenith_bound::mag::Mag;
 
@@ -132,7 +132,7 @@ fn smaller_than_half_ulp_matches_model_on_boundary_grid() -> Result<(), String> 
             let h = mid_exp - i64::from(*p) - 1;
             for exp in (h - 2)..=(h + 2) {
                 for &mant in mantissas().iter() {
-                    let x = Mag::Finite { exp, mant };
+                    let x = from_magv(&MagV::Finite { exp, mant })?;
                     let want = dcmp(
                         &dy_of(&MagV::Finite { exp, mant })?,
                         &Dy::pow2(i128::from(h)),
@@ -154,7 +154,7 @@ fn smaller_than_half_ulp_contract_1_4_boundary_set() -> Result<(), String> {
     let prec = 4;
     for exp in 3..=8 {
         for &mant in CONTRACT_MANTS.iter() {
-            let x = Mag::Finite { exp, mant };
+            let x = from_magv(&MagV::Finite { exp, mant })?;
             let want = exp <= 5;
             let got = x.smaller_than_half_ulp(mid_exp, prec);
             if got != want {
@@ -220,7 +220,7 @@ fn smaller_than_half_ulp_near_i64_min_matches_model_and_is_false_below_the_range
                 i64::MIN + 130,
             ] {
                 for &mant in mantissas().iter() {
-                    let x = Mag::Finite { exp, mant };
+                    let x = from_magv(&MagV::Finite { exp, mant })?;
                     let want =
                         dcmp(&dy_of(&MagV::Finite { exp, mant })?, &Dy::pow2(h))? == Ordering::Less;
                     let got = x.smaller_than_half_ulp(mid_exp, *p);
@@ -241,13 +241,13 @@ fn smaller_than_half_ulp_near_i64_min_matches_model_and_is_false_below_the_range
 fn smaller_than_half_ulp_zero_is_true_and_infinity_is_false() -> Result<(), String> {
     for p in PRECS.iter() {
         for mid_exp in [i64::MIN, -1000, 0, 1000, i64::MAX] {
-            if !(Mag::Finite { exp: 0, mant: 0 }).smaller_than_half_ulp(mid_exp, *p) {
+            if !Mag::zero().smaller_than_half_ulp(mid_exp, *p) {
                 return Err(format!(
                     "zero must be smaller than half an ulp: mid_exp {}, prec {}",
                     mid_exp, p
                 ));
             }
-            if Mag::Infinity.smaller_than_half_ulp(mid_exp, *p) {
+            if Mag::infinity().smaller_than_half_ulp(mid_exp, *p) {
                 return Err(format!(
                     "Infinity must not be smaller than half an ulp: mid_exp {}, prec {}",
                     mid_exp, p

@@ -13,7 +13,7 @@ pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
 }
 
 fn check_pair(a: &MagV, b: &MagV) -> Result<(), String> {
-    let r = to_magv(&from_magv(a).mul_lower(&from_magv(b)));
+    let r = to_magv(&from_magv(a)?.mul_lower(&from_magv(b)?));
     verify(a, b, &r)
 }
 

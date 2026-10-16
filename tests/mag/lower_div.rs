@@ -15,7 +15,7 @@ fn check_pair(a: &MagV, b: &MagV) -> Result<(), String> {
     if dy_of(b)?.is_zero() {
         return Ok(());
     }
-    let r = to_magv(&from_magv(a).div_lower(&from_magv(b)));
+    let r = to_magv(&from_magv(a)?.div_lower(&from_magv(b)?));
     verify(a, b, &r)
 }
 

@@ -106,8 +106,8 @@ fn run_line(line: &str) -> Result<(), String> {
                         .args
                         .get(1)
                         .ok_or_else(|| String::from("missing argument b"))?;
-                    let ma = from_magv(a);
-                    let mb = from_magv(b);
+                    let ma = from_magv(a)?;
+                    let mb = from_magv(b)?;
                     let r = match row.op.as_str() {
                         "add_up" => ma.add_up(&mb),
                         "mul_up" => ma.mul_up(&mb),
@@ -120,7 +120,7 @@ fn run_line(line: &str) -> Result<(), String> {
                     (to_magv(&r), row.want)
                 }
                 "sqrt_up" | "sqrt_lower" => {
-                    let ma = from_magv(a);
+                    let ma = from_magv(a)?;
                     let r = if row.op == "sqrt_up" {
                         ma.sqrt_up()
                     } else {

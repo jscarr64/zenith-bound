@@ -31,7 +31,7 @@ pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
 }
 
 fn check_pair(a: &MagV, b: &MagV) -> Result<(), String> {
-    let r = to_magv(&from_magv(a).add_up(&from_magv(b)));
+    let r = to_magv(&from_magv(a)?.add_up(&from_magv(b)?));
     verify(a, b, &r)
 }
 
@@ -57,8 +57,8 @@ fn add_up_extreme_exponent_set_is_smallest_upper_bound() -> Result<(), String> {
 #[test]
 fn add_up_infinity_operand_gives_infinity() -> Result<(), String> {
     for x in magv_set(&mid_exponents()).iter() {
-        let r1 = to_magv(&from_magv(x).add_up(&Mag::Infinity));
-        let r2 = to_magv(&Mag::Infinity.add_up(&from_magv(x)));
+        let r1 = to_magv(&from_magv(x)?.add_up(&Mag::infinity()));
+        let r2 = to_magv(&Mag::infinity().add_up(&from_magv(x)?));
         if r1 != MagV::Infinity {
             return Err(format!("expected Infinity, got {:?}", r1));
         }
@@ -66,7 +66,7 @@ fn add_up_infinity_operand_gives_infinity() -> Result<(), String> {
             return Err(format!("expected Infinity, got {:?}", r2));
         }
     }
-    let r3 = to_magv(&Mag::Infinity.add_up(&Mag::Infinity));
+    let r3 = to_magv(&Mag::infinity().add_up(&Mag::infinity()));
     if r3 != MagV::Infinity {
         return Err(format!("expected Infinity, got {:?}", r3));
     }
@@ -79,8 +79,8 @@ fn add_up_is_commutative() -> Result<(), String> {
     set.push(MagV::Infinity);
     for a in set.iter() {
         for b in set.iter() {
-            let ab = to_magv(&from_magv(a).add_up(&from_magv(b)));
-            let ba = to_magv(&from_magv(b).add_up(&from_magv(a)));
+            let ab = to_magv(&from_magv(a)?.add_up(&from_magv(b)?));
+            let ba = to_magv(&from_magv(b)?.add_up(&from_magv(a)?));
             if ab != ba {
                 return Err(format!(
                     "add_up({:?}, {:?}) = {:?} but swapped gives {:?}",
