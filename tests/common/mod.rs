@@ -4,6 +4,7 @@
 //! `#[path = "../common/mod.rs"] mod common;`. No other test target may include it. The crate denies `unused` and `#[allow]` is banned,
 //! so every `pub` item added to common MUST be used by the harness target (its self-tests count), or the build fails with a
 //! `never used` error. Add the item and its use in the same commit.
+pub mod ballrows;
 pub mod generators;
 pub mod goldens;
 pub mod replay;
