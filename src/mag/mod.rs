@@ -24,6 +24,7 @@ mod sqrt;
 mod ulp;
 
 use crate::error::BoundError;
+use core::num::NonZeroU64;
 
 /// Least canonical nonzero mantissa, `2^63`.
 const TOP: u64 = 0x8000_0000_0000_0000;
@@ -127,11 +128,11 @@ impl Mag {
         }
     }
 
-    /// `(exp, mant)` when this value is finite and nonzero.
-    fn nonzero(&self) -> Option<(i64, u64)> {
+    /// `(exp, mant)` when this value is finite and nonzero; the type carries the nonzero mantissa.
+    fn nonzero(&self) -> Option<(i64, NonZeroU64)> {
         match &self.inner {
-            Inner::Finite { exp, mant } if *mant != 0 => Some((*exp, *mant)),
-            _ => None,
+            Inner::Finite { exp, mant } => NonZeroU64::new(*mant).map(|m| (*exp, m)),
+            Inner::Infinity => None,
         }
     }
 }

@@ -41,7 +41,7 @@ fn sqrt_parts(mag: &Mag, up: bool) -> Mag {
         None => return loose(up),
     };
     let (radicand, scale) = if parity == 0 {
-        let radicand = match u128::from(mant).checked_shl(64) {
+        let radicand = match u128::from(mant.get()).checked_shl(64) {
             Some(radicand) => radicand,
             None => return loose(up),
         };
@@ -51,7 +51,7 @@ fn sqrt_parts(mag: &Mag, up: bool) -> Mag {
         };
         (radicand, scale)
     } else {
-        let radicand = match u128::from(mant).checked_shl(63) {
+        let radicand = match u128::from(mant.get()).checked_shl(63) {
             Some(radicand) => radicand,
             None => return loose(up),
         };

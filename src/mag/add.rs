@@ -4,6 +4,7 @@ use super::round::loose;
 use super::round::norm;
 use super::Mag;
 use super::TOP;
+use core::num::NonZeroU64;
 
 impl Mag {
     /// Least `Mag` at or above `self + other` (CONTRACT 14.1, 14.3).
@@ -26,7 +27,7 @@ impl Mag {
     }
 }
 
-fn add_parts(ea: i64, ma: u64, eb: i64, mb: u64) -> Mag {
+fn add_parts(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64) -> Mag {
     let (ea, ma, eb, mb) = if ea >= eb {
         (ea, ma, eb, mb)
     } else {
@@ -37,17 +38,17 @@ fn add_parts(ea: i64, ma: u64, eb: i64, mb: u64) -> Mag {
         None => return Mag::infinity(),
     };
     if gap >= 64 {
-        return successor(ea, ma);
+        return successor(ea, ma.get());
     }
     let gap_u = match u32::try_from(gap) {
         Ok(gap) => gap,
         Err(_) => return Mag::infinity(),
     };
-    let shifted = match u128::from(ma).checked_shl(gap_u) {
+    let shifted = match u128::from(ma.get()).checked_shl(gap_u) {
         Some(shifted) => shifted,
         None => return Mag::infinity(),
     };
-    let sum = match shifted.checked_add(u128::from(mb)) {
+    let sum = match shifted.checked_add(u128::from(mb.get())) {
         Some(sum) => sum,
         None => return Mag::infinity(),
     };

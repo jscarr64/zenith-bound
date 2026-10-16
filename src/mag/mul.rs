@@ -3,6 +3,7 @@
 use super::round::loose;
 use super::round::norm;
 use super::Mag;
+use core::num::NonZeroU64;
 
 impl Mag {
     /// Least `Mag` at or above `self * other` (CONTRACT 1.3, 14.1).
@@ -24,8 +25,8 @@ impl Mag {
     }
 }
 
-pub(super) fn mul_parts(ea: i64, ma: u64, eb: i64, mb: u64, up: bool) -> Mag {
-    let prod = match u128::from(ma).checked_mul(u128::from(mb)) {
+pub(super) fn mul_parts(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64, up: bool) -> Mag {
+    let prod = match u128::from(ma.get()).checked_mul(u128::from(mb.get())) {
         Some(prod) => prod,
         None => return loose(up),
     };

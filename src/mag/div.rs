@@ -41,11 +41,11 @@ fn div_parts(num: &Mag, den: &Mag, up: bool) -> Mag {
     let Some((eb, mb)) = den.nonzero() else {
         return loose(up);
     };
-    let numerator = match u128::from(ma).checked_shl(64) {
+    let numerator = match u128::from(ma.get()).checked_shl(64) {
         Some(numerator) => numerator,
         None => return loose(up),
     };
-    let divisor = u128::from(mb);
+    let divisor = u128::from(mb.get());
     let quot = match numerator.checked_div(divisor) {
         Some(quot) => quot,
         None => return loose(up),

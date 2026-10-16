@@ -35,7 +35,7 @@ impl Mag {
             return Mag::zero();
         }
         match (self.nonzero(), other.nonzero()) {
-            (Some((ea, ma)), Some((eb, mb))) => sub_parts(ea, ma, eb, mb),
+            (Some((ea, ma)), Some((eb, mb))) => sub_parts(ea, ma.get(), eb, mb.get()),
             (Some(_), None) => self.replicate(),
             _ => Mag::zero(),
         }
