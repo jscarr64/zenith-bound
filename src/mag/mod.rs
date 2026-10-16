@@ -9,7 +9,9 @@
 //! [`Mag::infinity`]. `Mag` is not `Clone`, `Copy` or `Hash`. Ordering is a total order:
 //! zero is least, `Infinity` is greatest, and canonical finite values compare by `(exp, mant)`.
 
+mod add;
 mod cmp;
+mod round;
 mod ulp;
 
 use crate::error::BoundError;
@@ -104,6 +106,26 @@ impl Mag {
         Mag::from_canonical(i64::MIN, TOP)
     }
 
+    fn max_finite() -> Mag {
+        Mag::from_canonical(i64::MAX, u64::MAX)
+    }
+
+    /// A new `Mag` with the same exponent and mantissa, or `Infinity`.
+    fn replicate(&self) -> Mag {
+        match &self.inner {
+            Inner::Infinity => Mag::infinity(),
+            Inner::Finite { exp, mant } => Mag::from_canonical(*exp, *mant),
+        }
+    }
+
+    /// `(exp, mant)` when this value is finite and nonzero.
+    fn nonzero(&self) -> Option<(i64, u64)> {
+        match &self.inner {
+            Inner::Finite { exp, mant } if *mant != 0 => Some((*exp, *mant)),
+            _ => None,
+        }
+    }
+
     /// Placeholder until `add_up` is implemented: the canonical zero.
     fn wrong_up() -> Mag {
         Mag::zero()
@@ -112,11 +134,6 @@ impl Mag {
     /// Placeholder until the round-down operations are implemented: `Infinity`.
     fn wrong_down() -> Mag {
         Mag::infinity()
-    }
-
-    /// Placeholder: zero for every input.
-    pub fn add_up(&self, _other: &Mag) -> Mag {
-        Mag::wrong_up()
     }
 
     /// Placeholder: zero for every input.
