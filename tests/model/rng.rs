@@ -42,7 +42,7 @@ impl SplitMix64 {
     }
 }
 
-/// Base seed of every property test unless ZB_PROP_SEED overrides it.
+/// Base seed of every property test unless ZB_PROP_SEED overrides it (each test mixes in the hash of its own name).
 pub const DEFAULT_SEED: u64 = 0x5EED_2B0D_C0FF_EE01;
 
 /// Number of cases and base seed of one property run.
@@ -86,20 +86,36 @@ pub fn case_seed(base: u64, case: u64) -> u64 {
     }
 }
 
-/// Returns a hint for replaying a failing test case.
-pub fn replay_hint(seed: u64) -> String {
-    format!("replay: ZB_PROP_SEED={:#x} ZB_PROP_CASES=1", seed)
+/// FNV-1a hash of a test name; it is mixed into the base seed so that each property test draws its own cases.
+pub fn name_hash(name: &str) -> u64 {
+    let mut h: u64 = 0xCBF2_9CE4_8422_2325;
+    for b in name.bytes() {
+        h = (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01B3);
+    }
+    h
+}
+
+/// Returns a hint for replaying a failing test case: `ZB_PROP_SEED` is the case seed with the test name hash undone,
+/// so that running only the test `name` with one case reproduces it.
+pub fn replay_hint(name: &str, seed: u64) -> String {
+    format!(
+        "replay: ZB_PROP_SEED={:#x} ZB_PROP_CASES=1 cargo test {}",
+        seed ^ name_hash(name),
+        name
+    )
 }
 
 /// Runs `body` once per case of the configured run; a failure names the case, its seed and the replay command.
+/// The base seed is mixed with the hash of `name`, so two tests with the same `ZB_PROP_SEED` draw different cases.
 pub fn run_cases(
     name: &str,
     default_cases: u64,
     body: &dyn Fn(&mut SplitMix64) -> Result<(), String>,
 ) -> Result<(), String> {
     let cfg = config(default_cases)?;
+    let base = cfg.seed ^ name_hash(name);
     for case in 0..cfg.cases {
-        let seed = case_seed(cfg.seed, case);
+        let seed = case_seed(base, case);
         let mut rng = SplitMix64::new(seed);
         body(&mut rng).map_err(|e| {
             format!(
@@ -108,7 +124,7 @@ pub fn run_cases(
                 case,
                 seed,
                 e,
-                replay_hint(seed)
+                replay_hint(name, seed)
             )
         })?;
     }

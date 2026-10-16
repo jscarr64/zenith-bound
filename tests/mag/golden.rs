@@ -118,7 +118,7 @@ fn run_line(line: &str) -> Result<(), String> {
                         "div_lower" => ma.div_lower(&mb),
                         _ => return Err(format!("unknown op {}", row.op)),
                     };
-                    (to_magv(&r), row.want)
+                    (to_magv(&r)?, row.want)
                 }
                 "sqrt_up" | "sqrt_lower" => {
                     let ma = from_magv(a)?;
@@ -127,7 +127,7 @@ fn run_line(line: &str) -> Result<(), String> {
                     } else {
                         ma.sqrt_lower()
                     };
-                    (to_magv(&r), row.want)
+                    (to_magv(&r)?, row.want)
                 }
                 _ => return Err(format!("unknown op {}", row.op)),
             };

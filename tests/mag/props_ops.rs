@@ -28,7 +28,7 @@ fn check_binary(
     run_cases(name, CASES, &|rng| {
         let a = draw_mag(rng);
         let b = draw_partner(rng, &a);
-        let got = to_magv(&lib(&from_magv(&a)?, &from_magv(&b)?));
+        let got = to_magv(&lib(&from_magv(&a)?, &from_magv(&b)?))?;
         let want =
             oracle(&a, &b).ok_or_else(|| format!("direct oracle failed on {:?} {:?}", a, b))?;
         if got != want {
@@ -53,7 +53,7 @@ fn check_unary(
 ) -> Result<(), String> {
     run_cases(name, CASES, &|rng| {
         let a = draw_mag(rng);
-        let got = to_magv(&lib(&from_magv(&a)?));
+        let got = to_magv(&lib(&from_magv(&a)?))?;
         let want = oracle(&a).ok_or_else(|| format!("direct oracle failed on {:?}", a))?;
         if got != want {
             return Err(format!(
@@ -72,8 +72,8 @@ fn commutes(name: &str, lib: fn(&Mag, &Mag) -> Mag) -> Result<(), String> {
     run_cases(name, CASES, &|rng| {
         let a = draw_mag(rng);
         let b = draw_partner(rng, &a);
-        let ab = to_magv(&lib(&from_magv(&a)?, &from_magv(&b)?));
-        let ba = to_magv(&lib(&from_magv(&b)?, &from_magv(&a)?));
+        let ab = to_magv(&lib(&from_magv(&a)?, &from_magv(&b)?))?;
+        let ba = to_magv(&lib(&from_magv(&b)?, &from_magv(&a)?))?;
         if ab != ba {
             return Err(format!(
                 "{}({:?}, {:?}) = {:?} but swapped gives {:?}",
@@ -96,8 +96,8 @@ fn up_is_lower_or_successor(
         if !is_finite(&a) || !is_finite(&b) || (needs_nonzero_divisor && is_zero(&b)) {
             return Ok(());
         }
-        let u = to_magv(&up(&from_magv(&a)?, &from_magv(&b)?));
-        let l = to_magv(&lower(&from_magv(&a)?, &from_magv(&b)?));
+        let u = to_magv(&up(&from_magv(&a)?, &from_magv(&b)?))?;
+        let l = to_magv(&lower(&from_magv(&a)?, &from_magv(&b)?))?;
         if u != l && u != succ(&l) {
             return Err(format!(
                 "{}({:?}, {:?}): up {:?} is neither lower {:?} nor its successor",
@@ -114,8 +114,8 @@ fn sqrt_up_is_lower_or_successor() -> Result<(), String> {
         if !is_finite(&a) {
             return Ok(());
         }
-        let u = to_magv(&Mag::sqrt_up(&from_magv(&a)?));
-        let l = to_magv(&Mag::sqrt_lower(&from_magv(&a)?));
+        let u = to_magv(&Mag::sqrt_up(&from_magv(&a)?))?;
+        let l = to_magv(&Mag::sqrt_lower(&from_magv(&a)?))?;
         if u != l && u != succ(&l) {
             return Err(format!(
                 "sqrt_up({:?}): up {:?} is neither lower {:?} nor its successor",
@@ -137,8 +137,8 @@ fn monotone(name: &str, lib: fn(&Mag, &Mag) -> Mag) -> Result<(), String> {
         } else {
             (x, y)
         };
-        let r_lo = to_magv(&lib(&from_magv(&lo)?, &from_magv(&c)?));
-        let r_hi = to_magv(&lib(&from_magv(&hi)?, &from_magv(&c)?));
+        let r_lo = to_magv(&lib(&from_magv(&lo)?, &from_magv(&c)?))?;
+        let r_hi = to_magv(&lib(&from_magv(&hi)?, &from_magv(&c)?))?;
         if direct::order(&r_lo, &r_hi) == core::cmp::Ordering::Greater {
             return Err(format!("{}({:?}, {:?}) = {:?} exceeds {}({:?}, {:?}) = {:?} although the first operand is not larger", name, lo, c, r_lo, name, hi, c, r_hi));
         }

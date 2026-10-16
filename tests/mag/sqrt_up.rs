@@ -12,7 +12,7 @@ pub fn verify(a: &MagV, r: &MagV) -> Result<(), String> {
 }
 
 fn check_one(a: &MagV) -> Result<(), String> {
-    let r = to_magv(&from_magv(a)?.sqrt_up());
+    let r = to_magv(&from_magv(a)?.sqrt_up())?;
     verify(a, &r)
 }
 
@@ -38,7 +38,7 @@ fn sqrt_up_extreme_exponent_set_is_smallest_upper_bound() -> Result<(), String> 
 #[test]
 fn sqrt_up_infinity_gives_infinity() -> Result<(), String> {
     let a = MagV::Infinity;
-    let r = to_magv(&from_magv(&a)?.sqrt_up());
+    let r = to_magv(&from_magv(&a)?.sqrt_up())?;
     if r != MagV::Infinity {
         return Err(String::from("sqrt_up(Infinity) != Infinity"));
     }

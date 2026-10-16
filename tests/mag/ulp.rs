@@ -18,7 +18,7 @@ fn ulp_mag_is_two_to_the_pre_round_exp_minus_prec() -> Result<(), String> {
     for e in EXPS.iter() {
         for p in PRECS.iter() {
             let k = *e - i64::from(*p);
-            let r = to_magv(&Mag::ulp_mag(*e, *p));
+            let r = to_magv(&Mag::ulp_mag(*e, *p))?;
             if dcmp(&dy_of(&r)?, &Dy::pow2(i128::from(k)))? != Ordering::Equal {
                 return Err(format!(
                     "ulp_mag({},{}) value differs from 2^{}, got {:?}",
@@ -55,7 +55,7 @@ fn ulp_mag_exponent_below_i64_min_rounds_up_to_smallest_positive_mag() -> Result
         (i64::MIN + 1, 127u32, min_pos_mag()),
     ];
     for (e, p, want) in cases.iter() {
-        let r = to_magv(&Mag::ulp_mag(*e, *p));
+        let r = to_magv(&Mag::ulp_mag(*e, *p))?;
         if r != *want {
             return Err(format!(
                 "ulp_mag({},{}) expected {:?}, got {:?}",
@@ -66,7 +66,7 @@ fn ulp_mag_exponent_below_i64_min_rounds_up_to_smallest_positive_mag() -> Result
 
     for p in [1u32, 2, 64, 127] {
         let e = i64::MIN + i64::from(p) - 1;
-        let r = to_magv(&Mag::ulp_mag(e, p));
+        let r = to_magv(&Mag::ulp_mag(e, p))?;
         if r != min_pos_mag() {
             return Err(format!(
                 "ulp_mag({},{}) expected {:?}, got {:?}",
@@ -80,7 +80,7 @@ fn ulp_mag_exponent_below_i64_min_rounds_up_to_smallest_positive_mag() -> Result
 
     for p in [1u32, 2, 64, 127] {
         let e = i64::MIN + i64::from(p);
-        let r = to_magv(&Mag::ulp_mag(e, p));
+        let r = to_magv(&Mag::ulp_mag(e, p))?;
         let want = MagV::Finite {
             exp: i64::MIN + 1,
             mant: TWO63,
@@ -101,7 +101,7 @@ fn half_ulp_is_two_to_the_mid_exp_minus_prec_minus_one() -> Result<(), String> {
     for e in EXPS.iter() {
         for p in PRECS.iter() {
             let k = *e - i64::from(*p) - 1;
-            let r = to_magv(&Mag::half_ulp(*e, *p));
+            let r = to_magv(&Mag::half_ulp(*e, *p))?;
             if dcmp(&dy_of(&r)?, &Dy::pow2(i128::from(k)))? != Ordering::Equal {
                 return Err(format!(
                     "half_ulp({},{}) value differs from 2^{}, got {:?}",
@@ -171,7 +171,7 @@ fn half_ulp_underflow_near_i64_min_rounds_up_to_smallest_positive_mag() -> Resul
     for p in PRECS.iter() {
         let p64 = i64::from(*p);
         for e in [i64::MIN, i64::MIN + p64 - 1, i64::MIN + p64] {
-            let r = to_magv(&Mag::half_ulp(e, *p));
+            let r = to_magv(&Mag::half_ulp(e, *p))?;
             if r != min_pos_mag() {
                 return Err(format!(
                     "half_ulp({},{}) expected {:?}, got {:?}",
@@ -183,7 +183,7 @@ fn half_ulp_underflow_near_i64_min_rounds_up_to_smallest_positive_mag() -> Resul
             }
         }
         let e = i64::MIN + p64 + 1;
-        let r = to_magv(&Mag::half_ulp(e, *p));
+        let r = to_magv(&Mag::half_ulp(e, *p))?;
         let want = MagV::Finite {
             exp: i64::MIN + 1,
             mant: TWO63,
@@ -272,7 +272,7 @@ fn ulp_mag_prec_zero_is_two_to_the_pre_round_exp_and_overflows_at_i64_max() -> R
         (i64::MAX - 1, i64::MAX),
     ];
     for (e, want_exp) in finite_cases.iter() {
-        let r = to_magv(&Mag::ulp_mag(*e, 0));
+        let r = to_magv(&Mag::ulp_mag(*e, 0))?;
         let want = MagV::Finite {
             exp: *want_exp,
             mant: TWO63,
@@ -281,7 +281,7 @@ fn ulp_mag_prec_zero_is_two_to_the_pre_round_exp_and_overflows_at_i64_max() -> R
             return Err(format!("ulp_mag({},0) expected {:?}, got {:?}", e, want, r));
         }
     }
-    let r = to_magv(&Mag::ulp_mag(i64::MAX, 0));
+    let r = to_magv(&Mag::ulp_mag(i64::MAX, 0))?;
     if r != MagV::Infinity {
         return Err(format!(
             "ulp_mag(i64::MAX,0) expected Infinity, got {:?}",
@@ -296,7 +296,7 @@ fn ulp_mag_prec_zero_is_two_to_the_pre_round_exp_and_overflows_at_i64_max() -> R
 fn half_ulp_prec_zero_is_two_to_the_mid_exp_minus_one() -> Result<(), String> {
     let mids: [i64; 7] = [i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX];
     for m in mids.iter() {
-        let r = to_magv(&Mag::half_ulp(*m, 0));
+        let r = to_magv(&Mag::half_ulp(*m, 0))?;
         let want = MagV::Finite {
             exp: *m,
             mant: TWO63,
@@ -308,7 +308,7 @@ fn half_ulp_prec_zero_is_two_to_the_mid_exp_minus_one() -> Result<(), String> {
             ));
         }
     }
-    if to_magv(&Mag::half_ulp(i64::MIN, 0)) != min_pos_mag() {
+    if to_magv(&Mag::half_ulp(i64::MIN, 0))? != min_pos_mag() {
         return Err(String::from(
             "half_ulp(i64::MIN,0) must be the smallest positive Mag",
         ));

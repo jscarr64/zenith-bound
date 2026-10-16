@@ -17,7 +17,7 @@ fn check_pair(a: &MagV, b: &MagV) -> Result<(), String> {
     if dy_of(b)?.is_zero() {
         return Ok(());
     }
-    let r = to_magv(&from_magv(a)?.div_up(&from_magv(b)?));
+    let r = to_magv(&from_magv(a)?.div_up(&from_magv(b)?))?;
     verify(a, b, &r)
 }
 
@@ -52,7 +52,7 @@ fn div_up_infinity_numerator_gives_infinity() -> Result<(), String> {
         if dy_of(x)?.is_zero() {
             continue;
         }
-        let r = to_magv(&Mag::infinity().div_up(&from_magv(x)?));
+        let r = to_magv(&Mag::infinity().div_up(&from_magv(x)?))?;
         if !matches!(r, MagV::Infinity) {
             return Err(String::from("div_up(infinity, nonzero) must be infinity"));
         }

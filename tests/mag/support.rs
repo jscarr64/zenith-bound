@@ -4,10 +4,18 @@ use crate::model::dyadic::{Dy, MagV};
 use core::cmp::Ordering;
 use zenith_bound::mag::Mag;
 
-pub fn to_magv(m: &Mag) -> MagV {
+pub fn to_magv(m: &Mag) -> Result<MagV, String> {
     match (m.exp(), m.mant()) {
-        (Some(exp), Some(mant)) => MagV::Finite { exp, mant },
-        _ => MagV::Infinity,
+        (Some(exp), Some(mant)) => Ok(MagV::Finite { exp, mant }),
+        (None, None) => Ok(MagV::Infinity),
+        (Some(exp), None) => Err(format!(
+            "broken accessors: exp() is Some({}) but mant() is None",
+            exp
+        )),
+        (None, Some(mant)) => Err(format!(
+            "broken accessors: exp() is None but mant() is Some({})",
+            mant
+        )),
     }
 }
 

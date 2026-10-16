@@ -7,7 +7,7 @@ use crate::support::{from_magv, to_magv};
 use zenith_bound::mag::Mag;
 
 fn check_is(op: &str, args: &[&MagV], got: &Mag, want: &MagV) -> Result<(), String> {
-    if to_magv(got) == *want {
+    if to_magv(got)? == *want {
         Ok(())
     } else {
         Err(format!(
@@ -15,7 +15,7 @@ fn check_is(op: &str, args: &[&MagV], got: &Mag, want: &MagV) -> Result<(), Stri
             op,
             args,
             want,
-            to_magv(got)
+            to_magv(got)?
         ))
     }
 }
