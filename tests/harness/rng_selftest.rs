@@ -1,4 +1,4 @@
-//! COVERS: common::SplitMix64::new, common::SplitMix64::next_u64, common::rng::splitmix64, common::expect_eq
+//! COVERS: common::SplitMix64::new, common::SplitMix64::next_u64, common::rng::splitmix64, common::SplitMix64::below, common::expect_eq
 //! Oracle: splitmix64 reference outputs (seed 0: the published values; the other seeds recomputed with an independent Python integer-mask implementation, 2026-10-15).
 
 use crate::common::expect_eq;
@@ -87,4 +87,27 @@ fn a_long_run_has_no_repeats() -> Result<(), String> {
     let n = v.len();
     v.dedup();
     expect_eq("distinct outputs of 100000 draws", &v.len(), &n)
+}
+
+#[test]
+fn below_is_in_range_deterministic_and_covers_the_range() -> Result<(), String> {
+    let mut g = SplitMix64::new(9);
+    let mut seen = [false; 10];
+    for _ in 0..1000 {
+        let v = g.below(10);
+        if v >= 10 {
+            return Err(format!("below(10) gave {}", v));
+        }
+        if let Some(f) = seen.get_mut(usize::try_from(v).map_err(|_| String::from("index"))?) {
+            *f = true;
+        }
+    }
+    expect_eq("every value of below(10) seen", &seen, &[true; 10])?;
+    expect_eq("below(0)", &g.below(0), &0)?;
+    expect_eq("below(1)", &g.below(1), &0)?;
+    // below is a pure function of the draw: one next_u64 output scaled by n (widening multiply)
+    let mut a = SplitMix64::new(0);
+    let mut b = SplitMix64::new(0);
+    let wide = (u128::from(b.next_u64()) * 100) >> 64;
+    expect_eq("below(100) from seed 0", &u128::from(a.below(100)), &wide)
 }
