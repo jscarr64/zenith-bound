@@ -2,16 +2,6 @@
 use super::dyadic::MagV;
 use core::cmp::Ordering;
 
-fn dup(x: &MagV) -> MagV {
-    match x {
-        MagV::Finite { exp, mant } => MagV::Finite {
-            exp: *exp,
-            mant: *mant,
-        },
-        MagV::Infinity => MagV::Infinity,
-    }
-}
-
 fn min_pos() -> MagV {
     MagV::Finite {
         exp: i64::MIN,
@@ -130,8 +120,11 @@ pub fn add_up(a: &MagV, b: &MagV) -> Option<MagV> {
         return Some(MagV::Infinity);
     }
     match (parts(a), parts(b)) {
-        (None, _) => Some(dup(b)),
-        (_, None) => Some(dup(a)),
+        (None, Some((e, m))) | (Some((e, m)), None) => Some(MagV::Finite {
+            exp: i64::try_from(e).ok()?,
+            mant: u64::try_from(m).ok()?,
+        }),
+        (None, None) => Some(zero()),
         (Some((ea, ma)), Some((eb, mb))) => {
             let (ea, ma, eb, mb) = if ea >= eb {
                 (ea, ma, eb, mb)
@@ -260,7 +253,10 @@ pub fn sub_lower(a: &MagV, b: &MagV) -> Option<MagV> {
             }
             norm((ma << gap) - mb, eb - 64, false, false)
         }
-        (Some(_), None) => Some(dup(a)),
+        (Some((e, m)), None) => Some(MagV::Finite {
+            exp: i64::try_from(e).ok()?,
+            mant: u64::try_from(m).ok()?,
+        }),
         _ => Some(zero()),
     }
 }
