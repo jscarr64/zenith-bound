@@ -341,58 +341,47 @@ pub fn round_int(
 
 #[derive(Debug, PartialEq, Eq)]
 enum Out {
-    Zero {
-        neg: bool,
-    },
-    Fin {
-        neg: bool,
-        m: u128,
-        t: i64,
-        inexact: bool,
-    },
+    Zero { neg: bool },
+    Fin { neg: bool, r: Rounded },
 }
 
 fn from_rounded(neg: bool, r: Rounded) -> Out {
     if r.m == 0 {
         Out::Zero { neg }
     } else {
-        Out::Fin {
-            neg,
-            m: r.m,
-            t: r.t,
-            inexact: r.inexact,
-        }
+        Out::Fin { neg, r }
     }
 }
 
-struct Mag {
+/// An operand of the recomputation: sign, mantissa and the exponent of `0.m * 2^exp`; the bit length is derived from `m`.
+struct Operand {
     neg: bool,
     m: u128,
-    bits: u32,
     exp: i64,
 }
 
-fn mag_of(n: &Num, neg: bool) -> Result<Mag, String> {
+impl Operand {
+    fn bits(&self) -> u32 {
+        128 - self.m.leading_zeros()
+    }
+}
+
+fn operand_of(n: &Num, neg: bool) -> Result<Operand, String> {
     let m = n
         .mant
         .ok_or_else(|| String::from("mantissa too wide to recompute"))?;
     if n.bits > 64 {
         return Err(String::from("operand wider than 64 bits"));
     }
-    Ok(Mag {
-        neg,
-        m,
-        bits: n.bits,
-        exp: n.exp,
-    })
+    Ok(Operand { neg, m, exp: n.exp })
 }
 
 /// The mantissa shifted so its top bit is bit 63.
-fn top64(x: &Mag) -> u128 {
-    x.m << (64 - x.bits)
+fn top64(x: &Operand) -> u128 {
+    x.m << (64 - x.bits())
 }
 
-fn add_mags(x: &Mag, y: &Mag, prec: u32, rm: &RoundingMode) -> Result<Out, String> {
+fn add_mags(x: &Operand, y: &Operand, prec: u32, rm: &RoundingMode) -> Result<Out, String> {
     if x.m == 0 && y.m == 0 {
         let neg = if x.neg == y.neg {
             x.neg
@@ -404,13 +393,13 @@ fn add_mags(x: &Mag, y: &Mag, prec: u32, rm: &RoundingMode) -> Result<Out, Strin
     if x.m == 0 {
         return Ok(from_rounded(
             y.neg,
-            round_int(y.neg, y.m, false, y.exp - i64::from(y.bits), prec, rm)?,
+            round_int(y.neg, y.m, false, y.exp - i64::from(y.bits()), prec, rm)?,
         ));
     }
     if y.m == 0 {
         return Ok(from_rounded(
             x.neg,
-            round_int(x.neg, x.m, false, x.exp - i64::from(x.bits), prec, rm)?,
+            round_int(x.neg, x.m, false, x.exp - i64::from(x.bits()), prec, rm)?,
         ));
     }
     let (xa, ya) = (top64(x), top64(y));
@@ -445,7 +434,7 @@ fn add_mags(x: &Mag, y: &Mag, prec: u32, rm: &RoundingMode) -> Result<Out, Strin
     ))
 }
 
-fn mul_mags(x: &Mag, y: &Mag, prec: u32, rm: &RoundingMode) -> Result<Out, String> {
+fn mul_mags(x: &Operand, y: &Operand, prec: u32, rm: &RoundingMode) -> Result<Out, String> {
     let neg = x.neg != y.neg;
     if x.m == 0 || y.m == 0 {
         return Ok(Out::Zero { neg });
@@ -453,11 +442,11 @@ fn mul_mags(x: &Mag, y: &Mag, prec: u32, rm: &RoundingMode) -> Result<Out, Strin
     let p =
         x.m.checked_mul(y.m)
             .ok_or_else(|| String::from("product overflow"))?;
-    let t = (x.exp - i64::from(x.bits)) + (y.exp - i64::from(y.bits));
+    let t = (x.exp - i64::from(x.bits())) + (y.exp - i64::from(y.bits()));
     Ok(from_rounded(neg, round_int(neg, p, false, t, prec, rm)?))
 }
 
-fn div_mags(x: &Mag, y: &Mag, prec: u32, rm: &RoundingMode) -> Result<Out, String> {
+fn div_mags(x: &Operand, y: &Operand, prec: u32, rm: &RoundingMode) -> Result<Out, String> {
     let neg = x.neg != y.neg;
     if y.m == 0 {
         return Err(String::from("zero divisor"));
@@ -494,7 +483,7 @@ fn isqrt_rem(n: u128) -> (u128, u128) {
     (res, x)
 }
 
-fn sqrt_mag(x: &Mag, prec: u32, rm: &RoundingMode) -> Result<Out, String> {
+fn sqrt_mag(x: &Operand, prec: u32, rm: &RoundingMode) -> Result<Out, String> {
     if x.m == 0 {
         return Ok(Out::Zero { neg: x.neg });
     }
@@ -502,7 +491,7 @@ fn sqrt_mag(x: &Mag, prec: u32, rm: &RoundingMode) -> Result<Out, String> {
         return Err(String::from("sqrt of a negative nonzero value"));
     }
     let mut m = x.m;
-    let mut t = x.exp - i64::from(x.bits);
+    let mut t = x.exp - i64::from(x.bits());
     if t.rem_euclid(2) == 1 {
         m <<= 1;
         t -= 1;
@@ -530,12 +519,12 @@ fn sqrt_mag(x: &Mag, prec: u32, rm: &RoundingMode) -> Result<Out, String> {
 }
 
 fn recompute(row: &GoldRow) -> Result<Out, String> {
-    let a = mag_of(&row.a, row.a.neg)?;
-    let two = |b: &Option<Num>| -> Result<Mag, String> {
+    let a = operand_of(&row.a, row.a.neg)?;
+    let two = |b: &Option<Num>| -> Result<Operand, String> {
         let n = b
             .as_ref()
             .ok_or_else(|| String::from("missing operand b"))?;
-        mag_of(n, n.neg)
+        operand_of(n, n.neg)
     };
     match row.op {
         BallOp::Add => add_mags(&a, &two(&row.b)?, row.prec, &row.rm),
@@ -544,7 +533,7 @@ fn recompute(row: &GoldRow) -> Result<Out, String> {
                 .b
                 .as_ref()
                 .ok_or_else(|| String::from("missing operand b"))?;
-            add_mags(&a, &mag_of(n, !n.neg)?, row.prec, &row.rm)
+            add_mags(&a, &operand_of(n, !n.neg)?, row.prec, &row.rm)
         }
         BallOp::Mul => mul_mags(&a, &two(&row.b)?, row.prec, &row.rm),
         BallOp::Div => div_mags(&a, &two(&row.b)?, row.prec, &row.rm),
@@ -645,9 +634,11 @@ fn expected_out(row: &GoldRow) -> Result<Out, String> {
         .ok_or_else(|| String::from("result mantissa too wide"))?;
     Ok(Out::Fin {
         neg: row.r.neg,
-        m,
-        t: row.r.exp - i64::from(row.r.bits),
-        inexact: row.inexact,
+        r: Rounded {
+            m,
+            t: row.r.exp - i64::from(row.r.bits),
+            inexact: row.inexact,
+        },
     })
 }
 
