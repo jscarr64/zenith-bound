@@ -15,6 +15,7 @@ mod div;
 mod lower;
 mod mul;
 mod round;
+mod sqrt;
 mod ulp;
 
 use crate::error::BoundError;
@@ -129,28 +130,13 @@ impl Mag {
         }
     }
 
-    /// Placeholder until `add_up` is implemented: the canonical zero.
-    fn wrong_up() -> Mag {
-        Mag::zero()
-    }
-
-    /// Placeholder until the round-down operations are implemented: `Infinity`.
+    /// Placeholder until `sub_lower` is implemented: `Infinity`.
     fn wrong_down() -> Mag {
         Mag::infinity()
     }
 
-    /// Placeholder: zero for every input.
-    pub fn sqrt_up(&self) -> Mag {
-        Mag::wrong_up()
-    }
-
     /// Placeholder: `Infinity` for every input.
     pub fn sub_lower(&self, _other: &Mag) -> Mag {
-        Mag::wrong_down()
-    }
-
-    /// Placeholder: `Infinity` for every input.
-    pub fn sqrt_lower(&self) -> Mag {
         Mag::wrong_down()
     }
 }
