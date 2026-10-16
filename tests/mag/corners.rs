@@ -1,4 +1,5 @@
-//! CONTRACT 14.6 (Infinity and zero-divisor rules), 14.2 (round-down overflow), 3.2, 3.3, 2.3, 2.4; oracle: the rules stated in the clauses (exact expected values)
+//! CONTRACT 14.6 (Infinity and zero-divisor rules), 14.2 (round-down overflow), 3.2, 3.3, 3.4, 2.3, 2.4; oracle: the rules stated in the clauses (exact expected values)
+//! COVERS: Mag::add_up, Mag::div_lower, Mag::div_up, Mag::mul_lower, Mag::mul_up, Mag::sqrt_lower, Mag::sqrt_up, Mag::sub_lower
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{max_mag, min_pos_mag, zero_mag};
 use crate::model::sets::{magv_set, mid_exponents};
@@ -6,7 +7,7 @@ use crate::support::{from_magv, to_magv};
 use zenith_bound::mag::Mag;
 
 fn check_is(op: &str, args: &[&MagV], got: &Mag, want: &MagV) -> Result<(), String> {
-    if to_magv(got) == *want {
+    if to_magv(got)? == *want {
         Ok(())
     } else {
         Err(format!(
@@ -14,7 +15,7 @@ fn check_is(op: &str, args: &[&MagV], got: &Mag, want: &MagV) -> Result<(), Stri
             op,
             args,
             want,
-            to_magv(got)
+            to_magv(got)?
         ))
     }
 }

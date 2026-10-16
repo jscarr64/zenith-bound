@@ -1,4 +1,5 @@
 //! CONTRACT 14.2, 3.2, 2.3; oracle: dyadic-rational model (tests/model)
+//! COVERS: Mag::sub_lower
 
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{check_down, cmp_minus, pred, zero_mag};
@@ -27,7 +28,7 @@ pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
 }
 
 fn check_pair(a: &MagV, b: &MagV) -> Result<(), String> {
-    let r = to_magv(&from_magv(a)?.sub_lower(&from_magv(b)?));
+    let r = to_magv(&from_magv(a)?.sub_lower(&from_magv(b)?))?;
     verify(a, b, &r)
 }
 
@@ -53,7 +54,7 @@ fn sub_lower_extreme_exponent_set_is_largest_lower_bound() -> Result<(), String>
 #[test]
 fn sub_lower_equal_operands_are_zero() -> Result<(), String> {
     for x in magv_set(&mid_exponents()).iter() {
-        let r = to_magv(&from_magv(x)?.sub_lower(&from_magv(x)?));
+        let r = to_magv(&from_magv(x)?.sub_lower(&from_magv(x)?))?;
         if r == zero_mag() {
             continue;
         } else {

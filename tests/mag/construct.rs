@@ -1,5 +1,7 @@
 //! CONTRACT 2.1, 15.4; oracle: the clauses (exact expected values); Mag has private fields and is built only through its constructors
+//! COVERS: BoundError::Representation, Mag::exp, Mag::finite, Mag::infinity, Mag::is_infinity, Mag::is_zero, Mag::mant, Mag::zero, Eq for Mag, PartialEq for Mag
 
+use zenith_bound::error::BoundError;
 use zenith_bound::mag::Mag;
 
 fn made(mant: u64, exp: i64) -> Result<Mag, String> {
@@ -68,14 +70,14 @@ fn finite_rejects_zero_mantissa_with_a_nonzero_exponent() -> Result<(), String> 
 fn finite_zero_is_the_canonical_zero() -> Result<(), String> {
     let m = made(0, 0)?;
     if !m.is_zero() {
-        return Err("made(0, 0) must be zero".to_string());
+        return Err(String::from("made(0, 0) must be zero"));
     }
     parts_are(&m, 0, 0)?;
     if m != Mag::zero() {
-        return Err("made(0, 0) must equal Mag::zero()".to_string());
+        return Err(String::from("made(0, 0) must equal Mag::zero()"));
     }
     if Mag::zero().is_infinity() {
-        return Err("Mag::zero() must not be infinity".to_string());
+        return Err(String::from("Mag::zero() must not be infinity"));
     }
     Ok(())
 }
@@ -108,35 +110,62 @@ fn finite_rejects_an_exponent_that_cannot_be_represented() -> Result<(), String>
 }
 
 #[test]
+fn finite_rejections_are_the_representation_error() -> Result<(), String> {
+    let cases = [
+        // mant == 0 with exp != 0 (a proven zero is built with Mag::zero(), clause 2.1)
+        (0u64, 1i64),
+        (0, -1),
+        (0, i64::MIN),
+        (0, i64::MAX),
+        // exp - leading_zeros(mant) below i64::MIN: the value is below the smallest positive Mag
+        (1, i64::MIN),
+        (1, i64::MIN + 62),
+        (1u64 << 62, i64::MIN),
+        (0x7FFF_FFFF_FFFF_FFFF, i64::MIN),
+    ];
+
+    for &(mant, exp) in &cases {
+        let got = Mag::finite(mant, exp);
+        if !matches!(got, Err(BoundError::Representation)) {
+            return Err(format!(
+                "Mag::finite({}, {}) must be Err(BoundError::Representation), got {:?}",
+                mant, exp, got
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn eq_treats_all_zeros_as_equal_and_infinity_only_equal_to_itself() -> Result<(), String> {
     let zero = Mag::zero();
     let infinity = Mag::infinity();
 
     if zero != made(0, 0)? {
-        return Err("zero must equal made(0, 0)".to_string());
+        return Err(String::from("zero must equal made(0, 0)"));
     }
     if zero != Mag::zero() {
-        return Err("zero must equal itself".to_string());
+        return Err(String::from("zero must equal itself"));
     }
     if infinity != Mag::infinity() {
-        return Err("infinity must equal itself".to_string());
+        return Err(String::from("infinity must equal itself"));
     }
     if zero == infinity {
-        return Err("zero must not equal infinity".to_string());
+        return Err(String::from("zero must not equal infinity"));
     }
 
     let nonzero = made(1u64 << 63, 0)?;
     if nonzero == zero {
-        return Err("nonzero must not equal zero".to_string());
+        return Err(String::from("nonzero must not equal zero"));
     }
     if nonzero == infinity {
-        return Err("nonzero must not equal infinity".to_string());
+        return Err(String::from("nonzero must not equal infinity"));
     }
 
     let a = made(1, 64)?;
     let b = made(1u64 << 63, 1)?;
     if a != b {
-        return Err("made(1, 64) must equal made(1u64 << 63, 1)".to_string());
+        return Err(String::from("made(1, 64) must equal made(1u64 << 63, 1)"));
     }
     Ok(())
 }
@@ -145,18 +174,18 @@ fn eq_treats_all_zeros_as_equal_and_infinity_only_equal_to_itself() -> Result<()
 fn accessors_describe_zero_and_infinity() -> Result<(), String> {
     let infinity = Mag::infinity();
     if infinity.exp().is_some() || infinity.mant().is_some() {
-        return Err("infinity must have None exp and mant".to_string());
+        return Err(String::from("infinity must have None exp and mant"));
     }
     if !infinity.is_infinity() {
-        return Err("infinity must be infinity".to_string());
+        return Err(String::from("infinity must be infinity"));
     }
     if infinity.is_zero() {
-        return Err("infinity must not be zero".to_string());
+        return Err(String::from("infinity must not be zero"));
     }
 
     let zero = Mag::zero();
     if !zero.is_zero() {
-        return Err("zero must be zero".to_string());
+        return Err(String::from("zero must be zero"));
     }
     Ok(())
 }

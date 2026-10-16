@@ -1,4 +1,5 @@
 //! CONTRACT 1.3, 14.1, 2.3, 2.4, 3.2, 3.3; oracle: dyadic-rational model (tests/model)
+//! COVERS: Mag::mul_up
 
 use crate::model::dyadic::MagV;
 use crate::model::oracle::{check_up, cmp_dy};
@@ -14,7 +15,7 @@ pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
 }
 
 fn check_pair(a: &MagV, b: &MagV) -> Result<(), String> {
-    let r = to_magv(&from_magv(a)?.mul_up(&from_magv(b)?));
+    let r = to_magv(&from_magv(a)?.mul_up(&from_magv(b)?))?;
     verify(a, b, &r)
 }
 
@@ -42,22 +43,22 @@ fn mul_up_infinity_operand_gives_infinity_even_for_zero() -> Result<(), String> 
     let set = magv_set(&mid_exponents());
     for x in set.iter() {
         // x * Infinity
-        let r1 = to_magv(&from_magv(x)?.mul_up(&Mag::infinity()));
+        let r1 = to_magv(&from_magv(x)?.mul_up(&Mag::infinity()))?;
         if r1 != MagV::Infinity {
-            return Err("x * Infinity != Infinity".to_string());
+            return Err(String::from("x * Infinity != Infinity"));
         }
 
         // Infinity * x
-        let r2 = to_magv(&Mag::infinity().mul_up(&from_magv(x)?));
+        let r2 = to_magv(&Mag::infinity().mul_up(&from_magv(x)?))?;
         if r2 != MagV::Infinity {
-            return Err("Infinity * x != Infinity".to_string());
+            return Err(String::from("Infinity * x != Infinity"));
         }
     }
 
     // Infinity * Infinity
-    let r3 = to_magv(&Mag::infinity().mul_up(&Mag::infinity()));
+    let r3 = to_magv(&Mag::infinity().mul_up(&Mag::infinity()))?;
     if r3 != MagV::Infinity {
-        return Err("Infinity * Infinity != Infinity".to_string());
+        return Err(String::from("Infinity * Infinity != Infinity"));
     }
 
     Ok(())
@@ -69,8 +70,8 @@ fn mul_up_is_commutative() -> Result<(), String> {
     set.push(MagV::Infinity);
     for a in set.iter() {
         for b in set.iter() {
-            let ab = to_magv(&from_magv(a)?.mul_up(&from_magv(b)?));
-            let ba = to_magv(&from_magv(b)?.mul_up(&from_magv(a)?));
+            let ab = to_magv(&from_magv(a)?.mul_up(&from_magv(b)?))?;
+            let ba = to_magv(&from_magv(b)?.mul_up(&from_magv(a)?))?;
             if ab != ba {
                 return Err(format!(
                     "mul_up({:?}, {:?}) = {:?} but swapped gives {:?}",
