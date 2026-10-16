@@ -5,6 +5,7 @@ mod model;
 mod add_up;
 mod cmp;
 mod convert;
+mod corners;
 mod div_up;
 mod golden;
 mod lower_div;

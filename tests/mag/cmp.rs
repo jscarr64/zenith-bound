@@ -1,8 +1,10 @@
-//! CONTRACT 14.5, 2.1; oracle: dyadic-rational model (tests/model)
+//! CONTRACT 14.5, 2.1; oracle: dyadic-rational model (tests/model); zero least, Infinity greatest (decided 2026-10-15)
 
 use crate::convert::{ctx, dcmp, dy_of, from_magv};
 use crate::model::dyadic::MagV;
 use crate::model::sets::{extreme_exponents, magv_set, mid_exponents};
+use core::cmp::Ordering;
+use zenith_bound::mag::Mag;
 
 fn check_pair(a: &MagV, b: &MagV) -> Result<(), String> {
     let got = from_magv(a).cmp(&from_magv(b));
@@ -44,6 +46,59 @@ fn cmp_is_antisymmetric_on_mid_exponent_set() -> Result<(), String> {
                 continue;
             } else {
                 return Err(format!("expected {:?}, got {:?}", ord2.reverse(), ord1));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn cmp_zero_is_least_and_infinity_is_greatest_and_equal_to_itself() -> Result<(), String> {
+    let zero = Mag::Finite { exp: 0, mant: 0 };
+    if zero.cmp(&Mag::Finite { exp: 0, mant: 0 }) != Ordering::Equal {
+        return Err(String::from("zero must equal zero"));
+    }
+    if Mag::Infinity.cmp(&Mag::Infinity) != Ordering::Equal {
+        return Err(String::from("Infinity must equal Infinity"));
+    }
+    if zero.cmp(&Mag::Infinity) != Ordering::Less || Mag::Infinity.cmp(&zero) != Ordering::Greater {
+        return Err(String::from("zero must be below Infinity"));
+    }
+    for x in magv_set(&extreme_exponents()).iter() {
+        let m = from_magv(x);
+        if matches!(x, MagV::Finite { mant: 0, .. }) {
+            continue;
+        }
+        if zero.cmp(&m) != Ordering::Less || m.cmp(&zero) != Ordering::Greater {
+            return Err(format!("zero must be below {:?}", x));
+        }
+        if m.cmp(&Mag::Infinity) != Ordering::Less || Mag::Infinity.cmp(&m) != Ordering::Greater {
+            return Err(format!("{:?} must be below Infinity", x));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn cmp_agrees_with_eq_and_the_comparison_operators() -> Result<(), String> {
+    let mut set: Vec<Mag> = Vec::new();
+    for x in magv_set(&mid_exponents()).iter() {
+        set.push(from_magv(x));
+    }
+    set.push(Mag::Infinity);
+    for a in set.iter() {
+        for b in set.iter() {
+            let ord = a.cmp(b);
+            if (a == b) != (ord == Ordering::Equal)
+                || (a < b) != (ord == Ordering::Less)
+                || (a > b) != (ord == Ordering::Greater)
+                || (a <= b) != (ord != Ordering::Greater)
+                || (a >= b) != (ord != Ordering::Less)
+            {
+                return Err(format!(
+                    "operators disagree with cmp for {:?} and {:?}",
+                    a, b
+                ));
             }
         }
     }

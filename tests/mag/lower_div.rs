@@ -2,18 +2,12 @@
 
 use crate::convert::{ctx, dy_of, from_magv, to_magv};
 use crate::model::dyadic::MagV;
-use crate::model::oracle::{check_down, cmp_quotient, max_mag};
+use crate::model::oracle::{check_down, cmp_quotient};
 use crate::model::sets::{extreme_exponents, magv_set, mid_exponents};
-use core::cmp::Ordering;
 
 pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
     let da = dy_of(a)?;
     let db = dy_of(b)?;
-    let over = cmp_quotient(&max_mag(), &da, &db)
-        .ok_or_else(|| String::from("model cannot align max_mag"))?;
-    if over == Ordering::Less {
-        return Ok(());
-    }
     check_down(r, da.is_zero(), &|m| cmp_quotient(m, &da, &db))
 }
 
