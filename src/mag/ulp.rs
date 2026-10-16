@@ -14,14 +14,15 @@ impl Mag {
     /// (only `ulp_mag(i64::MAX, 0)`) is `Infinity`. An exponent field below `i64::MIN`
     /// rounds up to the smallest positive `Mag` (CONTRACT 3.2).
     pub fn ulp_mag(pre_round_exp: i64, prec: u32) -> Mag {
-        let mag_exp = match i128::from(pre_round_exp).checked_sub(i128::from(prec)) {
-            Some(diff) => match diff.checked_add(1) {
-                Some(exp) => exp,
-                None => return Mag::infinity(),
-            },
-            None => return Mag::min_pos(),
-        };
-        place_pow2(mag_exp)
+        // |pre_round_exp - prec + 1| < 2^65, so the checked steps cannot fail. `Infinity` is the
+        // one fallback: an error term must never be too small.
+        match i128::from(pre_round_exp)
+            .checked_sub(i128::from(prec))
+            .and_then(|diff| diff.checked_add(1))
+        {
+            Some(mag_exp) => place_pow2(mag_exp),
+            None => Mag::infinity(),
+        }
     }
 
     /// `2^(mid_exp - prec - 1)`, placed as a canonical power of two (CONTRACT 14.7).
@@ -33,9 +34,10 @@ impl Mag {
     /// This value is the right midpoint-rounding term only under a nearest mode. A
     /// directed mode needs the full ulp from [`Mag::ulp_mag`].
     pub fn half_ulp(mid_exp: i64, prec: u32) -> Mag {
+        // |mid_exp - prec| < 2^64, so the checked step cannot fail. `Infinity` is the one fallback.
         match i128::from(mid_exp).checked_sub(i128::from(prec)) {
             Some(mag_exp) => place_pow2(mag_exp),
-            None => Mag::min_pos(),
+            None => Mag::infinity(),
         }
     }
 
@@ -45,27 +47,23 @@ impl Mag {
     /// `i128` so a threshold below `i64::MIN` is not rounded up (CONTRACT 1.4, 14.7).
     /// The canonical zero is below every half ulp. `Infinity` is not.
     pub fn smaller_than_half_ulp(&self, mid_exp: i64, prec: u32) -> bool {
-        if self.is_zero() {
-            return true;
-        }
-        if self.is_infinity() {
-            return false;
-        }
-        let Some(exp) = self.exp() else {
+        // |mid_exp - prec - 1| < 2^65, so the checked steps cannot fail; `false` ("not known to be
+        // below") is the one fallback.
+        let Some(threshold) = i128::from(mid_exp)
+            .checked_sub(i128::from(prec))
+            .and_then(|diff| diff.checked_sub(1))
+        else {
             return false;
         };
-        let threshold = match i128::from(mid_exp).checked_sub(i128::from(prec)) {
-            Some(diff) => match diff.checked_sub(1) {
-                Some(threshold) => threshold,
-                None => return false,
-            },
-            None => return false,
-        };
-        i128::from(exp) <= threshold
+        match self.nonzero() {
+            Some((exp, _)) => i128::from(exp) <= threshold,
+            None => !self.is_infinity(),
+        }
     }
 }
 
-/// `2^(mag_exp - 1)` as `Finite { exp: mag_exp, mant: 2^63 }`, or the range clamp.
+/// `2^(mag_exp - 1)` as `Finite { exp: mag_exp, mant: 2^63 }`, or the range clamp: above
+/// `i64::MAX` is `Infinity`, below `i64::MIN` is `min_pos` (round-up underflow, CONTRACT 3.2).
 fn place_pow2(mag_exp: i128) -> Mag {
     match i64::try_from(mag_exp) {
         Ok(exp) => Mag::from_canonical(exp, TOP),
