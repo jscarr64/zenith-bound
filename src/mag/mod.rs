@@ -10,8 +10,12 @@
 //! zero is least, `Infinity` is greatest, and canonical finite values compare by `(exp, mant)`.
 
 mod cmp;
+mod ulp;
 
 use crate::error::BoundError;
+
+/// Least canonical nonzero mantissa, `2^63`.
+const TOP: u64 = 0x8000_0000_0000_0000;
 
 #[derive(Debug)]
 enum Inner {
@@ -96,6 +100,10 @@ impl Mag {
         }
     }
 
+    fn min_pos() -> Mag {
+        Mag::from_canonical(i64::MIN, TOP)
+    }
+
     /// Placeholder until `add_up` is implemented: the canonical zero.
     fn wrong_up() -> Mag {
         Mag::zero()
@@ -144,20 +152,5 @@ impl Mag {
     /// Placeholder: `Infinity` for every input.
     pub fn sqrt_lower(&self) -> Mag {
         Mag::wrong_down()
-    }
-
-    /// Placeholder: zero.
-    pub fn ulp_mag(_pre_round_exp: i64, _prec: u32) -> Mag {
-        Mag::wrong_up()
-    }
-
-    /// Placeholder: zero.
-    pub fn half_ulp(_mid_exp: i64, _prec: u32) -> Mag {
-        Mag::wrong_up()
-    }
-
-    /// Placeholder: always false.
-    pub fn smaller_than_half_ulp(&self, _mid_exp: i64, _prec: u32) -> bool {
-        false
     }
 }
