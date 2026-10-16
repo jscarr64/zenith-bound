@@ -14,7 +14,7 @@ pub fn case_seed(base: u64, case: u64) -> u64 {
     if case == 0 {
         base
     } else {
-        super::rng::splitmix64(base ^ case.wrapping_mul(0x9E37_79B9_7F4A_7C15))
+        super::rng::splitmix64(base ^ super::modular::mul_u64(case, 0x9E37_79B9_7F4A_7C15))
     }
 }
 

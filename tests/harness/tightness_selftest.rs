@@ -1,4 +1,4 @@
-//! COVERS: common::TightnessLog::empty, common::TightnessLog::record, common::TightnessLog::render, common::TightnessLog::stats, common::TightnessLog::write_results, common::tightness::check_tight, common::tightness::parse_results, common::tightness::slack_q16
+//! COVERS: common::TightnessLog::empty, common::TightnessLog::record, common::TightnessLog::render, common::TightnessLog::stats, common::TightnessLog::write_results, common::tightness::check_tight, common::tightness::p99_rank, common::tightness::parse_results, common::tightness::slack_q16
 //! S12 self-tests of tests/common/tightness.rs: the exact q16 ratio, the tight check, the per-cell statistics, the results text that
 //! tools/tightness_report.py reads, and the strict parser. The pinned text below is the same fixture as RESULTS_TEXT in
 //! tools/tightness_selftest.sh, so the Rust writer and the Python reader agree on the format. Oracle: hand arithmetic. Every checker
@@ -6,7 +6,7 @@
 
 use crate::common::expect_eq;
 use crate::common::tightness::{
-    check_tight, parse_results, slack_q16, CellStat, TightnessLog, Q16_ONE,
+    check_tight, p99_rank, parse_results, slack_q16, CellStat, TightnessLog, Q16_ONE,
 };
 
 const PINNED: &str = "# zenith-bound tightness results (S12), written by the tightness sets; ratio = rad / R_ref in units of 1/65536 (q16), rounded up\n# columns: OP PREC COUNT MIN MEDIAN P99 MAX\nadd 24 3 65536 65536 98304 98304\nadd 53 2 0 0 131072 131072\nmul 24 4 10 20 40 40\n";
@@ -188,6 +188,33 @@ fn write_results_writes_the_rendered_text() -> Result<(), String> {
         .join("x.txt");
     if fixture_log()?.write_results(&unwritable).is_ok() {
         return Err(String::from("writing into a missing directory succeeded"));
+    }
+    Ok(())
+}
+
+#[test]
+fn p99_rank_follows_ceil_99_n_over_100_minus_1_and_refuses_the_unrepresentable(
+) -> Result<(), String> {
+    for (n, want) in [
+        (1usize, 0usize),
+        (2, 1),
+        (4, 3),
+        (50, 49),
+        (100, 98),
+        (101, 99),
+        (200, 197),
+    ] {
+        expect_eq(&format!("n = {}", n), &p99_rank(n)?, &want)?;
+    }
+    if p99_rank(0).is_ok() {
+        return Err(String::from(
+            "p99_rank(0) accepted: there is no p99 of zero samples",
+        ));
+    }
+    if p99_rank(usize::MAX).is_ok() {
+        return Err(String::from(
+            "p99_rank(usize::MAX) accepted: 99 n overflows",
+        ));
     }
     Ok(())
 }

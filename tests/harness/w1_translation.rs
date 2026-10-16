@@ -371,7 +371,7 @@ fn replay_text(label: &str, seed: u64, case: u64, prec: u32, rule: &Rule, c: &Ca
 fn base_seed(op_index: u64) -> Result<u64, String> {
     let s = seed_for("l0a_mag", CASE_CLASS_GATE)
         .ok_or_else(|| String::from("suite l0a_mag is not in the seeds table"))?;
-    Ok(splitmix64(s.wrapping_add(op_index)))
+    Ok(splitmix64(crate::common::modular::add_u64(s, op_index)))
 }
 
 /// Runs the random set. `honor_env`: ZB_FUZZ_* / ZB_PROP_* / ZB_REPLAY apply (the real-Mag tests); the self-tests pass `false`.
@@ -1115,12 +1115,12 @@ fn the_range_predicate_excludes_exactly_the_out_of_range_bands() -> Result<(), S
     // a wrapping operation passes inside the predicate and is not asked about the excluded bands
     let wrapping = |a: &Val, b: &Val| -> Result<Out, String> {
         Ok(Out::Finite {
-            exp: a.exp.wrapping_add(b.exp),
+            exp: crate::common::modular::add_i64(a.exp, b.exp),
             mant: (a.mant ^ b.mant) | TOP,
         })
     };
     run_random(
-        "wrapping_mul",
+        "modular_add_op",
         230,
         &MUL,
         &Parity::Any,
