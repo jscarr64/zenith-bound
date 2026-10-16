@@ -176,7 +176,7 @@ hidden >/dev/null || fail "tests fixtures left a flag behind: $(hidden)"
 # git modes in a throwaway repo
 g="$t/repo"; mkdir -p "$g/src" "$g/tools"; cd "$g" || exit 1
 git init -q . && git config user.email a@b && git config user.name t
-cp "$t/tools/rules_allowlist.txt" tools/; echo 0 > tools/clone_count_baseline.txt; echo 0 > tools/ref_sum_count_baseline.txt; echo 0 > tools/hidden_copy_count_baseline.txt
+cp "$t/tools/rules_allowlist.txt" tools/; echo 0 > tools/clone_count_baseline.txt; echo 0 > tools/ref_sum_count_baseline.txt; echo 0 > tools/hidden_copy_count_baseline.txt; echo 0 > tools/sanctioned_rebuild_count_baseline.txt
 printf 'fn a() {}\n' > src/x.rs; git add -A; git commit -qm base; base=$(git rev-parse HEAD)
 export RULES_SCAN_ROOT="$g"; unset RULES_SCAN_SKIP_COUNT
 scan "$base..HEAD" >/dev/null || fail "empty range flagged"
@@ -236,4 +236,50 @@ echo 0 > tools/hidden_copy_count_baseline.txt
 scan --count-only | grep -q "hidden-copy count 1 is ABOVE" || fail "hidden copy in tests/ not counted: $(scan --count-only)"
 scan --count-only >/dev/null && fail "hidden copy in tests/ passed a 0 baseline"
 rm -f tools/hidden_copy_count_baseline.txt; scan --count-only >/dev/null && fail "missing hidden-copy baseline passed"
+
+# sanctioned-rebuild baseline (O18-C): counts Mag::from_canonical(..) calls in src/ fed by a part of another value; may only go down
+rb() { RULES_SCAN_ROOT="$g" "$here/rules_scan.sh" --sanctioned-rebuilds; }
+rm -f tests/m.rs; echo 0 > tools/hidden_copy_count_baseline.txt; echo 0 > tools/clone_count_baseline.txt; echo 0 > tools/ref_sum_count_baseline.txt   # the other three counts are 0 and have baselines, so only the rebuild count can fail below
+cat > src/x.rs <<'EOF'
+impl Mag {
+    fn from_canonical(exp: i64, mant: u64) -> Mag { Mag { exp, mant } }
+    fn finite(exp: i64, mant: u64) -> Mag { Mag::from_canonical(exp, mant << 1) }
+    fn min_pos() -> Mag { Mag::from_canonical(i64::MIN, TOP) }
+    fn pack(e: i64, mant: u64) -> Mag { Self::from_canonical(e, mant) }
+    fn next(e: i64, next: u64) -> Mag { Mag::from_canonical(e.checked_add(1)?, next) }
+    // Mag::from_canonical(e, m.get()) in a comment
+    fn s() -> Mag { let _x = "Mag::from_canonical(e, m.get())"; Mag::zero() }
+    pub fn add_up(&self, other: &Mag) -> Mag {
+        match (self.nonzero(), other.nonzero()) {
+            (Some((e, m)), None) | (None, Some((e, m))) => Mag::from_canonical(e, m.get()),
+            _ => Mag::zero(),
+        }
+    }
+    pub fn sub_lower(&self, other: &Mag) -> Mag {
+        match self.nonzero() {
+            Some((e, m)) => Mag::from_canonical(
+                e,
+                m.get(),
+            ),
+            None => Mag::zero(),
+        }
+    }
+}
+EOF
+git add -A; git commit -qm rb2
+echo 2 > tools/sanctioned_rebuild_count_baseline.txt
+out="$(rb)"; echo "$out" | grep -q "sanctioned_rebuild_count 2\$" || fail "sanctioned rebuilds should be 2 (definition, computed and constant args, comment, string not counted; multi-line call counted): $out"
+scan --count-only | grep -q "sanctioned-rebuild count 2 == baseline" || fail "sanctioned-rebuild count should equal baseline 2: $(scan --count-only)"
+cat >> src/x.rs <<'EOF'
+impl Mag { pub fn third(&self) -> Mag { match self.nonzero() { Some((e, m)) => Mag::from_canonical(e, m.get()), None => Mag::zero() } } }
+EOF
+git add -A; git commit -qm rb3
+scan --count-only | grep -q "sanctioned-rebuild count 3 is ABOVE the baseline 2" || fail "a third rebuild not reported: $(scan --count-only)"
+scan --count-only >/dev/null && fail "a third rebuild passed the baseline of 2"
+printf 'impl Mag { fn again(x: &Mag) -> Mag { Mag::from_canonical(x.exp, x.mant) } fn again2(x: &Mag) -> Mag { Mag::from_canonical(x.exp(), x.mant()) } }\n' > src/x.rs
+rb | grep -q "sanctioned_rebuild_count 2\$" || fail "field and accessor reads must count: $(rb)"
+echo 9 > tools/sanctioned_rebuild_count_baseline.txt; scan --count-only | grep -qi "sanctioned-rebuild count 2 is below baseline 9" || fail "no hint to lower rebuild baseline"
+scan --update-baseline >/dev/null; [ "$(tr -d '[:space:]' < tools/sanctioned_rebuild_count_baseline.txt)" = 2 ] || fail "rebuild baseline not lowered"
+echo 0 > tools/sanctioned_rebuild_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising rebuild baseline allowed"; [ "$(tr -d '[:space:]' < tools/sanctioned_rebuild_count_baseline.txt)" = 0 ] || fail "rebuild baseline raised"
+rm -f tools/sanctioned_rebuild_count_baseline.txt; scan --count-only >/dev/null && fail "missing rebuild baseline passed"
 echo "rules_scan selftest: ok"

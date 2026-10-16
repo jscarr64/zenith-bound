@@ -10,8 +10,9 @@ Usage:
   tools/rules_scan.sh --staged             # git diff --cached
   tools/rules_scan.sh --working            # git diff HEAD (staged + unstaged; new files must be staged)
   tools/rules_scan.sh --diff-file F        # a saved unified diff (used by the self-test)
-  tools/rules_scan.sh --count-only         # only the clone-count, *_ref-count and hidden-copy-count baseline checks
+  tools/rules_scan.sh --count-only         # only the clone-count, *_ref-count, hidden-copy-count and sanctioned-rebuild-count baseline checks
   tools/rules_scan.sh --hidden-copies      # list the hidden-copy sites of src/ tests/ benches/ examples/ (no baseline needed; RULES_SCAN_ROOT picks the tree)
+  tools/rules_scan.sh --sanctioned-rebuilds # list the sanctioned-rebuild sites of src/ (O18-C; no baseline needed)
   tools/rules_scan.sh --update-baseline    # lower the baselines to the current counts (never raises them)
 
 SCANNED PATHS: every .rs file under src/ tests/ benches/ examples/ (any depth) and build.rs. There is NO
@@ -47,6 +48,14 @@ scope as the clone patterns; no test exemption) that
       fn body (`Inner::Finite { exp, mant } => Mag::from_canonical(*exp, *mant)`).
 Heuristic, text-based: arguments that are computed (`exp + 1`, `mant.checked_add(1)`) are not bare field reads, so
 `successor`-style code does not count. A copy routed through intermediate `let` bindings is not seen. The count is
+SANCTIONED-REBUILD COUNT (O18-C, DECIDED): a `Mag` may be rebuilt from the two scalar integers of another `Mag` with
+`Mag::from_canonical(exp, mant)` while every method keeps its `&Mag` signature. The count is the number of
+`Mag::from_canonical(` / `Self::from_canonical(` call sites under src/ that are not the definition and whose arguments take a
+part of another value (`x.get()` on a NonZero mantissa, `x.exp`, `x.mant`, `x.exp()`, `x.mant()`); constructor-path calls whose
+arguments are computed or constant (`Mag::finite`, `min_pos`, `max_finite`, `pack`, `succ`, `place_pow2`) are not counted.
+Expected 2 (add_up, sub_lower). Same ratchet against tools/sanctioned_rebuild_count_baseline.txt: it may only go down
+(--update-baseline lowers it); a third rebuild fails the gate until Jeff approves a baseline raise (CODEOWNERS covers tools/).
+
 A fn whose parameters name only other types than its return type (`fn from_magv(m: &MagV) -> Result<Mag, String>`, a
 conversion between the model and the library type, no `self`, no generics) is not a same-type copy, so rules (b) and (c) do not
 apply to it; rule (a), the name, always applies. There is no allowlist for this count. The count is
@@ -396,6 +405,43 @@ def hidden_copy_count():
     return len(hidden_copy_sites())
 
 
+REBUILD_CALL = re.compile(r"\b(?:Mag|Self)::from_canonical\s*\(")
+PART_OF_ANOTHER = re.compile(r"\.get\(\)|\.(?:exp|mant)\b")
+
+
+def sanctioned_rebuild_sites():
+    """[(relpath, line, args)] for every `Mag::from_canonical(..)` call under src/ whose arguments take a part of another value"""
+    sites = []
+    base = os.path.join(ROOT, "src")
+    for dp, dn, fn in os.walk(base):
+        dn[:] = sorted(x for x in dn if x not in ("target", ".git"))
+        for f in sorted(fn):
+            if not f.endswith(".rs"):
+                continue
+            path = os.path.join(dp, f)
+            rel = os.path.relpath(path, ROOT)
+            text = blank_code(open(path, errors="replace").read())
+            for m in REBUILD_CALL.finditer(text):
+                prev = re.findall(r"[A-Za-z_]\w*\s*$", text[:m.start()])
+                if prev and prev[0].strip() == "fn":
+                    continue
+                close = match_close(text, m.end() - 1)
+                if close < 0:
+                    continue
+                args = [norm_arg(a) for a in split_top(text[m.end():close])]
+                if any(PART_OF_ANOTHER.search(a) for a in args):
+                    sites.append((rel, text.count("\n", 0, m.start()) + 1, ", ".join(args)))
+    return sites
+
+
+def sanctioned_rebuild_count():
+    return len(sanctioned_rebuild_sites())
+
+
+def rebuild_baseline_path():
+    return os.path.join(ROOT, "tools", "sanctioned_rebuild_count_baseline.txt")
+
+
 def hidden_baseline_path():
     return os.path.join(ROOT, "tools", "hidden_copy_count_baseline.txt")
 
@@ -478,8 +524,31 @@ def hidden_count_check(update=False):
     return 0
 
 
+def rebuild_count_check(update=False):
+    cur = sanctioned_rebuild_count()
+    try:
+        base = int(open(rebuild_baseline_path()).read().split()[0])
+    except (OSError, ValueError, IndexError):
+        print("rules_scan: missing or unreadable tools/sanctioned_rebuild_count_baseline.txt")
+        return 1
+    if cur > base:
+        print("rules_scan: sanctioned-rebuild count %d is ABOVE the baseline %d (it may only go down; a raise needs Jeff, O18-C)" % (cur, base))
+        for rel, line, args in sanctioned_rebuild_sites():
+            print("  %s:%d Mag::from_canonical(%s)" % (rel, line, args))
+        return 1
+    if cur < base:
+        if update:
+            open(rebuild_baseline_path(), "w").write("%d\n" % cur)
+            print("rules_scan: sanctioned-rebuild baseline lowered %d -> %d" % (base, cur))
+        else:
+            print("rules_scan: sanctioned-rebuild count %d is below baseline %d: lower the baseline (rules_scan.sh --update-baseline)" % (cur, base))
+        return 0
+    print("rules_scan: sanctioned-rebuild count %d == baseline" % cur)
+    return 0
+
+
 def both_count_checks(update=False):
-    return max(count_check(update), ref_count_check(update), hidden_count_check(update))
+    return max(count_check(update), ref_count_check(update), hidden_count_check(update), rebuild_count_check(update))
 
 
 def main(argv):
@@ -489,6 +558,12 @@ def main(argv):
             print("%s:%d fn %s: %s" % (rel, line, name, reason))
         print("rules_scan: hidden_copy_count %d" % len(sites))
         return 1 if sites else 0
+    if "--sanctioned-rebuilds" in argv:
+        sites = sanctioned_rebuild_sites()
+        for rel, line, args in sites:
+            print("%s:%d Mag::from_canonical(%s)" % (rel, line, args))
+        print("rules_scan: sanctioned_rebuild_count %d" % len(sites))
+        return 0
     if "--count-only" in argv:
         return both_count_checks()
     if "--update-baseline" in argv:
