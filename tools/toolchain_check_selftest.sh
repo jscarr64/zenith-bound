@@ -6,8 +6,8 @@
 runlog_detach_children
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-t=$(mktemp -d); runlog_on_exit "rm -rf \"$t\""
 fail() { echo "toolchain_check selftest FAIL: $*"; exit 1; }
+t=$(mktemp -d) || fail "mktemp"; runlog_on_exit "rm -rf \"$t\""
 mkfake() { # mkfake <dir> <rustc version line> <cargo version line>
   mkdir -p "$1"
   printf '#!/bin/sh\necho "%s"\n' "$2" > "$1/rustc"; printf '#!/bin/sh\necho "%s"\n' "$3" > "$1/cargo"; chmod +x "$1/rustc" "$1/cargo"
@@ -21,7 +21,7 @@ mkfake "$t/long" "rustc 1.990.0 (0 2027-01-01)" "cargo 1.990.0 (0 2027-01-01)"
 sys="$t/sys"; mkdir -p "$sys"; for c in bash sed; do ln -s "$(command -v "$c")" "$sys/$c"; done
 # Fixture runs of the real toolchain_check.sh log through poplog into a throwaway POPLOG_ROOT, never the live ~/pop-logs
 # (RUNNING.tsv rows, per-run logs). Only the fixture runs get it; this selftest's own run log stays live.
-plr=$(mktemp -d); runlog_on_exit "rm -rf \"$plr\""
+plr=$(mktemp -d) || fail "mktemp"; runlog_on_exit "rm -rf \"$plr\""
 chk() { POPLOG_ROOT="$plr" PATH="$1:$sys" "$here/toolchain_check.sh" "$2" > "$t/out" 2>&1; }
 chk "$t/ok" "$t/pinned.toml" || fail "pinned 1.99.1 rejected: $(cat "$t/out")"
 grep -q 'rustc 1.99.1' "$t/out" || fail "version not printed"
