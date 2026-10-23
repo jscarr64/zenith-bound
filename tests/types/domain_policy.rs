@@ -3,18 +3,23 @@
 
 use zenith_bound::policy::DomainPolicy;
 
+// DomainPolicy is #[non_exhaustive] (options unit), so these tests compare instead of matching exhaustively.
 fn name(p: &DomainPolicy) -> &'static str {
-    match p {
-        DomainPolicy::Strict => "Strict",
-        DomainPolicy::Clip => "Clip",
+    if *p == DomainPolicy::Strict {
+        "Strict"
+    } else if *p == DomainPolicy::Clip {
+        "Clip"
+    } else {
+        "unknown"
     }
 }
 
 #[test]
 fn default_is_strict() -> Result<(), String> {
-    match DomainPolicy::default() {
-        DomainPolicy::Strict => Ok(()),
-        DomainPolicy::Clip => Err("default was Clip".into()),
+    if DomainPolicy::default() == DomainPolicy::Strict {
+        Ok(())
+    } else {
+        Err(format!("default was {:?}", DomainPolicy::default()))
     }
 }
 
