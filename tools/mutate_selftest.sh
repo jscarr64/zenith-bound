@@ -53,7 +53,7 @@ printf '# header only\n' > tools/mutants/EQUIVALENT.txt
 git add -A; git commit -qm mutants
 export MUTATE_REPO="$r" MUTATE_TMP="$t"
 run() { MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@"; }
-leftovers() { git -C "$r" worktree list | grep -c 'zb-mutate\.' ; ls -d "$t"/zb-mutate.* "$t"/zb-mutate-target.* 2>/dev/null | wc -l; }
+leftovers() { git -C "$r" worktree list | grep -c 'zb-mutate\.' ; find "$t" -maxdepth 1 \( -name "zb-mutate.*" -o -name "zb-mutate-target.*" \) | wc -l; }
 setm() { cp "$r/$1" "$r/tools/mutants/manifest.txt"; }
 
 # 0 mutants: header-only manifest passes

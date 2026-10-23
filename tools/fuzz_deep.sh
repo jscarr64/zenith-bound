@@ -24,7 +24,7 @@ count_of() {
     *) m=$t; e=0 ;;
   esac
   m=$(( 10#$m )); e=$(( 10#$e ))
-  [ "${#m}" -le 18 ] && [ $(( ${#m} + e )) -le 19 ] || fail "$2 is too large (at most 10^18), got '$t'"
+  if ! { [ "${#m}" -le 18 ] && [ $(( ${#m} + e )) -le 19 ]; }; then fail "$2 is too large (at most 10^18), got '$t'"; fi
   n=$m; while [ "$e" -gt 0 ]; do n=$(( n * 10 )); e=$(( e - 1 )); done
   [ "$n" -le 1000000000000000000 ] || fail "$2 is too large (at most 10^18), got '$t'"
   echo "$n"
@@ -49,7 +49,7 @@ case "$shards" in ''|*[!0-9]*) fail "--shards must be a decimal number" ;; esac
 case "$seed" in ''|*[!0-9a-fA-F]*) fail "--seed must be hex" ;; esac
 [ "${#seed}" -le 16 ] || fail "--seed has more than 16 hex digits"
 [ "$cases" -ge 1 ] || fail "--cases must be at least 1"
-[ "$shards" -ge 1 ] && [ "$shards" -le 64 ] || fail "--shards must be 1..64"
+if ! { [ "$shards" -ge 1 ] && [ "$shards" -le 64 ]; }; then fail "--shards must be 1..64"; fi
 [ "$cases" -ge "$shards" ] || fail "--cases must be at least --shards"
 
 shard_seed() { # shard_seed <base hex> <shard index>: base + index * 0x9E3779B97F4A7C15 mod 2^64 (bash arithmetic is 64-bit modular; the Rust side only sees the hex)
@@ -64,11 +64,11 @@ if [ "$selftest" = 1 ]; then
   a=$(shard_seed 5eed 0); b=$(shard_seed 5eed 1); c=$(shard_seed 5eed 2)
   [ "$a" = 0000000000005eed ] || fail "selftest: shard 0 seed is $a"
   [ "$b" = 9e3779b97f4adb02 ] || fail "selftest: shard 1 seed is $b"
-  [ "$a" != "$b" ] && [ "$b" != "$c" ] || fail "selftest: shard seeds collide"
+  if ! { [ "$a" != "$b" ] && [ "$b" != "$c" ]; }; then fail "selftest: shard seeds collide"; fi
   t=$(mktemp -d /tmp/fuzz-deep-selftest.XXXXXX); trap 'rm -rf "$t"' EXIT
   "$me" --cases 4000 --shards 2 --out "$t" >"$t/run.txt" 2>&1 || { cat "$t/run.txt"; fail "selftest: small run failed"; }
   grep -q 'fuzz_deep: 2 shards ok, 4000 cases' "$t/run.txt" || { cat "$t/run.txt"; fail "selftest: no summary line"; }
-  [ -s "$t/shard-0.log" ] && [ -s "$t/shard-1.log" ] || fail "selftest: shard logs missing"
+  if ! { [ -s "$t/shard-0.log" ] && [ -s "$t/shard-1.log" ]; }; then fail "selftest: shard logs missing"; fi
   "$me" --replay 5eed:17 >"$t/replay.txt" 2>&1 || { cat "$t/replay.txt"; fail "selftest: replay failed"; }
   grep -q 'fuzz_deep: replay 5eed:17 ok' "$t/replay.txt" || fail "selftest: no replay summary"
   # case counts: ZB_FUZZ_CASES and --cases take plain integers or <digits>e<digits>; garbage is refused with a clear error
