@@ -3,15 +3,22 @@
 //! Implemented by [`Ball`]; `ComplexBall` implements it when it lands (L2a). The trait is sealed:
 //! no type outside zenith-bound can implement it, so methods may be added in a minor release.
 
-use zenith_float_num::ExactNum;
+use zenith_float_num::{ExactNum, RoundingMode};
 
 use crate::ball::Ball;
+use crate::mag::Mag;
 use crate::tri::Tri;
 
 mod sealed {
     /// Only zenith-bound types implement `Enclosure`.
     pub trait Sealed {}
 }
+
+/// Extra bits over the wider operand used by [`Ball`]'s `contains` difference.
+const GUARD_BITS: usize = 128;
+
+/// zf precision used when an operand reports none.
+const MIN_PREC: usize = 64;
 
 /// A set-valued number with a midpoint precision.
 pub trait Enclosure: sealed::Sealed {
@@ -38,12 +45,53 @@ impl Enclosure for Ball {
     }
 
     fn identical(&self, other: &Ball) -> bool {
-        let _ = other;
-        false
+        self.prec() == other.prec() && self.rad() == other.rad() && self.mid() == other.mid()
     }
 
     fn contains(&self, x: &ExactNum) -> Tri {
-        let _ = x;
-        Tri::Unknown
+        if x.is_nan() || x.is_inf() {
+            return Tri::False;
+        }
+        if self.rad().is_infinity() {
+            return Tri::True;
+        }
+        let p = match working_prec(self.mid(), x) {
+            Some(p) => p,
+            None => return Tri::Unknown,
+        };
+        // d = mid - x, enclosed by [lo, hi]: both steps round in one direction and are monotone.
+        let hi = ExactNum::new(p)
+            .sub(x, p, RoundingMode::Up)
+            .add(self.mid(), p, RoundingMode::Up);
+        let lo =
+            ExactNum::new(p)
+                .sub(x, p, RoundingMode::Down)
+                .add(self.mid(), p, RoundingMode::Down);
+        if hi.is_nan() || lo.is_nan() {
+            return Tri::Unknown;
+        }
+        let upper = Mag::from_exact_num(&hi).max(Mag::from_exact_num(&lo));
+        if upper <= *self.rad() {
+            return Tri::True;
+        }
+        let lower = if lo.is_positive() && !lo.is_zero() {
+            Mag::from_exact_num_lower(&lo)
+        } else if hi.is_negative() && !hi.is_zero() {
+            Mag::from_exact_num_lower(&hi)
+        } else {
+            Mag::zero()
+        };
+        if lower > *self.rad() {
+            Tri::False
+        } else {
+            Tri::Unknown
+        }
     }
+}
+
+/// Precision for the exact-when-possible difference of `a` and `b`.
+fn working_prec(a: &ExactNum, b: &ExactNum) -> Option<usize> {
+    let pa = a.precision().map_or(MIN_PREC, |p| p.max(MIN_PREC));
+    let pb = b.precision().map_or(MIN_PREC, |p| p.max(MIN_PREC));
+    pa.max(pb).checked_add(GUARD_BITS)
 }
