@@ -384,4 +384,16 @@ out="$(scan --count-only)" && fail "wrapped pub use rename under tests/ passed -
 echo "$out" | grep -q "tests/y.rs:3 \[type_rename\]" || fail "rename under tests/ not reported at its line: $out"
 rm -rf tests; printf 'fn a() {}\n' > src/x.rs
 scan --count-only >/dev/null || fail "tree not clean after the alias fixtures: $(scan --count-only)"
+
+# API-freeze unit 4: no public signature in src/ names zf's i32 `Exponent` or `i32` (zb signatures use i64); baseline-free
+printf 'pub fn e(&self) -> Option<i64> { None }\npub(crate) fn p(x: i32) {}\nfn q(x: Exponent) {}\n// pub fn c(x: i32)\n' > src/x.rs
+scan --count-only >/dev/null || fail "i64 / private i32 flagged as narrow exponent: $(scan --count-only)"
+printf 'impl A {\n    pub fn exp(\n        &self,\n    ) -> Option<Exponent> { None }\n}\n' > src/x.rs
+out="$(scan --count-only)" && fail "pub fn returning Exponent passed"
+echo "$out" | grep -q "src/x.rs:2 \[pub_sig_narrow_exponent\]" || fail "wrapped Exponent signature not reported at its line: $out"
+printf 'pub fn s(e: i32) {}\n' > src/x.rs; scan --count-only >/dev/null && fail "pub fn taking i32 passed"
+printf 'pub struct S { pub e: i32 }\n' > src/x.rs; scan --count-only >/dev/null && fail "pub field of type i32 passed"
+printf 'pub const E: zenith_float_num::Exponent = 0;\npub type T = i32;\n' > src/x.rs; scan --count-only >/dev/null && fail "pub const/type naming Exponent/i32 passed"
+printf 'fn a() {}\n' > src/x.rs
+scan --count-only >/dev/null || fail "tree not clean after the narrow-exponent fixtures: $(scan --count-only)"
 echo "rules_scan selftest: ok"

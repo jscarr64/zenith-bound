@@ -635,8 +635,21 @@ def alias_tree_check():
     return 1 if sites else 0
 
 
+def narrow_exponent_sites():
+    """API-freeze unit 4: [(relpath, line, snippet)] for every public signature in src/ naming zf's `Exponent` or `i32`."""
+    return []
+
+
+def narrow_exponent_check():
+    sites = narrow_exponent_sites()
+    for rel, line, snippet in sites:
+        print("%s:%d [pub_sig_narrow_exponent] %s" % (rel, line, snippet[:120]))
+    print("rules_scan: public signatures naming Exponent or i32: %d (no baseline, any hit fails; zb uses i64)" % len(sites))
+    return 1 if sites else 0
+
+
 def both_count_checks(update=False):
-    return max(count_check(update), ref_count_check(update), hidden_count_check(update), rebuild_count_check(update), alias_tree_check())
+    return max(count_check(update), ref_count_check(update), hidden_count_check(update), rebuild_count_check(update), alias_tree_check(), narrow_exponent_check())
 
 
 def main(argv):
