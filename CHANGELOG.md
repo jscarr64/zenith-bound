@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Container/LA op signature rule frozen (API freeze F8; CONTRACT 15.6): explicit `prec: Precision`, no rounding mode, `BoundResult` return.
 - Allocation failure is `Resource`, never an abort, for storage zenith-bound sizes from caller input (API freeze F7; CONTRACT 15.5). `BallArray::zeros` with a shape too large to allocate returns `Resource`.
 - `Tri` is documented as exhaustive (API freeze F2): `{True, False, Unknown}` is the complete set; no `#[non_exhaustive]`. CONTRACT 15.2.
 - `BoundError::NotConverged { op, detail }` (Paul, 2026-10-23): an iteration out of budget (e.g. `EigOpts::max_sweeps`) returns it, never a silently loose answer. CONTRACT O11-W.

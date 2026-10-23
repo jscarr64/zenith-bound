@@ -184,6 +184,8 @@ All of this section is integer-only (`u64`/`u128`/`i64` and wider integers in te
 
 15.5 **Allocation failure (API freeze F7, behaviour contract).** Storage that zenith-bound itself allocates in proportion to a caller's size (container storage: `BallArray::zeros` today, and every later container or LA op) is reserved with `try_reserve`/`try_reserve_exact`; when it cannot be allocated the op returns `Err(BoundError::Resource { .. })` and does not abort. A shape whose element count overflows `usize` is `InvalidArgument` instead. Out of scope: allocations inside zenith-float (one bignum's limbs) and the shrink in `Vec::into_boxed_slice` of a caller-supplied `Vec`; those follow Rust's global allocator (abort on OOM).
 
+15.6 **Container and linear-algebra op signatures (API freeze F8).** Every container or LA op that computes balls (elementwise ops, norms, products, solves, factorizations, eigen) takes an explicit `prec: Precision` and **no `RoundingMode`** (the clause 15.1 rule: midpoints round to nearest internally, radii outward), and returns `BoundResult<_>`. Iteration budgets come from the `SolveOpts`/`EigOpts` option structs; running out of budget is `NotConverged`. Pure accessors (`shape`, `rank`, `len`, `get`, `nrows`, `ncols`, `as_slice`) take no `prec` and return plain values or `Option`.
+
 ## Decisions recorded (formerly open items; decided 2026-10-15 by Rusty with Paul, private fields also by Jeff via Paul; O2 detection rule and O11-W to O17-W on Rusty's second review; O1, O6, D14, D15, 10.2a to 10.2e and O13-C decided 2026-10-16 by Paul under Jeff's delegation, Rusty recommended)
 
 | Item | Decision | Stated in |
