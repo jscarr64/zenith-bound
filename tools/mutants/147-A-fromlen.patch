@@ -1,0 +1,12 @@
+diff --git a/src/array.rs b/src/array.rs
+--- a/src/array.rs
++++ b/src/array.rs
+@@ -34,7 +34,7 @@
+     /// `balls.len()`.
+     pub fn from_balls(shape: Box<[usize]>, balls: Vec<Ball>) -> BoundResult<BallArray> {
+         let len = element_count("BallArray::from_balls", &shape)?;
+-        if len != balls.len() {
++        if len < balls.len() {
+             return Err(BoundError::InvalidArgument {
+                 op: "BallArray::from_balls",
+                 detail: "shape does not match the number of balls",

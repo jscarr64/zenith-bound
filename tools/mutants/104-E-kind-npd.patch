@@ -1,0 +1,12 @@
+diff --git a/src/error.rs b/src/error.rs
+--- a/src/error.rs
++++ b/src/error.rs
+@@ -85,7 +85,7 @@
+             BoundError::InvalidArgument { .. } => "invalid argument",
+             BoundError::Domain { .. } => "input outside the domain",
+             BoundError::Resource { .. } => "resource limit reached",
+-            BoundError::NotPositiveDefinite { .. } => "matrix not positive definite",
++            BoundError::NotPositiveDefinite { .. } => "matrix singular",
+             BoundError::Singular { .. } => "matrix singular",
+         }
+     }

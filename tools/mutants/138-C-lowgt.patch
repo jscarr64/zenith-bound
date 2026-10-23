@@ -1,0 +1,12 @@
+diff --git a/src/enclosure.rs b/src/enclosure.rs
+--- a/src/enclosure.rs
++++ b/src/enclosure.rs
+@@ -82,7 +82,7 @@
+         } else {
+             Mag::zero()
+         };
+-        if lower > *self.rad() {
++        if lower >= *self.rad() {
+             Tri::False
+         } else {
+             Tri::Unknown

@@ -1,0 +1,12 @@
+diff --git a/src/error.rs b/src/error.rs
+--- a/src/error.rs
++++ b/src/error.rs
+@@ -73,7 +73,7 @@
+             BoundError::Representation { detail, .. } => detail,
+             BoundError::InvalidArgument { detail, .. } => detail,
+             BoundError::Domain { detail, .. } => detail,
+-            BoundError::Resource { detail, .. } => detail,
++            BoundError::Resource { detail: _, .. } => "",
+             BoundError::NotPositiveDefinite { detail, .. } => detail,
+             BoundError::Singular { detail, .. } => detail,
+         }

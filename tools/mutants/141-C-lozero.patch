@@ -1,0 +1,12 @@
+diff --git a/src/enclosure.rs b/src/enclosure.rs
+--- a/src/enclosure.rs
++++ b/src/enclosure.rs
+@@ -80,7 +80,7 @@
+         } else if hi.is_negative() && !hi.is_zero() {
+             Mag::from_exact_num_lower(&hi)
+         } else {
+-            Mag::zero()
++            Mag::infinity()
+         };
+         if lower > *self.rad() {
+             Tri::False
