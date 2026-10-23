@@ -10,6 +10,8 @@
 # derive-scan sees a derive that spans several lines (grep -Pz); no-panic-scan also covers unwrap_or_default/unwrap_unchecked/unwrap_err/expect_err and the assert! family.
 # The rules are the zero-clone, no-unwrap/expect/panic/unreachable/todo/unimplemented (test code included), no-allow, no-unsafe,
 # no-float rules.
+# mutants runs the mutant-runner self-test, then the WHOLE manifest (tools/mutants/manifest.txt) with a persistent MUTATE_TARGET (default
+# "$CARGO_TARGET_DIR-mutate", outside the repo); any SURVIVED (not in EQUIVALENT.txt) or INVALID mutant fails the step.
 set -u
 # PYTHONNOUSERSITE=1: a stray ~/.local mpmath (e.g. 1.3.0) must not shadow the pinned system mpmath 1.2.1 that the golden generators require.
 export PYTHONNOUSERSITE=1
@@ -33,4 +35,5 @@ run goldens-regen "tools/goldens_regen.sh"
 run wildcard-enum "tools/wildcard_enum_selftest.sh"
 run tightness "tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "tools/digests_selftest.sh && tools/digests.sh all"
+run mutants "tools/mutate_selftest.sh && MUTATE_TARGET=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:-/tmp/zb-target}-mutate} tools/mutate.sh"
 echo done >> "$T/$tag.rc"
