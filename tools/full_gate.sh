@@ -27,8 +27,8 @@ step() { name=$1; echo=$2; shift 2; echo "start $name $(date +%T)" >> "$T/$tag.r
 run() { step "$1" 0 "${@:2}"; }
 run_tee() { step "$1" 1 "${@:2}"; }
 run build-tests "cargo test --no-run"
-run_tee build-debug "cargo test"
-run_tee build-release "cargo test --release"
+run_tee build-debug "cargo test --no-fail-fast"
+run_tee build-release "cargo test --release --no-fail-fast"
 run rules-scan "tools/rules_scan_selftest.sh && tools/rules_scan.sh \${SCAN_ARGS:-\${RATCHET_BASE:-3c9f36f}..HEAD}"
 run fmt "cargo fmt --all -- --check"
 run clippy "cargo clippy --all-targets -- -D warnings"
