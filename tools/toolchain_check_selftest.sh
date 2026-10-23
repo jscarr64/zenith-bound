@@ -19,7 +19,10 @@ mkfake "$t/old" "rustc 1.95.0 (59807616e 2026-04-14)" "cargo 1.99.1 (5f94df478 2
 mkfake "$t/oldcargo" "rustc 1.99.1 (58cf8f9c3 2026-10-13)" "cargo 1.95.0 (aaaaaaaaa 2026-04-14)"
 mkfake "$t/long" "rustc 1.990.0 (0 2027-01-01)" "cargo 1.990.0 (0 2027-01-01)"
 sys="$t/sys"; mkdir -p "$sys"; for c in bash sed; do ln -s "$(command -v "$c")" "$sys/$c"; done
-chk() { PATH="$1:$sys" "$here/toolchain_check.sh" "$2" > "$t/out" 2>&1; }
+# Fixture runs of the real toolchain_check.sh log through poplog into a throwaway POPLOG_ROOT, never the live ~/pop-logs
+# (RUNNING.tsv rows, per-run logs). Only the fixture runs get it; this selftest's own run log stays live.
+plr=$(mktemp -d); runlog_on_exit "rm -rf \"$plr\""
+chk() { POPLOG_ROOT="$plr" PATH="$1:$sys" "$here/toolchain_check.sh" "$2" > "$t/out" 2>&1; }
 chk "$t/ok" "$t/pinned.toml" || fail "pinned 1.99.1 rejected: $(cat "$t/out")"
 grep -q 'rustc 1.99.1' "$t/out" || fail "version not printed"
 chk "$t/old" "$t/pinned.toml" && fail "rustc 1.95.0 accepted for channel 1.99"
@@ -29,4 +32,6 @@ chk "$t/long" "$t/pinned.toml" && fail "1.990.0 accepted for channel 1.99"
 chk "$t/ok" "$t/missing.toml" && fail "missing toolchain file accepted"
 chk "$t/ok" "$t/stable.toml" && fail "unpinned channel accepted"
 mkdir -p "$t/none"; chk "$t/none" "$t/pinned.toml" && fail "missing rustc accepted"
+# (Under RUNLOG_PLAIN=1, e.g. full_gate_selftest's fixture gate, nothing logs anywhere, so there is nothing to check.)
+[ "${RUNLOG_PLAIN:-0}" = 1 ] || [ -n "$(find "$plr" -name '*-toolchain_check*.log' -print -quit)" ] || fail "fixture runs did not log under POPLOG_ROOT=$plr (isolation not exercised)"
 echo "toolchain_check selftest: ok"
