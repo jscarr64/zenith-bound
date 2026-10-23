@@ -9,6 +9,7 @@ pub mod digest;
 pub mod generators;
 pub mod goldens;
 pub mod modular;
+pub mod points;
 pub mod replay;
 pub mod rng;
 pub mod seeds;
