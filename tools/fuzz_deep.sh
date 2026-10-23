@@ -3,8 +3,9 @@
 # Runs tests/harness/fuzz_mag.rs `fuzz_mag_gate` in release, split into independent shards (one process each, one distinct base seed each),
 # with ZB_FUZZ_SEED / ZB_FUZZ_CASES set per shard. Every failure prints its replay line; rerun one case with
 #   tools/fuzz_deep.sh --replay <seed hex>:<case>
-# The gate lock /tmp/pop-gate.lock is NOT taken (this is not a gate step); use a CARGO_TARGET_DIR of your own.
-#   tools/fuzz_deep.sh [--cases N] [--shards K] [--seed HEX] [--out DIR]     defaults: 100000000 cases in total, 7 shards, seed 0x5eed
+# Deep runs take `flock /tmp/pop-deep.lock` (FUZZ_DEEP_LOCK overrides the path, FUZZ_DEEP_LOCK_WAIT=<s> bounds the wait), never the gate lock.
+# The case count comes from ZB_FUZZ_CASES or --cases (the flag wins): a plain integer or <digits>e<digits> (1e8); garbage is refused.
+#   tools/fuzz_deep.sh [--cases N|NeK] [--shards K] [--seed HEX] [--out DIR]     defaults: 100000000 cases in total, 7 shards, seed 0x5eed
 #   tools/fuzz_deep.sh --replay <seed hex>:<case>                           one case, the replay line's seed=... and case=...
 #   tools/fuzz_deep.sh --selftest                                             proves argument checks, shard seeds, a small run and replay
 # Deep runs are env-driven: CARGO_TARGET_DIR (default /tmp/target-fuzz-deep), CARGO_BUILD_JOBS (default 7). No repo file is written.
@@ -14,10 +15,26 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-/tmp/target-fuzz-deep}
 export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-7}
 fail() { echo "fuzz_deep FAIL: $*" >&2; exit 2; }
-cases=100000000; shards=7; seed=5eed; out=; replay=; selftest=0
+# count_of <text> <label>: a case count, plain decimal digits or <digits>e<digits> (1e8, 25e5); at most 10^18; anything else fails naming <label>
+count_of() {
+  local t=$1 m e n
+  case "$t" in
+    ''|*[!0-9e]*|e*|*e|*e*e*) fail "$2 must be a plain integer or <digits>e<digits> such as 1e8, got '$t'" ;;
+    *e*) m=${t%%e*}; e=${t#*e} ;;
+    *) m=$t; e=0 ;;
+  esac
+  m=$(( 10#$m )); e=$(( 10#$e ))
+  [ "${#m}" -le 18 ] && [ $(( ${#m} + e )) -le 19 ] || fail "$2 is too large (at most 10^18), got '$t'"
+  n=$m; while [ "$e" -gt 0 ]; do n=$(( n * 10 )); e=$(( e - 1 )); done
+  [ "$n" -le 1000000000000000000 ] || fail "$2 is too large (at most 10^18), got '$t'"
+  echo "$n"
+}
+lock=${FUZZ_DEEP_LOCK:-/tmp/pop-deep.lock}; lock_wait=${FUZZ_DEEP_LOCK_WAIT:-}
+cases=100000000; cases_text=; shards=7; seed=5eed; out=; replay=; selftest=0
+if [ -n "${ZB_FUZZ_CASES+x}" ]; then cases=$(count_of "$ZB_FUZZ_CASES" ZB_FUZZ_CASES) || exit 2; fi
 while [ $# -gt 0 ]; do
   case "$1" in
-    --cases) cases=${2:-}; shift 2 ;;
+    --cases) cases_text=${2:-}; [ -n "$cases_text" ] || fail "--cases needs a value"; shift 2 ;;
     --shards) shards=${2:-}; shift 2 ;;
     --seed) seed=${2:-}; shift 2 ;;
     --out) out=${2:-}; shift 2 ;;
@@ -27,7 +44,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 seed=${seed#0x}
-case "$cases" in ''|*[!0-9]*) fail "--cases must be a decimal number" ;; esac
+if [ -n "$cases_text" ]; then cases=$(count_of "$cases_text" --cases) || exit 2; fi
 case "$shards" in ''|*[!0-9]*) fail "--shards must be a decimal number" ;; esac
 case "$seed" in ''|*[!0-9a-fA-F]*) fail "--seed must be hex" ;; esac
 [ "${#seed}" -le 16 ] || fail "--seed has more than 16 hex digits"
@@ -54,6 +71,30 @@ if [ "$selftest" = 1 ]; then
   [ -s "$t/shard-0.log" ] && [ -s "$t/shard-1.log" ] || fail "selftest: shard logs missing"
   "$me" --replay 5eed:17 >"$t/replay.txt" 2>&1 || { cat "$t/replay.txt"; fail "selftest: replay failed"; }
   grep -q 'fuzz_deep: replay 5eed:17 ok' "$t/replay.txt" || fail "selftest: no replay summary"
+  # case counts: ZB_FUZZ_CASES and --cases take plain integers or <digits>e<digits>; garbage is refused with a clear error
+  for g in garbage 1e 1e99 e8 -5 1.5e3 0x10 ''; do
+    msg=$(ZB_FUZZ_CASES="$g" "$me" --shards 2 2>&1) && fail "selftest: ZB_FUZZ_CASES=$g was accepted"
+    case "$msg" in *"ZB_FUZZ_CASES"*) ;; *) fail "selftest: ZB_FUZZ_CASES=$g error does not name the variable: $msg" ;; esac
+  done
+  msg=$("$me" --cases 1e 2>&1) && fail "selftest: --cases 1e was accepted"
+  case "$msg" in *"--cases"*) ;; *) fail "selftest: --cases 1e error does not name the flag: $msg" ;; esac
+  [ "$(count_of 1e8 x)" = 100000000 ] || fail "selftest: 1e8 is not 100000000"
+  [ "$(count_of 25e2 x)" = 2500 ] || fail "selftest: 25e2 is not 2500"
+  [ "$(count_of 4000 x)" = 4000 ] || fail "selftest: 4000 is not 4000"
+  ZB_FUZZ_CASES=2e3 "$me" --shards 2 --out "$t/env" >"$t/env.txt" 2>&1 || { cat "$t/env.txt"; fail "selftest: ZB_FUZZ_CASES=2e3 run failed"; }
+  grep -q 'fuzz_deep: 2 shards ok, 2000 cases' "$t/env.txt" || { cat "$t/env.txt"; fail "selftest: ZB_FUZZ_CASES=2e3 was not honoured"; }
+  ZB_FUZZ_CASES=2e3 "$me" --cases 3000 --shards 2 --out "$t/flag" >"$t/flag.txt" 2>&1 || fail "selftest: --cases over env run failed"
+  grep -q '3000 cases' "$t/flag.txt" || fail "selftest: --cases does not override ZB_FUZZ_CASES"
+  # deep runs take the deep lock (default /tmp/pop-deep.lock, never the gate lock); a busy lock blocks the run
+  grep -q 'lock /tmp/pop-deep.lock' "$t/run.txt" || { cat "$t/run.txt"; fail "selftest: the small run did not report the deep lock"; }
+  grep -q 'pop-gate.lock' "$t/run.txt" && fail "selftest: the run mentions the gate lock"
+  lk="$t/deep.lock"
+  ( exec 8>"$lk"; flock 8; sleep 30 8>&- ) & holder=$!   # only the subshell holds the lock fd, so killing it frees the lock
+  sleep 0.3
+  FUZZ_DEEP_LOCK="$lk" FUZZ_DEEP_LOCK_WAIT=1 "$me" --cases 1000 --shards 1 --out "$t/busy" >"$t/busy.txt" 2>&1 && { kill "$holder"; fail "selftest: the run did not wait for a held deep lock"; }
+  grep -q 'deep lock .* busy' "$t/busy.txt" || { kill "$holder"; cat "$t/busy.txt"; fail "selftest: no busy-lock message"; }
+  pkill -P "$holder" sleep 2>/dev/null; kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+  FUZZ_DEEP_LOCK="$lk" FUZZ_DEEP_LOCK_WAIT=5 "$me" --cases 1000 --shards 1 --out "$t/free" >"$t/free.txt" 2>&1 || { cat "$t/free.txt"; fail "selftest: the run failed with a free lock"; }
   echo "fuzz_deep selftest ok"; exit 0
 fi
 
@@ -65,6 +106,10 @@ if [ -n "$replay" ]; then
   echo "fuzz_deep: replay $replay ok"; exit 0
 fi
 
+# the deep lock (never the gate lock): one deep run at a time on this machine
+exec 9>"$lock" || fail "cannot open the deep lock $lock"
+if [ -n "$lock_wait" ]; then flock -w "$lock_wait" 9 || fail "deep lock $lock is busy (waited ${lock_wait}s)"; else flock 9 || fail "cannot take the deep lock $lock"; fi
+echo "fuzz_deep: holding deep lock $lock"
 [ -n "$out" ] || out=$(mktemp -d /tmp/fuzz-deep.XXXXXX)
 mkdir -p "$out" || fail "cannot create $out"
 (cd "$root" && cargo test --release --test harness --no-run >"$out/build.log" 2>&1) || { cat "$out/build.log"; fail "release build failed"; }
