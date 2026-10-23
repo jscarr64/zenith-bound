@@ -45,14 +45,6 @@ impl Term {
     pub fn is_zero(&self) -> bool {
         self.mant == 0
     }
-
-    fn negated(&self) -> Term {
-        Term {
-            neg: !self.neg && self.mant != 0,
-            mant: self.mant,
-            exp: self.exp,
-        }
-    }
 }
 
 /// An exact point `base + off`.
@@ -275,14 +267,25 @@ fn mag_sub(a: &[u64], b: &[u64]) -> Vec<u64> {
 
 /// Exact order of `a` and `b`; Err when aligning the four terms needs more than `max_shift` bits.
 pub fn cmp_points(a: &Point, b: &Point, max_shift: u64) -> Result<Ordering, String> {
-    let terms = [&a.base, &a.off, &b.base.negated(), &b.off.negated()];
-    let e0 = terms.iter().filter(|t| !t.is_zero()).map(|t| t.exp).min();
+    // (term, flip): b's terms enter with their sign flipped, so the sum is a - b.
+    let terms = [
+        (&a.base, false),
+        (&a.off, false),
+        (&b.base, true),
+        (&b.off, true),
+    ];
+    let e0 = terms
+        .iter()
+        .filter(|(t, _)| !t.is_zero())
+        .map(|(t, _)| t.exp)
+        .min();
     let e0 = match e0 {
         None => return Ok(Ordering::Equal),
         Some(e) => e,
     };
     let (mut neg, mut acc): (bool, Vec<u64>) = (false, vec![0]);
-    for t in terms.iter().filter(|t| !t.is_zero()) {
+    for (t, flip) in terms.iter().filter(|(t, _)| !t.is_zero()) {
+        let t_neg = t.neg != *flip;
         let d = t
             .exp
             .checked_sub(e0)
@@ -292,13 +295,13 @@ pub fn cmp_points(a: &Point, b: &Point, max_shift: u64) -> Result<Ordering, Stri
             return Err(format!("exponent spread {} exceeds {} bits", s, max_shift));
         }
         let m = shifted(t.mant, s)?;
-        if t.neg == neg {
+        if t_neg == neg {
             acc = mag_add(&acc, &m);
         } else if mag_cmp(&acc, &m) != Ordering::Less {
             acc = mag_sub(&acc, &m);
         } else {
             acc = mag_sub(&m, &acc);
-            neg = t.neg;
+            neg = t_neg;
         }
     }
     if acc.iter().all(|w| *w == 0) {

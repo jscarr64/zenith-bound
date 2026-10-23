@@ -85,21 +85,21 @@ fn grid_order_and_exact_values() -> Result<(), String> {
     let pts = sample_points(&one_ball(), 53, &mut SplitMix64::new(7), 10)?;
     expect_eq("count", &pts.len(), &18)?;
     let kinds: Vec<&SampleKind> = pts.iter().map(|(k, _)| k).collect();
-    expect_eq("first", &kinds.first().copied(), &Some(&SampleKind::Mid))?;
+    expect_eq("first", &kinds.first(), &Some(&&SampleKind::Mid))?;
     expect_eq(
         "edge+",
-        &kinds.get(1).copied(),
-        &Some(&SampleKind::Edge { plus: true }),
+        &kinds.get(1),
+        &Some(&&SampleKind::Edge { plus: true }),
     )?;
     expect_eq(
         "eighth -7",
-        &kinds.get(3).copied(),
-        &Some(&SampleKind::Eighth { j: -7 }),
+        &kinds.get(3),
+        &Some(&&SampleKind::Eighth { j: -7 }),
     )?;
     expect_eq(
         "eighth 7",
-        &kinds.get(16).copied(),
-        &Some(&SampleKind::Eighth { j: 7 }),
+        &kinds.get(16),
+        &Some(&&SampleKind::Eighth { j: 7 }),
     )?;
     // mid + r = 1 + 3/16 = 19/16; mid - r = 13/16; mid + 5r/8 = 1 + 15/128 = 143/128.
     let at = |i: usize| {

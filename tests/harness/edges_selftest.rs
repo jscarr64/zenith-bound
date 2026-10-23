@@ -24,10 +24,10 @@ fn mid_of(r: &Edge) -> Result<Point, String> {
         .ok_or_else(|| String::from("empty grid"))
 }
 
-fn dy(neg: bool, mant: u128, exp: i64, off: (bool, u128, i64)) -> Result<Point, String> {
+fn dy(neg: bool, mant: u128, exp: i64, off: Term) -> Result<Point, String> {
     Ok(Point {
         base: Term::new(neg, mant, exp)?,
-        off: Term::new(off.0, off.1, off.2)?,
+        off,
     })
 }
 
@@ -68,7 +68,7 @@ fn every_precision_has_unique_rows_and_the_right_grid() -> Result<(), String> {
 #[test]
 fn row_values_are_exact() -> Result<(), String> {
     let rows = edge_table(53)?;
-    let z = (false, 0, 0);
+    let z = || Term::new(false, 0, 0);
     let eq = |name: &str, want: Point| -> Result<(), String> {
         expect_eq(
             name,
@@ -76,12 +76,12 @@ fn row_values_are_exact() -> Result<(), String> {
             &Ordering::Equal,
         )
     };
-    eq("exact-point(1)", dy(false, 1, 0, z)?)?;
-    eq("exact-point(-1)", dy(true, 1, 0, z)?)?;
-    eq("2^200,1ulp", dy(false, 1, 200, z)?)?;
-    eq("1+2^-60,r=0", dy(false, 1, 0, (false, 1, -60))?)?;
-    eq("1-2^-60,r=0", dy(false, 1, 0, (true, 1, -60))?)?;
-    eq("zero-ball(-0,r=0)", dy(false, 0, 0, z)?)?;
+    eq("exact-point(1)", dy(false, 1, 0, z()?)?)?;
+    eq("exact-point(-1)", dy(true, 1, 0, z()?)?)?;
+    eq("2^200,1ulp", dy(false, 1, 200, z()?)?)?;
+    eq("1+2^-60,r=0", dy(false, 1, 0, Term::new(false, 1, -60)?)?)?;
+    eq("1-2^-60,r=0", dy(false, 1, 0, Term::new(true, 1, -60)?)?)?;
+    eq("zero-ball(-0,r=0)", dy(false, 0, 0, z()?)?)?;
     let edge = |name: &str| -> Result<Point, String> {
         let pts = sample_points(&find(&rows, name)?.desc, 53, &mut SplitMix64::new(0), 4)?;
         pts.into_iter()
@@ -93,7 +93,7 @@ fn row_values_are_exact() -> Result<(), String> {
         "2^200 + r=1 edge is 2^200+1",
         &cmp_points(
             &edge("2^200,r=1")?,
-            &dy(false, 1, 200, (false, 1, 0))?,
+            &dy(false, 1, 200, Term::new(false, 1, 0)?)?,
             DEFAULT_MAX_SHIFT,
         )?,
         &Ordering::Equal,
@@ -102,7 +102,7 @@ fn row_values_are_exact() -> Result<(), String> {
         "1 + 2^-60 edge",
         &cmp_points(
             &edge("1,r=2^-60")?,
-            &dy(false, 1, 0, (false, 1, -60))?,
+            &dy(false, 1, 0, Term::new(false, 1, -60)?)?,
             DEFAULT_MAX_SHIFT,
         )?,
         &Ordering::Equal,
@@ -111,7 +111,7 @@ fn row_values_are_exact() -> Result<(), String> {
         "1ulp at 53 above 2^200",
         &cmp_points(
             &edge("2^200,1ulp")?,
-            &dy(false, 1, 200, (false, 1, 148))?,
+            &dy(false, 1, 200, Term::new(false, 1, 148)?)?,
             DEFAULT_MAX_SHIFT,
         )?,
         &Ordering::Equal,
