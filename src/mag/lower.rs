@@ -71,10 +71,13 @@ fn sub_checked(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64) -> Option<Mag> 
 /// then truncated (CONTRACT 14.2). `gap >= 64` here.
 fn sub_wide(ea: i64, ma: NonZeroU64, gap: i128, mb: NonZeroU64) -> Option<Mag> {
     let wide = u128::from(ma.get()) << 63;
-    // Units of 2^(ea - 127): the subtrahend is mb / 2^(gap - 63), rounded up. A shift of 128 or
-    // more leaves only the fraction, which still rounds up to one unit.
+    // Units of 2^(ea - 127): the subtrahend is mb / 2^(gap - 63), rounded up. shift >= 1 (gap >= 64).
+    // A shift of 64 or more leaves only the fraction (mb < 2^64), which still rounds up to one unit:
+    // for 64 <= shift < 128 the shifted arm would give `mb >> shift == 0` and, because the mask keeps
+    // the low `shift >= 64` bits and mb is a nonzero value below 2^64, `frac == true`, i.e. exactly
+    // the `(0, true)` of the other arm. So the guard `< 64` is the tightest exact one.
     let (subtrahend, frac) = match u32::try_from(gap.checked_sub(63)?) {
-        Ok(shift) if shift < 128 => {
+        Ok(shift) if shift < 64 => {
             let mb = u128::from(mb.get());
             (mb >> shift, (mb & !(u128::MAX << shift)) != 0)
         }
@@ -85,9 +88,9 @@ fn sub_wide(ea: i64, ma: NonZeroU64, gap: i128, mb: NonZeroU64) -> Option<Mag> {
         .checked_sub(subtrahend)?
         .checked_sub(u128::from(frac))?;
     let scale = i128::from(ea).checked_sub(127)?;
-    // diff >= 2^126 - 2^64 - 1 > 0. Zero is the sound lower bound for the arm that is never taken.
-    match NonZeroU128::new(diff) {
-        Some(diff) => norm(diff, scale, false, false),
-        None => Some(Mag::zero()),
-    }
+    // Range proof that `diff` is nonzero: ma >= 2^63 (canonical form), so wide >= 2^126. shift >= 1,
+    // so subtrahend = mb >> shift < 2^63 (or 0), and frac <= 1. Hence diff >= 2^126 - 2^63 > 0 and
+    // `NonZeroU128::new` is always `Some`; no zero-result arm is written. (Its `None` could only
+    // reach `settle`, whose fallback is the sound bound.)
+    norm(NonZeroU128::new(diff)?, scale, false, false)
 }
