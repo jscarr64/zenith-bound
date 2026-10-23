@@ -11,12 +11,27 @@ const DIMS: [usize; 6] = [2, 3, 1, 4, 2, 3];
 
 fn balls(n: usize) -> Result<Vec<Ball>, String> {
     let mut v = Vec::new();
-    let mut k: i64 = 0;
-    for _ in 0..n {
+    for k in 0..n {
+        let k = i64::try_from(k).map_err(|e| e.to_string())?;
         v.push(Ball::exact(ExactNum::from(k), 64).map_err(|e| format!("{:?}", e))?);
-        k += 1;
     }
     Ok(v)
+}
+
+/// The first `rank` entries of DIMS, with `zero_axis` (if any) set to 0. Built fresh per call.
+fn dims(rank: usize, zero_axis: Option<usize>) -> Vec<usize> {
+    DIMS.iter()
+        .take(rank)
+        .enumerate()
+        .map(|(i, &d)| if Some(i) == zero_axis { 0 } else { d })
+        .collect()
+}
+
+/// usize::MAX on `axis`, 2 elsewhere: the product overflows. Built fresh per call.
+fn overflow_shape(rank: usize, axis: usize) -> Box<[usize]> {
+    (0..rank)
+        .map(|i| if i == axis { usize::MAX } else { 2 })
+        .collect()
 }
 
 /// Every index of `shape` in row-major order.
@@ -26,7 +41,8 @@ fn indices(shape: &[usize]) -> Vec<Vec<usize>> {
         let mut next = Vec::new();
         for prefix in &out {
             for i in 0..d {
-                let mut ix: Vec<usize> = prefix.iter().copied().collect();
+                let mut ix: Vec<usize> = Vec::with_capacity(prefix.len() + 1);
+                ix.extend(prefix);
                 ix.push(i);
                 next.push(ix);
             }
@@ -39,9 +55,9 @@ fn indices(shape: &[usize]) -> Vec<Vec<usize>> {
 #[test]
 fn ranks_zero_to_six_are_row_major() -> Result<(), String> {
     for rank in 0..=6 {
-        let shape: Vec<usize> = DIMS.iter().take(rank).copied().collect();
+        let shape: Vec<usize> = dims(rank, None);
         let n: usize = shape.iter().product();
-        let a = BallArray::from_balls(shape.clone().into_boxed_slice(), balls(n)?)
+        let a = BallArray::from_balls(dims(rank, None).into_boxed_slice(), balls(n)?)
             .map_err(|e| format!("rank {}: {:?}", rank, e))?;
         if a.rank() != rank || a.len() != n {
             return Err(format!("rank {}: rank {} len {}", rank, a.rank(), a.len()));
@@ -53,7 +69,7 @@ fn ranks_zero_to_six_are_row_major() -> Result<(), String> {
                 other => return Err(format!("rank {} index {:?}: got {:?}", rank, ix, other)),
             }
         }
-        let mut long: Vec<usize> = shape.clone();
+        let mut long: Vec<usize> = dims(rank, None);
         long.push(0);
         if a.get(&long).is_some() || shape.get(1..).is_some_and(|tail| a.get(tail).is_some()) {
             return Err(format!("rank {}: wrong-rank index accepted", rank));
@@ -71,22 +87,17 @@ fn ranks_zero_to_six_are_row_major() -> Result<(), String> {
 fn an_empty_dim_on_any_axis_empties_the_array() -> Result<(), String> {
     for rank in 1..=6 {
         for axis in 0..rank {
-            let shape: Vec<usize> = DIMS
-                .iter()
-                .take(rank)
-                .enumerate()
-                .map(|(i, &d)| if i == axis { 0 } else { d })
-                .collect();
-            let a = BallArray::from_balls(shape.clone().into_boxed_slice(), balls(0)?)
+            let shape: Vec<usize> = dims(rank, Some(axis));
+            let a = BallArray::from_balls(dims(rank, Some(axis)).into_boxed_slice(), balls(0)?)
                 .map_err(|e| format!("{:?}: {:?}", shape, e))?;
             let zero_ix: Vec<usize> = vec![0; rank];
             if !a.is_empty() || a.rank() != rank || a.get(&zero_ix).is_some() {
                 return Err(format!("{:?}: not an empty rank-{} array", shape, rank));
             }
-            if BallArray::from_balls(shape.clone().into_boxed_slice(), balls(1)?).is_ok() {
+            if BallArray::from_balls(dims(rank, Some(axis)).into_boxed_slice(), balls(1)?).is_ok() {
                 return Err(format!("{:?}: accepted one ball", shape));
             }
-            let z = BallArray::zeros(shape.clone().into_boxed_slice(), 64)
+            let z = BallArray::zeros(dims(rank, Some(axis)).into_boxed_slice(), 64)
                 .map_err(|e| format!("zeros {:?}: {:?}", shape, e))?;
             if !z.is_empty() {
                 return Err(format!("zeros {:?} not empty", shape));
@@ -100,18 +111,15 @@ fn an_empty_dim_on_any_axis_empties_the_array() -> Result<(), String> {
 fn shape_overflow_is_invalid_argument_at_every_rank_and_axis() -> Result<(), String> {
     for rank in 2..=6 {
         for axis in 0..rank {
-            // usize::MAX on `axis`, 2 elsewhere: the product overflows.
-            let shape: Vec<usize> = (0..rank)
-                .map(|i| if i == axis { usize::MAX } else { 2 })
-                .collect();
+            let shape = overflow_shape(rank, axis);
             for (what, r) in [
                 (
                     "from_balls",
-                    BallArray::from_balls(shape.clone().into_boxed_slice(), balls(0)?).map(|_| ()),
+                    BallArray::from_balls(overflow_shape(rank, axis), balls(0)?).map(|_| ()),
                 ),
                 (
                     "zeros",
-                    BallArray::zeros(shape.clone().into_boxed_slice(), 64).map(|_| ()),
+                    BallArray::zeros(overflow_shape(rank, axis), 64).map(|_| ()),
                 ),
             ] {
                 match r {
