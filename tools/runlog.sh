@@ -83,7 +83,7 @@ _rl_run() { # _rl_run JOB CMD...: the wrapper process
     printf '# agent: %s pid: %s\n' "$RUNLOG_AGENT" "$$"
   } >> "$RUNLOG_FILE"
   _rl_tsv add "$(printf '%s\t%s\t%s\t%s\t%s\t%s' "$RUNLOG_AGENT" "$job" "$$" "$RUNLOG_FILE" "$start" "$start")"
-  _rl_beat & _RL_HB=$!
+  _rl_beat < /dev/null > /dev/null 2>&1 & _RL_HB=$!   # off the run's stdout, or a reader of a pipe would wait out the sleep
   trap '_rl_end "$?"' EXIT
   trap '_rl_end 130; exit 130' INT
   trap '_rl_end 143; exit 143' TERM

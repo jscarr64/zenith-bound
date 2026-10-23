@@ -61,6 +61,9 @@ RUNLOG_LIB="$here/runlog.sh" RUNLOG_BEAT_SECS=1 bash "$t/ok.sh" > "$t/ok.out" 2>
 start=$(awk -F'\t' '$2=="ok-job"{print $5}' "$RUNLOG_ROOT/RUNNING.tsv")
 [ -z "$start" ] || fail "ok-job row left behind"
 grep -q "^beatcol 20" "$t/ok.out" || fail "last-beat column empty: $(cat "$t/ok.out")"
+# Piped output must end when the run ends: the heartbeat must not hold the pipe open (default 300 s beat).
+p0=$(date +%s); RUNLOG_LIB="$here/runlog.sh" bash "$t/ok.sh" 2>&1 | cat > /dev/null
+[ $(( $(date +%s) - p0 )) -lt 30 ] || fail "piped run held its output pipe open after exit (heartbeat)"
 okl=$(find "$RUNLOG_ROOT/selftest" -name '*-ok-job.log' | head -1)
 grep -q "^# result: PASS" "$okl" || fail "passing footer: $(tail -2 "$okl")"
 
