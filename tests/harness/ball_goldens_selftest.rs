@@ -85,7 +85,8 @@ fn header_block_is_ten_comment_lines_and_data_follows() -> Result<(), String> {
         &10,
     )?;
     let last = text.lines().nth(9).unwrap_or("");
-    if !last.starts_with("# generated with mpmath ") {
+    // provenance: the oracle venv pins (scripts/goldlib.py require_oracle); a 1.2.1 header is stale
+    if last != "# generated in the oracle venv (mpmath 1.3.0, sympy 1.14.0, gmpy2 2.3.2, python-flint 0.9.0); see scripts/README.md" {
         return Err(format!("last header line {:?}", last));
     }
     Ok(())
