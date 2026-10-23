@@ -8,7 +8,7 @@ export LC_ALL=C
 export PYTHONNOUSERSITE=1
 root=${GOLDENS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 PY=${GOLDENS_PYTHON:-/usr/bin/python3}
-GENERATORS="scripts/gen_goldens.py scripts/gen_ball_goldens.py"
+GENERATORS="scripts/gen_goldens.py scripts/gen_ball_goldens.py scripts/gen_ball_enclosure.py"
 cd "$root" || exit 2
 tmp=$(mktemp -d /tmp/zb-goldens-regen.XXXXXX); trap 'rm -rf "$tmp"' EXIT
 rc=0

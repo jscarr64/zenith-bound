@@ -37,3 +37,12 @@ Operand sets come from `goldlib.SplitMix64` streams of suite `l0b_ball` (same BA
 The Rust side (`tests/common/ballrows.rs`, `tests/harness/ball_goldens_selftest.rs`) re-verifies every row with an independent exact-integer checker: full recomputation for `PREC <= 64` (u128), structural checks only above.
 
 The gate wrappers (`tools/full_gate.sh`, `tools/goldens_regen.sh`) export `PYTHONNOUSERSITE=1` and call `/usr/bin/python3`, so a `pip --user` mpmath in `~/.local` cannot shadow the pinned system mpmath 1.2.1. When running a generator by hand, do the same: `PYTHONNOUSERSITE=1 /usr/bin/python3 scripts/gen_goldens.py`.
+
+## gen_ball_enclosure.py
+
+L0b-7 ball enclosure rows (TEST_PLAN section 9) at the full schedule PS: truth interval rounded outward at W = 2*PREC + 64 and R_ref, for
+containment checks only (tau and lambda are D2, not asserted). Exact Fractions, cross-checked with mpmath.iv.
+
+    /usr/bin/python3 scripts/gen_ball_enclosure.py            # writes tests/goldens/ball_enclosure_rows.txt
+    /usr/bin/python3 scripts/gen_ball_enclosure.py --check DIR # regenerates and compares with DIR/ball_enclosure_rows.txt
+    /usr/bin/python3 scripts/gen_ball_enclosure.py --selftest
