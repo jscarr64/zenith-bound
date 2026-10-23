@@ -86,6 +86,20 @@ cat m.killed m.surv > "$r/tools/mutants/manifest.txt"
 out="$(run --only 001-add-mul)" || fail "--only killed row failed: $out"; echo "$out" | grep -q "1 mutants" || fail "--only: wrong count: $out"
 run --only nope >/dev/null 2>&1 && fail "unknown --only id passed"
 
+# MUTATE_TARGET: a persistent target dir is reused and kept (same verdicts), the fixed worktree is still removed; bad values are refused
+pt="$t/persist-target"; setm m.killed
+out="$(MUTATE_TARGET="$pt" run)" || fail "persistent target: killable mutant not accepted: $out"
+echo "$out" | grep -q "^KILLED 001-add-mul" || fail "persistent target: wrong report: $out"
+[ -d "$pt/debug" ] || fail "persistent target: $pt/debug was not kept"
+touch "$pt/marker"
+setm m.surv; out="$(MUTATE_TARGET="$pt" run)" && fail "persistent target: surviving mutant passed"
+echo "$out" | grep -q "^SURVIVED 002-add-commute" || fail "persistent target: survivor wrong report: $out"
+[ -f "$pt/marker" ] || fail "persistent target: the dir was not reused (marker gone)"
+[ -e "$t/zb-mutate.persist" ] && fail "persistent target: fixed worktree left behind"
+MUTATE_TARGET="relative/dir" run >/dev/null 2>&1 && fail "relative MUTATE_TARGET accepted"
+MUTATE_TARGET="$r/target" run >/dev/null 2>&1 && fail "MUTATE_TARGET inside the repo accepted"
+rm -rf "$pt"
+
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
 echo "mutate selftest: ok"
