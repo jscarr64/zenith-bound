@@ -1,5 +1,8 @@
 # Plan: zenith-bound, rigorous ball arithmetic on zenith-float (revision 2026-10-14)
 
+> **Superseded 2026-10-23 (Paul; CONTRACT O19, O20).** Ball operations take no `RoundingMode`: the midpoint rounds to nearest (`ToEven`) and the radius rounds outward. Wherever this file gives a Ball op an `rm` argument or runs a Ball row "per mode" / "under each mode" / "all modes", read: one call at `ToEven`; per-mode rows apply only to internal `ulp`/`half_ulp` helpers and the zenith-float scalar level, where `RoundingMode::None` is still rejected. `identical` returns `bool`; `contains` and `overlaps` return `Tri`. CONTRACT wins on any remaining conflict.
+
+
 - **Branch under review:** `jscarr64/zenith-float` `cursor/oracle-step1-2-0-0-79c6`, head `508a40039fcb6118d4eb07f14596f0153639298f` (committed 2026-10-14 10:57 CT; `04ba6a8` is in its history). Read through the GitHub connector only. No clone, no push, no PR.
 - **This document:** a plan only. It revises `zenith-bound_PLAN_2026-10-13.md` and folds in Jeff's briefs B1–B9. Part K is the Task 1 audit of zf's rounding that this revision rests on. **Amended 2026-10-14 after an outside review**; every review item and its disposition is in Part R.
 - **Decisions (locked):**
@@ -233,7 +236,7 @@ Provenance: `NOTICE-puremp` at the repo root holds the full MIT text; each porte
   - `Interval { lo, hi }` (inf–sup) with `Ball::to_interval` (lo rounded Down, hi rounded Up) and `Interval::to_ball`, for subdivision (B1).
   - `BallPoly`, `BallSeries` (truncated power series with an order), `BallMat`, `ComplexBallMat` (B1).
   - `Tri { True, False, Unknown }`.
-  - **No `PartialEq`/`PartialOrd` on `Ball`** (or on any ball container). `==` on enclosures is ambiguous. Use `identical(&self, &Ball) -> bool` (same mid bits, same `Mag`, same `prec`) for representation equality and the `Tri` comparisons (`lt`, `le`, `eq`, …) for value questions.
+  - **No `PartialEq`/`PartialOrd` on `Ball`** (or on any ball container). `==` on enclosures is ambiguous. Use `identical(&self, &Ball) -> bool` (O20; `contains` and `overlaps` return `Tri`) (same mid bits, same `Mag`, same `prec`) for representation equality and the `Tri` comparisons (`lt`, `le`, `eq`, …) for value questions.
   - `DomainPolicy { Strict, Clip }` (see Part L clause 7): one enum, an **explicit last parameter** on every op that has a domain (`tan` included); `Strict` is `Default::default()` only, there are no paired `foo()`/`foo_policy()` forms (O6 decided 2026-10-16, Paul under Jeff's delegation, Rusty recommended).
 - **Precision is explicit** on every op: `fn add(&self, b: &Ball, prec: u32, rm: RoundingMode) -> BoundResult<Ball>`. `rm` only shapes the midpoint; it never affects correctness (B1: "mid rounded to prec p with rm").
 - **Results and error kinds** (B2):
@@ -525,7 +528,7 @@ Jeff discounts AI timeline estimates, so this table gives **relative runs only**
 
 ## Part J. Bit-identical ball results across machines and builds
 
-**Goal.** For a given (op, inputs, prec, rm, crate version), the output midpoint *and* radius are byte-identical on every supported platform and in debug and release builds. Golden hash files enforce this.
+**Goal.** For a given (op, inputs, prec, crate version), the output midpoint *and* radius are byte-identical on every supported platform and in debug and release builds. Golden hash files enforce this.
 
 **Sources of nondeterminism to ban (each has a lint or test):**
 
