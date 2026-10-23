@@ -1,8 +1,9 @@
 diff --git a/src/array.rs b/src/array.rs
+index 925bfdd..09196aa 100644
 --- a/src/array.rs
 +++ b/src/array.rs
-@@ -223,7 +223,7 @@
- fn element_count(op: &'static str, shape: &[usize]) -> BoundResult<usize> {
+@@ -227,7 +227,7 @@ fn element_count(op: &'static str, shape: &[usize]) -> BoundResult<usize> {
+     }
      shape
          .iter()
 -        .try_fold(1usize, |acc, &d| acc.checked_mul(d))
