@@ -175,3 +175,24 @@ fn from_balls_rejects_more_balls_than_the_shape() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn zeros_too_large_to_allocate_is_resource_not_abort() -> Result<(), String> {
+    // Gap F7 (API freeze): allocation failure is BoundError::Resource, never an abort. The
+    // shape product fits in usize, so this is not InvalidArgument; the byte size does not.
+    for shape in [[1usize << 60], [usize::MAX / 2]] {
+        match BallArray::zeros(Box::new(shape), 64) {
+            Err(BoundError::Resource {
+                op: "BallArray::zeros",
+                ..
+            }) => {}
+            other => {
+                return Err(format!(
+                    "zeros({:?}): want Resource, got {:?}",
+                    shape, other
+                ))
+            }
+        }
+    }
+    Ok(())
+}

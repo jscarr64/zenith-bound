@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Allocation failure is `Resource`, never an abort, for storage zenith-bound sizes from caller input (API freeze F7; CONTRACT 15.5). `BallArray::zeros` with a shape too large to allocate returns `Resource`.
 - `Tri` is documented as exhaustive (API freeze F2): `{True, False, Unknown}` is the complete set; no `#[non_exhaustive]`. CONTRACT 15.2.
 - `BoundError::NotConverged { op, detail }` (Paul, 2026-10-23): an iteration out of budget (e.g. `EigOpts::max_sweeps`) returns it, never a silently loose answer. CONTRACT O11-W.
 - `Enclosure::contains` for `Ball` is tight (Paul's ruling, 2026-10-23): when `rad` is a zenith-float value, False is returned exactly when `|mid - x| > rad` (e.g. `1 ± 1` vs `-2^-300` is now False, was Unknown). Unknown remains only for NaN-producing input, an overflowing working precision, or a `rad` outside zenith-float's exponent range. The lower-bracket fallback is gone. Exact-order property tests in `tests/mag/contains_exact.rs`.
