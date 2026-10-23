@@ -11,7 +11,7 @@
 # The rules are the zero-clone, no-unwrap/expect/panic/unreachable/todo/unimplemented (test code included), no-allow, no-unsafe,
 # no-float rules.
 # mutants runs the mutant-runner self-test, then the WHOLE manifest (tools/mutants/manifest.txt) with a persistent MUTATE_TARGET (default
-# "$CARGO_TARGET_DIR-mutate", outside the repo); any SURVIVED (not in EQUIVALENT.txt) or INVALID mutant fails the step.
+# "$CARGO_TARGET_DIR/mutate", inside the one target dir, outside the repo); any SURVIVED (not in EQUIVALENT.txt) or INVALID mutant fails the step.
 # toolchain (first step) prints which rustc/cargo run and fails unless both match rust-toolchain.toml's channel (Pop has rustc 1.95 in
 # /usr/bin; a PATH without ~/.cargo/bin first must not build silently with it). Callers: export PATH="$HOME/.cargo/bin:$PATH".
 set -u
@@ -58,5 +58,5 @@ run goldens-regen "require /usr/bin/python3 sha256sum grep && tools/goldens_rege
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"
-run mutants "require cargo git timeout grep && tools/mutate_selftest.sh && MUTATE_TARGET=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:-/tmp/zb-target}-mutate} tools/mutate.sh"
+run mutants "require cargo git timeout grep && tools/mutate_selftest.sh && MUTATE_TARGET=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:-/tmp/zb-target}/mutate} tools/mutate.sh"
 echo "done" >> "$T/$tag.rc"
