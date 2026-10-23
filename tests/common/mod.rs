@@ -6,6 +6,7 @@
 //! `never used` error. Add the item and its use in the same commit.
 pub mod ballrows;
 pub mod digest;
+pub mod edges;
 pub mod generators;
 pub mod goldens;
 pub mod modular;

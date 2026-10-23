@@ -4,6 +4,7 @@
 mod common;
 
 mod ball_goldens_selftest;
+mod edges_selftest;
 mod fuzz_mag;
 mod generators_selftest;
 mod goldens_selftest;
