@@ -9,6 +9,8 @@
 #   tools/fuzz_deep.sh --replay <seed hex>:<case>                           one case, the replay line's seed=... and case=...
 #   tools/fuzz_deep.sh --selftest                                             proves argument checks, shard seeds, a small run and replay
 # Deep runs are env-driven: CARGO_TARGET_DIR (default /tmp/target-fuzz-deep), CARGO_BUILD_JOBS (default 7). No repo file is written.
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap fuzz_deep "$@"   # run log (tools/runlog.sh)
 set -u
 export LC_ALL=C
 root=$(cd "$(dirname "$0")/.." && pwd)

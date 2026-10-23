@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Self-test for tools/rules_scan.sh (zenith-bound): every banned pattern is flagged on ADDED lines in src/, tests/, benches/ and examples/ alike (there is no test-code exemption), removed/context lines, comments, strings and non-Rust paths are not flagged, the allowlist works, git modes work, and both count baselines only go down.
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap rules_scan_selftest "$@"   # run log (tools/runlog.sh)
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d)"; trap 'rm -rf "$t"' EXIT
 scan() { "$here/rules_scan.sh" "$@"; }

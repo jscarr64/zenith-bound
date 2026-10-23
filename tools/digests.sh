@@ -8,6 +8,8 @@
 # The '#' lines of a run file (arch, pointer width) are not compared. Env: DIGESTS_CARGO (default cargo), DIGESTS_TMP (where the test writes;
 # default <target dir>/tmp, or <target dir>/<triple>/tmp with --target). A manifest line is a target triple or `host`; a target needs its std installed and a way to
 # execute its binaries (a native one, or CARGO_TARGET_<TRIPLE>_RUNNER); a run that fails makes the job fail, it is never skipped.
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap digests "$@"   # run log (tools/runlog.sh)
 set -u
 export LC_ALL=C
 root="$(cd "$(dirname "$0")/.." && pwd)"

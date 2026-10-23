@@ -3,6 +3,8 @@
 # Proves the runner KILLS a real mutant, reports a surviving mutant as SURVIVED (exit nonzero), accepts it only when documented as
 # equivalent, flags a non-building mutant and a non-applying patch as INVALID, counts a timeout as a kill, passes with 0 mutants,
 # and ALWAYS removes its worktree. The repo under test is never touched.
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap mutate_selftest "$@"   # run log (tools/runlog.sh)
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/mutate-selftest.XXXXXX)"; trap 'rm -rf "$t"' EXIT
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }

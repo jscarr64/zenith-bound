@@ -24,6 +24,8 @@ Only Jeff changes these; a diff touching them is rejected and sent to him: `.git
 
 `tools/full_gate.sh TAG` runs, each step logged under `/tmp/zb-gate-logs/`: `cargo test --no-run` (`build-tests`: a nonzero rc here is a compile error, not a red test), `cargo test` (debug, release), the rules-scan self-test and `tools/rules_scan.sh` over the commit range, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and grep scans for unsafe, floats, panics (including the assert family) and clones (`derive-scan` also sees a multi-line derive). On Pop run it as `flock /tmp/pop-gate.lock tools/full_gate.sh TAG` with `CARGO_TARGET_DIR=/tmp/target-spence CARGO_BUILD_JOBS=7`. The library crate also denies `missing_docs`, `clippy::allow_attributes` and `clippy::arithmetic_side_effects` (`src/lib.rs`). Run it on **every** commit, not just the last. `tools/rules_scan.sh --working` (after `git add -A`) scans uncommitted work. The scan was derived from zenith-float's (`d12a156`), with the test-code exemption removed.
 
+Every run on Pop gets a run log (`~/pop-logs/`): `tools/*.sh` scripts log themselves through `tools/runlog.sh`; wrap any other verify or test run as `tools/runlog.sh JOB [--tests] -- CMD`.
+
 **Not yet present** (earlier drafts of this file promised them; they are planned, and each lands in its own reviewed commit): `scripts/check_no_float.sh`, a HIR scan, the `thumbv6m-none-eabi` no-FPU build and symbol check (which also needs a decision on `#![no_std]`), `fpu-check/`, `cargo-deny`, `cargo-semver-checks`, CI workflows, `docs/audits/`. Until they exist, nothing here claims to be checked by them.
 
 ## Clean-room rule (LGPL oracles)

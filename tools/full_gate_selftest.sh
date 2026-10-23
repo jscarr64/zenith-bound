@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Self-test of tools/full_gate.sh: no step may pass VACUOUSLY when the tool it calls is missing (a `! grep ...` step passes if grep is absent),
 # and the scan steps must still catch a planted hit and pass a clean tree. Runs the gate on throwaway fixtures under /tmp with GATE_STEPS.
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap full_gate_selftest "$@"   # run log (tools/runlog.sh)
 set -u
 export LC_ALL=C
 root=$(cd "$(dirname "$0")/.." && pwd)

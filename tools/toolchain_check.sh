@@ -4,6 +4,8 @@
 # pinned by the toolchain file's `channel` ("1.99" matches 1.99 and 1.99.x, not 1.990). A missing file, a channel that is not a pinned
 # version (e.g. "stable"), or a missing rustc/cargo also fails. Why: on Pop /usr/bin/rustc is 1.95 and a PATH without ~/.cargo/bin first
 # silently builds with it.
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap toolchain_check "$@"   # run log (tools/runlog.sh)
 set -u
 f=${1:-rust-toolchain.toml}
 [ -r "$f" ] || { echo "toolchain: cannot read $f"; exit 2; }

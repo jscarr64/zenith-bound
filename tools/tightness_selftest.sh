@@ -3,6 +3,8 @@
 # unchanged or improved result and FAILS on every failure mode (worse maximum, unrecorded cell, cell that disappeared, malformed results,
 # malformed baseline), that --update never raises a baseline, and that the report prints the per-op/per-precision table.
 # The RESULTS fixture below is byte-identical to the text pinned by tests/harness/tightness_selftest.rs (the Rust writer): format agreement.
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap tightness_selftest "$@"   # run log (tools/runlog.sh)
 set -u
 export LC_ALL=C PYTHONNOUSERSITE=1
 here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/tightness-selftest.XXXXXX)"; trap 'rm -rf "$t"' EXIT

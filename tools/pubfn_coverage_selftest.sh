@@ -2,6 +2,8 @@
 # Self-test for tools/pubfn_coverage.sh: builds fixture trees under /tmp at run time and proves the check
 # (1) lists exactly the expected public items, (2) PASSES on a clean fixture, (3) FAILS on each failure mode
 # (UNCOVERED, STALE, NOTEST), (4) honours the exemption list for UNCOVERED only. No repo files are touched.
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap pubfn_coverage_selftest "$@"   # run log (tools/runlog.sh)
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/pubfn-selftest.XXXXXX)"; trap 'rm -rf "$t"' EXIT
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }

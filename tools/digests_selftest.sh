@@ -3,6 +3,8 @@
 # name the arch) and FAILS, naming the first differing line, on each failure mode (a changed digest, a changed word count, a missing suite row,
 # an extra row, runs that agree with each other but not with the expected file, no runs at all, a missing expected file); and a fake cargo
 # proves `run` builds the right command lines (profile, --target, test threads) and fails when a run fails or writes no file.
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap digests_selftest "$@"   # run log (tools/runlog.sh)
 set -u
 export LC_ALL=C
 here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/digests-selftest.XXXXXX)"; trap 'rm -rf "$t"' EXIT

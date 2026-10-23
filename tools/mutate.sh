@@ -18,6 +18,8 @@
 #   SURVIVED             the suite passed on the mutant: exit 1 (unless the id is in EQUIVALENT.txt: SURVIVED-EQUIVALENT, not a failure)
 #   INVALID              the patch does not apply or the mutant does not build (proves nothing): exit 1
 # Exit 0 only if every mutant was KILLED or SURVIVED-EQUIVALENT (0 mutants is exit 0).
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap mutate "$@"   # run log (tools/runlog.sh)
 set -u
 export LC_ALL=C
 repo=${MUTATE_REPO:-$(cd "$(dirname "$0")/.." && pwd)}

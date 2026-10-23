@@ -14,6 +14,8 @@
 # "$CARGO_TARGET_DIR/mutate", inside the one target dir, outside the repo); any SURVIVED (not in EQUIVALENT.txt) or INVALID mutant fails the step.
 # toolchain (first step) prints which rustc/cargo run and fails unless both match rust-toolchain.toml's channel (Pop has rustc 1.95 in
 # /usr/bin; a PATH without ~/.cargo/bin first must not build silently with it). Callers: export PATH="$HOME/.cargo/bin:$PATH".
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap full_gate "$@"   # run log (tools/runlog.sh)
 set -u
 # PYTHONNOUSERSITE=1: nothing from ~/.local outside a venv (the golden generators run in ~/.local/oracle-venv; see tools/goldens_regen.sh).
 export PYTHONNOUSERSITE=1
@@ -39,7 +41,8 @@ no_hits() { # no_hits <exclude-ERE or ''> <grep args...>  (grep runs over the ex
 export -f require no_hits
 run() { name=$1; shift
   case " ${GATE_STEPS:-$name} " in *" $name "*) ;; *) return 0 ;; esac
-  echo "start $name $(date +%T)" >> "$T/$tag.rc"; timeout "${STEP_TIMEOUT:-20m}" bash -c "$*" > "$T/$tag-$name.log" 2>&1; echo "$name=$?" >> "$T/$tag.rc"; }
+  local tf=(); case $name in build-debug|build-release) tf=(--tests) ;; esac   # a test step that runs zero tests fails (runlog_step)
+  echo "start $name $(date +%T)" >> "$T/$tag.rc"; runlog_step "${tf[@]}" "$name" -- timeout "${STEP_TIMEOUT:-20m}" bash -c "$*" > "$T/$tag-$name.log" 2>&1; echo "$name=$?" >> "$T/$tag.rc"; }
 run toolchain "require rustc cargo sed && tools/toolchain_check_selftest.sh && tools/toolchain_check.sh"
 run build-tests "require cargo && cargo test --no-run"
 run build-debug "require cargo && cargo test"

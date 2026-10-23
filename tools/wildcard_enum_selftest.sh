@@ -11,6 +11,8 @@
 #   5. Cargo.toml also has `match_wildcard_for_single_variants = "deny"`; a SINGLE-variant sample (`A => .., _ => ..` over a two-variant enum) FAILS
 #      with the repo's lints and PASSES with that line stripped.
 # No repo file is touched. Offline, no dependencies. usage: tools/wildcard_enum_selftest.sh
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap wildcard_enum_selftest "$@"   # run log (tools/runlog.sh)
 set -u
 export LC_ALL=C
 root=${WILDCARD_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
