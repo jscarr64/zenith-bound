@@ -1,11 +1,12 @@
+#!/home/jsc64/.local/oracle-venv/bin/python
 """
 Generates tests/goldens/ball_enclosure_rows.txt (TEST_PLAN section 9 enclosure rows, checklist L0b-7 "enclosure rows at PS"): for add, sub, mul,
 div and sqrt on BALL inputs (mid, rad) at every precision of the full schedule PS (41 values), the TRUTH INTERVAL [LO, HI] of the exact image of
 the input ball(s), rounded OUTWARD to W = 2*PREC + 64 bits, and the reference radius RREF of section 9 (R_ref = max over the sample points s of
-|f(s) - f(m)| plus U, U one ulp of f(m)'s binade at PREC), rounded UP to 64 bits. One row serves every rounding mode. Run with /usr/bin/python3:
-    /usr/bin/python3 scripts/gen_ball_enclosure.py              write tests/goldens/ball_enclosure_rows.txt
-    /usr/bin/python3 scripts/gen_ball_enclosure.py --check DIR  regenerate into DIR (never tests/goldens) and compare byte for byte
-    /usr/bin/python3 scripts/gen_ball_enclosure.py --selftest   the generator's own negative tests
+|f(s) - f(m)| plus U, U one ulp of f(m)'s binade at PREC), rounded UP to 64 bits. One row serves every rounding mode. Run with ~/.local/oracle-venv/bin/python:
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_enclosure.py              write tests/goldens/ball_enclosure_rows.txt
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_enclosure.py --check DIR  regenerate into DIR (never tests/goldens) and compare byte for byte
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_enclosure.py --selftest   the generator's own negative tests
 
 CONTAINMENT ONLY. A consumer asserts that its output ball contains [LO, HI]. The tight and loose checks (rad <= tau*R_ref, rad <= lambda*R_ref) are NOT
 asserted anywhere: tau and lambda are placeholders (D2, Rusty). RREF is recorded so they can be added when D2 is decided.
@@ -47,7 +48,7 @@ HEADER = [
     "# RREF = max over sample points s of |f(s) - f(m)| + U (U = one ulp of f(m)'s binade at PREC), rounded up to 64 bits; NOT asserted (D2 open)",
     "# containment check for any mode: output ball contains [LO, HI]. Divisors exclude 0, sqrt inputs lie in [0, inf)",
     "# rows sorted by (OP order above, PREC, row text); draws: goldlib.SplitMix64 from stream_seed(2, 1), not bit-identical to the Rust draws",
-    "# generated with mpmath 1.2.1 by /usr/bin/python3; see scripts/README.md",
+    "# generated in the oracle venv (mpmath 1.3.0, sympy 1.14.0, gmpy2 2.3.2, python-flint 0.9.0); see scripts/README.md",
 ]
 
 
@@ -326,7 +327,7 @@ def main(argv):
         return 0
     if argv == ["--selftest"]:
         return 0
-    raise SystemExit("usage: /usr/bin/python3 scripts/gen_ball_enclosure.py [--check DIR | --selftest]")
+    raise SystemExit("usage: ~/.local/oracle-venv/bin/python scripts/gen_ball_enclosure.py [--check DIR | --selftest]")
 
 
 if __name__ == "__main__":

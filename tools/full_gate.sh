@@ -15,7 +15,7 @@
 # toolchain (first step) prints which rustc/cargo run and fails unless both match rust-toolchain.toml's channel (Pop has rustc 1.95 in
 # /usr/bin; a PATH without ~/.cargo/bin first must not build silently with it). Callers: export PATH="$HOME/.cargo/bin:$PATH".
 set -u
-# PYTHONNOUSERSITE=1: a stray ~/.local mpmath (e.g. 1.3.0) must not shadow the pinned system mpmath 1.2.1 that the golden generators require.
+# PYTHONNOUSERSITE=1: nothing from ~/.local outside a venv (the golden generators run in ~/.local/oracle-venv; see tools/goldens_regen.sh).
 export PYTHONNOUSERSITE=1
 T=${T:-/tmp/zb-gate-logs}; mkdir -p "$T"
 cd "${REPO:-$(cd "$(dirname "$0")/.." && pwd)}" || exit 2
@@ -54,7 +54,7 @@ run no-clone-scan "no_hits ':[0-9]+:\s*(//|\*)' -rn --include='*.rs' -E '\.clone
 run derive-scan "no_hits '' -rPzl --include='*.rs' '#\\[derive\\([^)]*\\b(Clone|Copy)\\b'"
 run gate-selftest "require mktemp ln sed grep wc && tools/full_gate_selftest.sh"
 run pubfn-coverage "require awk grep git && tools/pubfn_coverage_selftest.sh && tools/pubfn_coverage.sh"
-run goldens-regen "require /usr/bin/python3 sha256sum grep && tools/goldens_regen.sh"
+run goldens-regen "require sha256sum grep cmp && tools/goldens_regen.sh"
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"
