@@ -183,3 +183,18 @@ fn contains_is_tight_at_both_edges() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn contains_stays_unknown_when_rad_is_past_zenith_float_range() -> Result<(), String> {
+    // d = max - (-max) = 2 max overflows to +Inf in zenith-float, and rad = 2 max is no zf value either, so the
+    // comparison cannot be decided there; the true answer is True, so the one wrong answer is False.
+    let m = Mag::from_exact_num(&ExactNum::max_value(64));
+    let exp = m.exp().ok_or("exp")?.checked_add(1).ok_or("exp+1")?;
+    let rad = Mag::finite(m.mant().ok_or("mant")?, exp).map_err(|e| format!("{:?}", e))?;
+    let b = Ball::from_mid_rad(ExactNum::max_value(64), rad, 64).map_err(|e| format!("{:?}", e))?;
+    let t = b.contains(&-ExactNum::max_value(64));
+    if t == Tri::False {
+        return Err("max ± 2 max vs -max: False is wrong".into());
+    }
+    Ok(())
+}

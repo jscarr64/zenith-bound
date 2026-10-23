@@ -152,11 +152,9 @@ src/enclosure.rs:Ball::contains	134-C-loadd	134-C-loadd.patch	enclosure
 src/enclosure.rs:Ball::contains	135-C-nanu	135-C-nanu.patch	enclosure
 src/enclosure.rs:Ball::contains	136-C-upmax	136-C-upmax.patch	enclosure
 src/enclosure.rs:Ball::contains	137-C-uple	137-C-uple.patch	enclosure
-src/enclosure.rs:Ball::contains	138-C-lowgt	138-C-lowgt.patch	enclosure
-src/enclosure.rs:Ball::contains	139-C-lopos	139-C-lopos.patch	enclosure
-src/enclosure.rs:Ball::contains	140-C-hineg	140-C-hineg.patch	enclosure
-src/enclosure.rs:Ball::contains	141-C-lozero	141-C-lozero.patch	enclosure
-src/enclosure.rs:Ball::contains	142-C-lohi	142-C-lohi.patch	enclosure
+src/enclosure.rs:Ball::contains	166-C-tightok	166-C-tightok.patch	enclosure
+src/enclosure.rs:Ball::contains	167-C-tighterr	167-C-tighterr.patch	enclosure
+src/enclosure.rs:Ball::contains	168-C-tightdrop	168-C-tightdrop.patch	enclosure
 src/enclosure.rs:working_prec	143-C-wpmin	143-C-wpmin.patch	enclosure
 src/enclosure.rs:working_prec	144-C-wpguard	144-C-wpguard.patch	enclosure
 src/array.rs:element_count	145-A-countmul	145-A-countmul.patch	array
