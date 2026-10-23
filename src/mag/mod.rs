@@ -66,7 +66,10 @@ impl Mag {
     pub fn finite(mant: u64, exp: i64) -> Result<Mag, BoundError> {
         match NonZeroU64::new(mant) {
             None if exp == 0 => Ok(Mag::zero()),
-            None => Err(BoundError::Representation),
+            None => Err(BoundError::Representation {
+                op: "Mag::finite",
+                detail: "zero mantissa with nonzero exponent",
+            }),
             Some(nonzero) => {
                 // A nonzero `u64` has at most 63 leading zeros, so the shift below drops only
                 // zero bits and loses nothing.
@@ -77,7 +80,10 @@ impl Mag {
                 let exp = i128::from(exp)
                     .checked_sub(i128::from(shift))
                     .and_then(|adjusted| i64::try_from(adjusted).ok())
-                    .ok_or(BoundError::Representation)?;
+                    .ok_or(BoundError::Representation {
+                        op: "Mag::finite",
+                        detail: "below the smallest positive Mag",
+                    })?;
                 Ok(Mag::from_canonical(exp, mant << shift))
             }
         }

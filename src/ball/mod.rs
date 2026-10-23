@@ -37,7 +37,10 @@ impl Ball {
     pub fn from_mid_rad(mid: ExactNum, rad: Mag, prec: u32) -> BoundResult<Ball> {
         check_prec(prec)?;
         if mid.is_nan() || mid.is_inf() {
-            return Err(BoundError::Representation);
+            return Err(BoundError::Representation {
+                op: "Ball::from_mid_rad",
+                detail: "NaN or infinite midpoint",
+            });
         }
         if rad.is_infinity() {
             return Ball::all_reals(prec);
@@ -96,7 +99,10 @@ impl Ball {
 /// `prec == 0` is rejected before zenith-float sees it (CONTRACT 8.1, O17-W).
 fn check_prec(prec: u32) -> Result<(), BoundError> {
     match prec {
-        0 => Err(BoundError::InvalidArgument),
+        0 => Err(BoundError::InvalidArgument {
+            op: "Ball",
+            detail: "prec must be at least 1",
+        }),
         1..=u32::MAX => Ok(()),
     }
 }

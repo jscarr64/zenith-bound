@@ -199,7 +199,7 @@ fn to_exact_num_rejects_unrepresentable() -> Result<(), String> {
     ];
     for (name, m) in cases {
         match m.to_exact_num() {
-            Err(BoundError::Representation) => {}
+            Err(BoundError::Representation { .. }) => {}
             Ok(_) => return Err(format!("{}: accepted", name)),
             Err(e) => return Err(format!("{}: wrong error {:?}", name, e)),
         }
@@ -216,7 +216,7 @@ fn wide_exponent_sweep_round_trips_or_rejects() -> Result<(), String> {
         let in_range = e >= emin() - 63 && e <= emax();
         match (m.to_exact_num(), in_range) {
             (Ok(x), true) => is_parts("sweep", &Mag::from_exact_num(&x), TOP, e)?,
-            (Err(BoundError::Representation), false) => {}
+            (Err(BoundError::Representation { .. }), false) => {}
             (r, _) => {
                 return Err(format!(
                     "exp {}: in_range {} got {:?}",

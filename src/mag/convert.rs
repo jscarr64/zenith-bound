@@ -48,12 +48,16 @@ impl Mag {
     /// `Representation` when `self` is `Infinity` or its exponent lies outside zf's exponent range.
     pub fn to_exact_num(&self) -> Result<ExactNum, BoundError> {
         let Some((exp, mant)) = self.finite_parts() else {
-            return Err(BoundError::Representation);
+            return Err(BoundError::Representation {
+                op: "Mag::to_exact_num",
+                detail: "Infinity has no ExactNum value",
+            });
         };
         if mant == 0 {
             return Ok(ExactNum::new(EXACT_PREC));
         }
-        ExactNum::from_mag_parts(mant, exp, EXACT_PREC).map_err(map_zf_error)
+        ExactNum::from_mag_parts(mant, exp, EXACT_PREC)
+            .map_err(|e| map_zf_error("Mag::to_exact_num", e))
     }
 
     /// `(exp, mant)` of a finite `Mag`, including the canonical zero.
@@ -66,10 +70,27 @@ impl Mag {
 }
 
 /// zf errors in zb terms (CONTRACT O2 table; PLAN: `PrecisionRetryExhausted` is `Resource`).
-fn map_zf_error(e: Error) -> BoundError {
+fn map_zf_error(op: &'static str, e: Error) -> BoundError {
     match e {
-        Error::ExponentOverflow(_) | Error::InvalidArgument => BoundError::Representation,
-        Error::DivisionByZero => BoundError::Domain,
-        Error::PrecisionRetryExhausted | Error::MemoryAllocation => BoundError::Resource,
+        Error::ExponentOverflow(_) => BoundError::Representation {
+            op,
+            detail: "zf exponent overflow",
+        },
+        Error::InvalidArgument => BoundError::Representation {
+            op,
+            detail: "zf invalid argument",
+        },
+        Error::DivisionByZero => BoundError::Domain {
+            op,
+            detail: "zf division by zero",
+        },
+        Error::PrecisionRetryExhausted => BoundError::Resource {
+            op,
+            detail: "zf precision retry exhausted",
+        },
+        Error::MemoryAllocation => BoundError::Resource {
+            op,
+            detail: "zf memory allocation",
+        },
     }
 }

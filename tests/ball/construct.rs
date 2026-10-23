@@ -23,7 +23,7 @@ fn ok(what: &str, r: Result<Ball, BoundError>) -> Result<Ball, String> {
 
 fn want_err(what: &str, r: Result<Ball, BoundError>, want: BoundError) -> Result<(), String> {
     match r {
-        Err(e) if e == want => Ok(()),
+        Err(e) if core::mem::discriminant(&e) == core::mem::discriminant(&want) => Ok(()),
         Err(e) => Err(format!("{}: want {:?}, got {:?}", what, want, e)),
         Ok(b) => Err(format!("{}: want {:?}, got Ok({:?})", what, want, b)),
     }
@@ -38,42 +38,46 @@ fn prec_zero_is_invalid_argument() -> Result<(), String> {
     want_err(
         "exact(3, 0)",
         Ball::exact(num(3), 0),
-        BoundError::InvalidArgument,
+        BoundError::InvalidArgument { op: "", detail: "" },
     )?;
     want_err(
         "from_mid_rad(3, 0, 0)",
         Ball::from_mid_rad(num(3), Mag::zero(), 0),
-        BoundError::InvalidArgument,
+        BoundError::InvalidArgument { op: "", detail: "" },
     )?;
     want_err(
         "from_mid_rad(3, inf, 0)",
         Ball::from_mid_rad(num(3), Mag::infinity(), 0),
-        BoundError::InvalidArgument,
+        BoundError::InvalidArgument { op: "", detail: "" },
     )?;
     want_err(
         "all_reals(0)",
         Ball::all_reals(0),
-        BoundError::InvalidArgument,
+        BoundError::InvalidArgument { op: "", detail: "" },
     )
 }
 
 #[test]
 fn nan_and_inf_mid_are_representation() -> Result<(), String> {
     for (name, x) in [("NAN", NAN), ("INF_POS", INF_POS), ("INF_NEG", INF_NEG)] {
-        want_err(name, Ball::exact(x, 64), BoundError::Representation)?;
+        want_err(
+            name,
+            Ball::exact(x, 64),
+            BoundError::Representation { op: "", detail: "" },
+        )?;
     }
     for (name, x) in [("NAN", NAN), ("INF_POS", INF_POS), ("INF_NEG", INF_NEG)] {
         want_err(
             name,
             Ball::from_mid_rad(x, mag(TOP, 1)?, 64),
-            BoundError::Representation,
+            BoundError::Representation { op: "", detail: "" },
         )?;
     }
     // A NaN midpoint stays an error even with an Infinity radius (6.2: never stored, not silently canonicalised).
     want_err(
         "NAN ± inf",
         Ball::from_mid_rad(NAN, Mag::infinity(), 64),
-        BoundError::Representation,
+        BoundError::Representation { op: "", detail: "" },
     )
 }
 
