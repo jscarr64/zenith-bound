@@ -1,6 +1,7 @@
 //! API-freeze unit 5 (Paul/Rusty 2026-10-23): every public prec is `Precision` (= zf's `usize` alias), validated
 //! at the constructors against `MIN_PRECISION..=MAX_PRECISION` (`min(2^60, usize::MAX/4) - 1`, zf w6 defs.rs).
-//! COVERS: Precision, MIN_PRECISION, MAX_PRECISION
+//! COVERS: Ball::exact, Ball::all_reals, Ball::from_mid_rad, BallArray::zeros
+//! (Precision, MIN_PRECISION and MAX_PRECISION are a type alias and consts, which pubfn_coverage does not list.)
 
 use zenith_bound::array::BallArray;
 use zenith_bound::ball::Ball;
