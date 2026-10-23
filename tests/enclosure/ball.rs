@@ -160,3 +160,26 @@ fn contains_works_at_the_wider_operand_precision() -> Result<(), String> {
         )),
     }
 }
+
+#[test]
+fn contains_is_tight_at_both_edges() -> Result<(), String> {
+    // Paul's ruling 2026-10-23: contains is tight. |mid - x| = 1 + 2^-300 > 1 = rad is decided, so the answer is False,
+    // at the lower edge (1 ± 1 vs -2^-300, mirror -1 ± 1 vs 2^-300) and the upper edge (1 ± 1 vs 2 + 2^-300, mirror
+    // -1 ± 1 vs -2 - 2^-300). Formerly Unknown (L0b survivors 138-C-lowgt, 141-C-lozero, 142-C-lohi).
+    let rm = zenith_float_num::RoundingMode::Down;
+    let up_edge = n(2).add(&pow2(-300, false), 600, rm);
+    let down_edge = n(-2).sub(&pow2(-300, false), 600, rm);
+    let cases = [
+        ("1±1 vs -2^-300", ball(1, 0, 64)?, pow2(-300, true)),
+        ("-1±1 vs 2^-300", ball(-1, 0, 64)?, pow2(-300, false)),
+        ("1±1 vs 2 + 2^-300", ball(1, 0, 64)?, up_edge),
+        ("-1±1 vs -2 - 2^-300", ball(-1, 0, 64)?, down_edge),
+    ];
+    for (what, b, x) in cases {
+        let t = b.contains(&x);
+        if t != Tri::False {
+            return Err(format!("{}: want False, got {:?}", what, t));
+        }
+    }
+    Ok(())
+}
