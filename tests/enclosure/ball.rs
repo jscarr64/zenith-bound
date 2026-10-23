@@ -1,6 +1,6 @@
 //! PLAN C5 (2026-10-23): sealed `Enclosure` with `prec`, `identical -> bool`, `contains -> Tri`;
 //! CONTRACT 6.5 b (identical includes prec), O20. Oracle: hand-built balls of small dyadics.
-//! COVERS: Enclosure::prec, Enclosure::identical, Enclosure::contains
+//! COVERS: Enclosure for Ball, Sealed for Ball
 
 use zenith_bound::ball::Ball;
 use zenith_bound::enclosure::Enclosure;
