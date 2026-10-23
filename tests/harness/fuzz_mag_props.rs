@@ -640,7 +640,7 @@ pub fn mono_case(ops: &Ops, which: &Mono, rng: &mut SplitMix64) -> Result<u8, Ba
     let rel = match which {
         Mono::MulUp | Mono::MulLower => Rel::Sum,
         Mono::DivUp | Mono::DivLower => Rel::Diff,
-        _ => Rel::Any,
+        Mono::AddUp | Mono::SqrtUp | Mono::SqrtLower | Mono::SubLower => Rel::Any,
     };
     let c = draw_case(rng, &rel).map_err(bare)?;
     let mut run = || -> Result<u8, String> {
@@ -648,35 +648,39 @@ pub fn mono_case(ops: &Ops, which: &Mono, rng: &mut SplitMix64) -> Result<u8, Ba
         let ((blo_e, blo_m), (bhi_e, bhi_m)) = draw_partner(rng, gen_prec(c.prec)?, c.eb, c.mb)?;
         let (alo, ahi) = (mag_from(alo_m, alo_e)?, mag_from(ahi_m, ahi_e)?);
         let (blo, bhi) = (mag_from(blo_m, blo_e)?, mag_from(bhi_m, bhi_e)?);
-        match which {
-            Mono::SqrtUp | Mono::SqrtLower => {
-                let f = if matches!(which, Mono::SqrtUp) {
-                    ops.sqrt_up
-                } else {
-                    ops.sqrt_lower
-                };
-                le("sqrt in the argument", &ap1(f, &alo)?, &ap1(f, &ahi)?)?;
+        // (binary op, second argument non-increasing) or the unary sqrt
+        let (f, decreasing) = match which {
+            Mono::SqrtUp => {
+                return le(
+                    "sqrt in the argument",
+                    &ap1(ops.sqrt_up, &alo)?,
+                    &ap1(ops.sqrt_up, &ahi)?,
+                )
+                .map(|()| FIN)
             }
-            _ => {
-                let f = match which {
-                    Mono::AddUp => ops.add_up,
-                    Mono::MulUp => ops.mul_up,
-                    Mono::MulLower => ops.mul_lower,
-                    Mono::DivUp => ops.div_up,
-                    Mono::DivLower => ops.div_lower,
-                    _ => ops.sub_lower,
-                };
-                // first argument: nondecreasing for every binary operation
-                le("first argument", &ap2(f, &alo, &blo)?, &ap2(f, &ahi, &blo)?)?;
-                // second argument: nondecreasing for add and mul, non-increasing for div and sub
-                let (x, y) = (ap2(f, &alo, &blo)?, ap2(f, &alo, &bhi)?);
-                match which {
-                    Mono::DivUp | Mono::DivLower | Mono::SubLower => {
-                        le("second argument (non-increasing)", &y, &x)?
-                    }
-                    _ => le("second argument", &x, &y)?,
-                }
+            Mono::SqrtLower => {
+                return le(
+                    "sqrt in the argument",
+                    &ap1(ops.sqrt_lower, &alo)?,
+                    &ap1(ops.sqrt_lower, &ahi)?,
+                )
+                .map(|()| FIN)
             }
+            Mono::AddUp => (ops.add_up, false),
+            Mono::MulUp => (ops.mul_up, false),
+            Mono::MulLower => (ops.mul_lower, false),
+            Mono::DivUp => (ops.div_up, true),
+            Mono::DivLower => (ops.div_lower, true),
+            Mono::SubLower => (ops.sub_lower, true),
+        };
+        // first argument: nondecreasing for every binary operation
+        le("first argument", &ap2(f, &alo, &blo)?, &ap2(f, &ahi, &blo)?)?;
+        // second argument: nondecreasing for add and mul, non-increasing for div and sub
+        let (x, y) = (ap2(f, &alo, &blo)?, ap2(f, &alo, &bhi)?);
+        if decreasing {
+            le("second argument (non-increasing)", &y, &x)?;
+        } else {
+            le("second argument", &x, &y)?;
         }
         Ok(FIN)
     };

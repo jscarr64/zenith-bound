@@ -24,6 +24,8 @@ Only Jeff changes these; a diff touching them is rejected and sent to him: `.git
 
 `tools/full_gate.sh TAG` runs, each step logged under `/tmp/zb-gate-logs/`: `cargo test --no-run` (`build-tests`: a nonzero rc here is a compile error, not a red test), `cargo test` (debug, release), the rules-scan self-test and `tools/rules_scan.sh` over the commit range, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and grep scans for unsafe, floats, panics (including the assert family) and clones (`derive-scan` also sees a multi-line derive). On Pop run it as `flock /tmp/pop-gate.lock tools/full_gate.sh TAG` with `CARGO_TARGET_DIR=/tmp/target-spence CARGO_BUILD_JOBS=7`. The library crate also denies `missing_docs`, `clippy::allow_attributes` and `clippy::arithmetic_side_effects` (`src/lib.rs`). Run it on **every** commit, not just the last. `tools/rules_scan.sh --working` (after `git add -A`) scans uncommitted work. The scan was derived from zenith-float's (`d12a156`), with the test-code exemption removed.
 
+Every run on Pop gets a run log (`~/pop-logs/`): `tools/*.sh` scripts log themselves through `tools/runlog.sh`; wrap any other verify or test run as `tools/runlog.sh JOB [--tests] -- CMD`.
+
 **Not yet present** (earlier drafts of this file promised them; they are planned, and each lands in its own reviewed commit): `scripts/check_no_float.sh`, a HIR scan, the `thumbv6m-none-eabi` no-FPU build and symbol check (which also needs a decision on `#![no_std]`), `fpu-check/`, `cargo-deny`, `cargo-semver-checks`, CI workflows, `docs/audits/`. Until they exist, nothing here claims to be checked by them.
 
 ## Clean-room rule (LGPL oracles)
@@ -48,10 +50,10 @@ Arb/FLINT and MPFR are licensed under the **LGPL**. We use them (and mpmath) onl
 ## Oracle setup (dev only)
 
 ```sh
-/usr/bin/python3 scripts/gen_goldens.py    # writes tests/goldens/mag_ops.txt (mpmath 1.2.1)
+~/.local/oracle-venv/bin/python scripts/gen_goldens.py    # writes tests/goldens/mag_ops.txt
 ```
 
-Use `/usr/bin/python3`, not plain `python3`: mpmath 1.2.1 is the Ubuntu package `python3-mpmath` and only the system interpreter sees it (on Pop `python3` on `PATH` is `/usr/local/bin/python3` and fails with `No module named 'mpmath'`). Do not `pip install` (Pop's pip has no TLS); `scripts/requirements.lock` records the version and the generator refuses any other. The output is deterministic, so regenerating must leave `tests/goldens/mag_ops.txt` byte-identical.
+Use the isolated oracle venv `~/.local/oracle-venv/bin/python` (mpmath 1.3.0, sympy 1.14.0, gmpy2 2.3.2, python-flint 0.9.0; `scripts/requirements.lock`). `scripts/goldlib.py` refuses any other interpreter at startup: exact versions, `sys.prefix` is the venv, no `~/.local` on `sys.path`. Never import oracle packages from `~/.local` outside the venv. The output is deterministic, so regenerating must leave `tests/goldens/mag_ops.txt` byte-identical.
 
 MPFR is reached only through zenith-float's own test suite (via `rug`); zenith-bound has no MPFR dependency. Goldens are regenerated only in a commit that says why, and a byte-golden change also needs an `op_ver` bump.
 

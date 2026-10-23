@@ -1,0 +1,13 @@
+diff --git a/src/mag/ulp.rs b/src/mag/ulp.rs
+index 94fed1e..1770a92 100644
+--- a/src/mag/ulp.rs
++++ b/src/mag/ulp.rs
+@@ -53,7 +53,7 @@ impl Mag {
+             .checked_sub(i128::from(prec))
+             .and_then(|diff| diff.checked_sub(1))
+         else {
+-            return false;
++            return true;
+         };
+         match self.nonzero() {
+             Some((exp, _)) => i128::from(exp) <= threshold,

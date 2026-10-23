@@ -4,11 +4,11 @@
 
 Generates `tests/goldens/mag_ops.txt`, the mpmath golden rows for the integer-only `Mag` operations (`add_up`, `mul_up`, `mul_lower`, `sub_lower`, `div_up`, `div_lower`, `sqrt_up`, `sqrt_lower`). The rows come from `mpmath.libmp` directed rounding to 64 bits, an oracle that is independent of zenith-float and of the Rust model. Every row is also checked with exact rationals (`fractions.Fraction`) before it is written, when its exponents are close enough to compute; the script prints how many rows were checked and how many were skipped.
 
-Run it with **`/usr/bin/python3`**:
+Run it with the **oracle venv** `~/.local/oracle-venv/bin/python` (every generator has it as its shebang):
 
-    /usr/bin/python3 scripts/gen_goldens.py
+    ~/.local/oracle-venv/bin/python scripts/gen_goldens.py
 
-On Pop the `python3` on `PATH` (`/usr/local/bin/python3`) has no mpmath. mpmath 1.2.1 is the Ubuntu package (`python3-mpmath`) and is visible only to `/usr/bin/python3`. The script refuses to run with any other mpmath version. `requirements.lock` records the version; do not `pip install` it (Pop's pip has no TLS).
+Oracle venv (since 2026-10-23, Jeff's decision): mpmath 1.3.0, sympy 1.14.0, gmpy2 2.3.2, python-flint 0.9.0, the pins of zenith-float `scripts/oracle-requirements.lock` (recorded in `requirements.lock`). `goldlib.require_oracle` runs when any generator imports `goldlib` and exits nonzero unless all four versions match exactly, `sys.prefix` is the venv and no `~/.local` path outside the venv is on `sys.path` (the `flint` in `~/.local` is an unrelated tool). `/usr/bin/python3` (Ubuntu mpmath 1.2.1) is refused. Goldens regenerated in the venv were byte-identical to the 1.2.1 ones apart from the provenance header line.
 
 The output is deterministic (fixed operand sets, a fixed xorshift seed, order-preserving de-duplication), so regenerating must leave `tests/goldens/mag_ops.txt` byte-identical (a gate step that regenerates and diffs it is planned, shared-harness item S8; it does not exist yet).
 
@@ -16,9 +16,9 @@ Operand sets: binary rows use four mantissas and eleven exponents (including `i6
 
 ## gen_review_goldens.py
 
-Generates `tests/goldens/mag_ops_review.txt`: boundary rows added after the L0a review (sub_lower at exponent gap 191, division with remainder exactly 1 and mb - 1, add_up and sub_lower at the alignment gaps around 64, 128 and 192, mul carry rows at the exponent limits, `ulp_mag` and `half_ulp` at the `i32` exponent limits and large precisions). The oracle is a big-integer script inside the generator (no mpmath, no Rust code), so any `/usr/bin/python3` or `python3` runs it:
+Generates `tests/goldens/mag_ops_review.txt`: boundary rows added after the L0a review (sub_lower at exponent gap 191, division with remainder exactly 1 and mb - 1, add_up and sub_lower at the alignment gaps around 64, 128 and 192, mul carry rows at the exponent limits, `ulp_mag` and `half_ulp` at the `i32` exponent limits and large precisions). The oracle is a big-integer script inside the generator (no mpmath, no Rust code), but it still imports `goldlib`, so it runs only in the oracle venv like the others:
 
-    python3 scripts/gen_review_goldens.py > tests/goldens/mag_ops_review.txt
+    ~/.local/oracle-venv/bin/python scripts/gen_review_goldens.py > tests/goldens/mag_ops_review.txt
 
 The output is deterministic. `tests/mag/review_rows.rs` runs every row against the crate.
 
@@ -30,10 +30,19 @@ Method: every row is computed with exact `Fraction`s and `goldlib.round_fraction
 
 Operand sets come from `goldlib.SplitMix64` streams of suite `l0b_ball` (same BASE and seeds table as the Rust side); the exponent bands, mantissa patterns and tie patterns mirror `tests/common/generators.rs` in spirit, NOT bit for bit. Structured sets (zeros, carries, exact ties at `p`, 81/64 at p = 3, cancellation, huge exponent gaps, perfect squares) plus random sets are all used under all six modes.
 
-    /usr/bin/python3 scripts/gen_ball_goldens.py            # writes tests/goldens/ball_exact_ops.txt
-    /usr/bin/python3 scripts/gen_ball_goldens.py --check DIR # regenerates and compares with DIR/ball_exact_ops.txt
-    /usr/bin/python3 scripts/gen_ball_goldens.py --selftest
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_goldens.py            # writes tests/goldens/ball_exact_ops.txt
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_goldens.py --check DIR # regenerates and compares with DIR/ball_exact_ops.txt
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_goldens.py --selftest
 
 The Rust side (`tests/common/ballrows.rs`, `tests/harness/ball_goldens_selftest.rs`) re-verifies every row with an independent exact-integer checker: full recomputation for `PREC <= 64` (u128), structural checks only above.
 
-The gate wrappers (`tools/full_gate.sh`, `tools/goldens_regen.sh`) export `PYTHONNOUSERSITE=1` and call `/usr/bin/python3`, so a `pip --user` mpmath in `~/.local` cannot shadow the pinned system mpmath 1.2.1. When running a generator by hand, do the same: `PYTHONNOUSERSITE=1 /usr/bin/python3 scripts/gen_goldens.py`.
+The gate wrappers (`tools/full_gate.sh`, `tools/goldens_regen.sh`) export `PYTHONNOUSERSITE=1` and call the oracle venv (`GOLDENS_PYTHON` may override it, but the startup check still applies). `tools/goldens_regen.sh` also regenerates `mag_ops_review.txt` and compares it byte for byte.
+
+## gen_ball_enclosure.py
+
+L0b-7 ball enclosure rows (TEST_PLAN section 9) at the full schedule PS: truth interval rounded outward at W = 2*PREC + 64 and R_ref, for
+containment checks only (tau and lambda are D2, not asserted). Exact Fractions, cross-checked with mpmath.iv.
+
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_enclosure.py            # writes tests/goldens/ball_enclosure_rows.txt
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_enclosure.py --check DIR # regenerates and compares with DIR/ball_enclosure_rows.txt
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_enclosure.py --selftest

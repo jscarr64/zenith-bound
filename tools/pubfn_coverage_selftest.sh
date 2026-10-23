@@ -2,8 +2,11 @@
 # Self-test for tools/pubfn_coverage.sh: builds fixture trees under /tmp at run time and proves the check
 # (1) lists exactly the expected public items, (2) PASSES on a clean fixture, (3) FAILS on each failure mode
 # (UNCOVERED, STALE, NOTEST), (4) honours the exemption list for UNCOVERED only. No repo files are touched.
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap pubfn_coverage_selftest "$@"   # run log (tools/runlog.sh)
+runlog_detach_children
 set -u
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/pubfn-selftest.XXXXXX)"; trap 'rm -rf "$t"' EXIT
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/pubfn-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }
 chk() { PUBFN_ROOT="$1" PUBFN_EXEMPT="${2:-$1/tools/pubfn_coverage_exempt.txt}" "$here/pubfn_coverage.sh" "${@:3}"; }
 
@@ -67,12 +70,12 @@ $want"
 
 # 2. clean fixture passes
 out="$(chk "$c")" || fail "clean fixture failed: $out"
-echo "$out" | grep -q "ok (9 public items)" || fail "clean fixture: unexpected summary: $out"
+echo "$out" | grep -c "ok (9 public items)" > /dev/null || fail "clean fixture: unexpected summary: $out"
 
 # 3a. UNCOVERED: a new public fn that no COVERS line names
 u="$t/uncovered"; mkfix "$u"; printf 'impl Foo {\n    pub fn extra() {}\n}\n' >> "$u/src/m.rs"
 out="$(chk "$u")" && fail "uncovered public fn passed"
-echo "$out" | grep -q "UNCOVERED: Foo::extra" || fail "uncovered: wrong report: $out"
+echo "$out" | grep -c "UNCOVERED: Foo::extra" > /dev/null || fail "uncovered: wrong report: $out"
 # 4. exemption rescues UNCOVERED
 printf 'Foo::extra\tfixture exemption\n' > "$u/tools/pubfn_coverage_exempt.txt"
 chk "$u" >/dev/null || fail "exempt item still failed"
@@ -80,7 +83,7 @@ chk "$u" >/dev/null || fail "exempt item still failed"
 s="$t/stale"; mkfix "$s"; sed -i 's/^\(\/\/! COVERS:.*\)$/\1, Foo::gone/' "$s/tests/t.rs"
 printf 'Foo::gone\tshould not rescue\n' > "$s/tools/pubfn_coverage_exempt.txt"
 out="$(chk "$s")" && fail "stale COVERS name passed"
-echo "$out" | grep -q "STALE: tests/t.rs names Foo::gone" || fail "stale: wrong report: $out"
+echo "$out" | grep -c "STALE: tests/t.rs names Foo::gone" > /dev/null || fail "stale: wrong report: $out"
 # 3c. NOTEST: declared, exists, but no #[test] in the declaring file mentions it (the mention sits in a non-test helper)
 n="$t/notest"; mkfix "$n"
 cat > "$n/tests/t.rs" <<'RS'
@@ -90,14 +93,14 @@ fn helper() { top(); Foo::new(); Foo::c(); free(); deep(); let _ = (E::A, E::B(1
 fn covers_nothing_by_name() -> Result<(), String> { helper(); Ok(()) }
 RS
 out="$(chk "$n")" && fail "name-less test passed"
-echo "$out" | grep -q "NOTEST: tests/t.rs declares Foo::new" || fail "notest: wrong report: $out"
+echo "$out" | grep -c "NOTEST: tests/t.rs declares Foo::new" > /dev/null || fail "notest: wrong report: $out"
 # 3c'. NOTEST: a file with COVERS and no #[test] at all
 z="$t/notestfile"; mkfix "$z"; printf '//! COVERS: crate::top, Foo::new, Foo::c, Ord for Foo, m::free, E::A, E::B, E::C, n::inner::deep\n' > "$z/tests/t.rs"
 out="$(chk "$z")" && fail "file with no #[test] passed"
-echo "$out" | grep -q "NOTEST" || fail "no-test file: wrong report: $out"
+echo "$out" | grep -c "NOTEST" > /dev/null || fail "no-test file: wrong report: $out"
 
 # 5. word match: a test that mentions only a longer identifier (new_thing) must not satisfy Foo::new
 w="$t/word"; mkfix "$w"; sed -i 's/Foo::new();/Foo::new_thing();/' "$w/tests/t.rs"
 out="$(chk "$w")" && fail "substring-only mention passed (grep -w semantics broken)"
-echo "$out" | grep -q "NOTEST: tests/t.rs declares Foo::new" || fail "word: wrong report: $out"
+echo "$out" | grep -c "NOTEST: tests/t.rs declares Foo::new" > /dev/null || fail "word: wrong report: $out"
 echo "pubfn_coverage selftest: ok"

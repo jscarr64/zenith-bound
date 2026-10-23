@@ -5,4 +5,104 @@
 #   patch     the patch file name inside tools/mutants/ (a unified diff against the repo root, applied with `git apply`)
 #   suite     the integration test target that must FAIL on the mutant: `cargo test --test <suite>`
 # Blank lines and lines starting with # are ignored. tools/mutate.sh runs every row (or one with --only ID).
-# No real mutants yet: src/mag does not exist at this head. The seed catalog is TEST_PLAN section 11.
+#
+# SEED (S7): Rusty's 101 text mutants, /tmp/zf-logs/zb-mag-green2-probe/{mut.py,mut_b.py,mut_c.py}, run there against /tmp/zb-rev-mag2 with `cargo test --release --test mag`.
+# Converted without changing the mutation (the same old -> new text replacement, written as a unified diff); the id is NNN-<Rusty's id>.
+# Not converted (10 of 101):
+#   dropped, did not compile in Rusty's own tree (he replaced them by the `b` variants): F1, A5, L8, L16, R4, U2, S8, N4
+#   not applicable, the code they mutate is gone since 706c452 / 7ec49d0: R12 (round.rs `NonZeroU128::new(m)?`, was an equivalent mutant), S10 (sqrt.rs `None => NonZeroU128::MIN` constant arm, was dead code)
+# Adapted to the current text with the same intent (the old text moved): R9 (`let m = m.get() | 1;`), S2/S3 (the shift in p64/p63), S4/S5 (the scale constants next to p64()/p63()),
+#   N3 (`NonZeroU128::new((numerator / divisor) | 1)?`), N9 (norm(.., sticky, up || true), i.e. `up` forced true; written with `up ||` so the parameter stays used under the deny(unused); it did not compile in Rusty's tree because of norm_u128), N9b (norm(.., !sticky, ..)).
+# Rusty's own labels: live = expected to be killable; dead / equiv = expected to survive (L12, R11, U12, U13, N12; their survival must be argued in EQUIVALENT.txt).
+# Rows are in Rusty's order: mut.py, mut_b.py, mut_c.py. Spence adds Mag-specific mutants below, with the next free NNN.
+src/mag/mod.rs:Mag::finite	001-F2	001-F2.patch	mag
+src/mag/mod.rs:Mag::finite	002-F3	002-F3.patch	mag
+src/mag/mod.rs:Mag::finite	003-F4	003-F4.patch	mag
+src/mag/mod.rs:Mag::nonzero	004-F5	004-F5.patch	mag
+src/mag/mod.rs:Mag::min_pos	005-F6	005-F6.patch	mag
+src/mag/mod.rs:Mag::max_finite	006-F7	006-F7.patch	mag
+src/mag/add.rs:Mag::add_up	007-A1	007-A1.patch	mag
+src/mag/add.rs:Mag::add_up	008-A2	008-A2.patch	mag
+src/mag/add.rs:add_checked	009-A3	009-A3.patch	mag
+src/mag/add.rs:successor	010-A4	010-A4.patch	mag
+src/mag/add.rs:add_checked	011-A6	011-A6.patch	mag
+src/mag/add.rs:add_checked	012-A7	012-A7.patch	mag
+src/mag/add.rs:Mag::add_up	013-A8	013-A8.patch	mag
+src/mag/add.rs:successor	014-A9	014-A9.patch	mag
+src/mag/lower.rs:Mag::sub_lower	015-L1	015-L1.patch	mag
+src/mag/lower.rs:sub_checked	016-L2	016-L2.patch	mag
+src/mag/lower.rs:sub_checked	017-L3	017-L3.patch	mag
+src/mag/lower.rs:sub_wide	018-L4	018-L4.patch	mag
+src/mag/lower.rs:sub_wide	019-L5	019-L5.patch	mag
+src/mag/lower.rs:sub_wide	020-L6	020-L6.patch	mag
+src/mag/lower.rs:sub_wide	021-L7	021-L7.patch	mag
+src/mag/lower.rs:sub_wide	022-L9	022-L9.patch	mag
+src/mag/lower.rs:sub_wide	023-L10	023-L10.patch	mag
+src/mag/lower.rs:sub_wide	024-L11	024-L11.patch	mag
+src/mag/lower.rs:sub_wide	025-L12	025-L12.patch	mag
+src/mag/lower.rs:sub_checked	026-L13	026-L13.patch	mag
+src/mag/lower.rs:Mag::mul_lower	027-L14	027-L14.patch	mag
+src/mag/lower.rs:sub_checked	028-L15	028-L15.patch	mag
+src/mag/round.rs:norm	029-R1	029-R1.patch	mag
+src/mag/round.rs:norm	030-R2	030-R2.patch	mag
+src/mag/round.rs:norm	031-R3	031-R3.patch	mag
+src/mag/round.rs:norm	032-R5	032-R5.patch	mag
+src/mag/round.rs:pack	033-R6	033-R6.patch	mag
+src/mag/round.rs:pack	034-R7	034-R7.patch	mag
+src/mag/round.rs:pack	035-R8	035-R8.patch	mag
+src/mag/round.rs:norm	036-R9	036-R9.patch	mag
+src/mag/round.rs:norm	037-R10	037-R10.patch	mag
+src/mag/round.rs:settle	038-R11	038-R11.patch	mag
+src/mag/div.rs:div_parts	039-D1	039-D1.patch	mag
+src/mag/div.rs:div_checked	040-D2	040-D2.patch	mag
+src/mag/div.rs:div_checked	041-D3	041-D3.patch	mag
+src/mag/div.rs:div_checked	042-D4	042-D4.patch	mag
+src/mag/div.rs:div_parts	043-D5	043-D5.patch	mag
+src/mag/div.rs:div_parts	044-D6	044-D6.patch	mag
+src/mag/mul.rs:mul_checked	045-U1	045-U1.patch	mag
+src/mag/mul.rs:Mag::mul_up	046-U3	046-U3.patch	mag
+src/mag/lower.rs:Mag::mul_lower	047-U4	047-U4.patch	mag
+src/mag/sqrt.rs:sqrt_checked	048-S1	048-S1.patch	mag
+src/mag/sqrt.rs:p64	049-S2	049-S2.patch	mag
+src/mag/sqrt.rs:p63	050-S3	050-S3.patch	mag
+src/mag/sqrt.rs:sqrt_checked	051-S4	051-S4.patch	mag
+src/mag/sqrt.rs:sqrt_checked	052-S5	052-S5.patch	mag
+src/mag/sqrt.rs:sqrt_checked	053-S6	053-S6.patch	mag
+src/mag/sqrt.rs:sqrt_checked	054-S7	054-S7.patch	mag
+src/mag/sqrt.rs:sqrt	055-S9	055-S9.patch	mag
+src/mag/ulp.rs:Mag::ulp_mag	056-U5	056-U5.patch	mag
+src/mag/ulp.rs:Mag::half_ulp	057-U6	057-U6.patch	mag
+src/mag/ulp.rs:Mag::smaller_than_half_ulp	058-U7	058-U7.patch	mag
+src/mag/ulp.rs:Mag::smaller_than_half_ulp	059-U8	059-U8.patch	mag
+src/mag/ulp.rs:Mag::smaller_than_half_ulp	060-U9	060-U9.patch	mag
+src/mag/ulp.rs:place_pow2	061-U10	061-U10.patch	mag
+src/mag/ulp.rs:place_pow2	062-U11	062-U11.patch	mag
+src/mag/ulp.rs:Mag::smaller_than_half_ulp	063-U12	063-U12.patch	mag
+src/mag/ulp.rs:Mag::ulp_mag	064-U13	064-U13.patch	mag
+src/mag/cmp.rs:Mag::cmp	065-C1	065-C1.patch	mag
+src/mag/cmp.rs:Mag::cmp	066-C2	066-C2.patch	mag
+src/mag/mod.rs:Mag::finite	067-F1b	067-F1b.patch	mag
+src/mag/add.rs:add_checked	068-A5b	068-A5b.patch	mag
+src/mag/lower.rs:sub_wide	069-L8b	069-L8b.patch	mag
+src/mag/lower.rs:sub_wide	070-L8c	070-L8c.patch	mag
+src/mag/lower.rs:Mag::sub_lower	071-L16b	071-L16b.patch	mag
+src/mag/round.rs:norm	072-R4b	072-R4b.patch	mag
+src/mag/mul.rs:mul_checked	073-U2b	073-U2b.patch	mag
+src/mag/sqrt.rs:sqrt	074-S8b	074-S8b.patch	mag
+src/mag/add.rs:add_checked	075-N1	075-N1.patch	mag
+src/mag/lower.rs:sub_checked	076-N2	076-N2.patch	mag
+src/mag/div.rs:div_checked	077-N3	077-N3.patch	mag
+src/mag/lower.rs:sub_checked	078-N6	078-N6.patch	mag
+src/mag/add.rs:Mag::add_up	079-N7	079-N7.patch	mag
+src/mag/lower.rs:Mag::sub_lower	080-N8	080-N8.patch	mag
+src/mag/div.rs:div_checked	081-N9	081-N9.patch	mag
+src/mag/round.rs:pack	082-N10	082-N10.patch	mag
+src/mag/sqrt.rs:sqrt_checked	083-N11	083-N11.patch	mag
+src/mag/sqrt.rs:sqrt_checked	084-N12	084-N12.patch	mag
+src/mag/lower.rs:sub_checked	085-N13	085-N13.patch	mag
+src/mag/round.rs:norm	086-N14	086-N14.patch	mag
+src/mag/mod.rs:Mag::finite	087-N15	087-N15.patch	mag
+src/mag/mod.rs:Mag::finite	088-N16	088-N16.patch	mag
+src/mag/mul.rs:mul_checked	089-N4b	089-N4b.patch	mag
+src/mag/div.rs:div_checked	090-N9b	090-N9b.patch	mag
+src/mag/mul.rs:mul_checked	091-N17	091-N17.patch	mag

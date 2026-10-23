@@ -1,0 +1,13 @@
+diff --git a/src/mag/lower.rs b/src/mag/lower.rs
+index d225a6c..556b0f1 100644
+--- a/src/mag/lower.rs
++++ b/src/mag/lower.rs
+@@ -74,7 +74,7 @@ fn sub_wide(ea: i64, ma: NonZeroU64, gap: i128, mb: NonZeroU64) -> Option<Mag> {
+     // Units of 2^(ea - 127): the subtrahend is mb / 2^(gap - 63), rounded up. A shift of 128 or
+     // more leaves only the fraction, which still rounds up to one unit.
+     let (subtrahend, frac) = match u32::try_from(gap.checked_sub(63)?) {
+-        Ok(shift) if shift < 128 => {
++        Ok(shift) if shift <= 128 => {
+             let mb = u128::from(mb.get());
+             (mb >> shift, (mb & !(u128::MAX << shift)) != 0)
+         }

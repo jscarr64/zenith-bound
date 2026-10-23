@@ -1,0 +1,13 @@
+diff --git a/src/mag/mod.rs b/src/mag/mod.rs
+index 746cd54..cb43c3e 100644
+--- a/src/mag/mod.rs
++++ b/src/mag/mod.rs
+@@ -65,7 +65,7 @@ impl Mag {
+     pub fn finite(mant: u64, exp: i64) -> Result<Mag, BoundError> {
+         match NonZeroU64::new(mant) {
+             None if exp == 0 => Ok(Mag::zero()),
+-            None => Err(BoundError::Representation),
++            None => Ok(Mag::zero()),
+             Some(nonzero) => {
+                 // A nonzero `u64` has at most 63 leading zeros, so the shift below drops only
+                 // zero bits and loses nothing.

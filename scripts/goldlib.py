@@ -1,6 +1,7 @@
+#!/home/jsc64/.local/oracle-venv/bin/python
 """
-goldlib: shared helpers for the golden generators (TEST_PLAN section 9). Run self-tests with:  /usr/bin/python3 scripts/goldlib.py --selftest
-Rules: mpmath 1.2.1 only (require_mpmath), no Python `random` (its algorithms changed across 3.x), integer-only arithmetic or Fraction,
+goldlib: shared helpers for the golden generators (TEST_PLAN section 9). Run self-tests with:  ~/.local/oracle-venv/bin/python scripts/goldlib.py --selftest
+Rules: the oracle venv only (require_oracle: mpmath 1.3.0, sympy 1.14.0, gmpy2 2.3.2, python-flint 0.9.0), no Python `random` (its algorithms changed across 3.x), integer-only arithmetic or Fraction,
 no dict/set iteration order in output, LF line endings, no timestamps/hostnames/paths in generated files, no network.
 
 `--check DIR` DESIGN (every generator script implements it with check_against below):
@@ -16,19 +17,69 @@ from fractions import Fraction
 
 MASK64 = (1 << 64) - 1
 
-# ---- mpmath version assert --------------------------------------------------------------------------------------------------
-MPMATH_VERSION = "1.2.1"
+# ---- oracle startup check (Jeff 9:22 AM CT 2026-10-23: goldens come from the isolated oracle venv) ----------------------------
+# Exact pins, the same as zenith-float scripts/oracle-requirements.lock and scripts/oracle_pins.py at 7c97b3c (read, not imported: zf is
+# not a dependency). The 'flint' in ~/.local is an unrelated tool, so nothing may be imported from ~/.local outside the venv.
+ORACLE_VENV = os.path.expanduser("~/.local/oracle-venv")
+ORACLE_PY = os.path.join(ORACLE_VENV, "bin", "python")
+USER_LOCAL = os.path.expanduser("~/.local")
+PINS = (("mpmath", "1.3.0"), ("sympy", "1.14.0"), ("gmpy2", "2.3.2"), ("flint", "0.9.0"))
+MPMATH_VERSION = "1.3.0"
+
+
+def _inside(path, root):
+    return path == root or path.startswith(root + os.sep)
+
+
+def oracle_problems(found, prefix, base_prefix, path, venv=ORACLE_VENV, user_local=USER_LOCAL):
+    """Every reason the running interpreter is not the pinned oracle venv (empty list: ok). Pure; selftest covers each case."""
+    probs = []
+    for name, want in PINS:
+        if found.get(name) != want:
+            probs.append("%s is %s, want %s" % (name, found.get(name), want))
+    venv_r = os.path.realpath(venv)
+    if os.path.realpath(prefix) != venv_r:
+        probs.append("sys.prefix is %s, not the oracle venv %s" % (prefix, venv))
+    if prefix == base_prefix:
+        probs.append("sys.prefix equals sys.base_prefix (not a venv)")
+    local_r = os.path.realpath(user_local)
+    for entry in path:
+        r = os.path.realpath(entry) if entry else ""
+        if r and _inside(r, local_r) and not _inside(r, venv_r):
+            probs.append("~/.local path on sys.path: %s" % entry)
+    return probs
+
+
+def _found_versions():
+    import importlib
+    found = {}
+    for name, _want in PINS:
+        try:
+            mod = importlib.import_module(name)
+        except ImportError:
+            found[name] = "not importable"
+            continue
+        found[name] = getattr(mod, "__version__", "no __version__")
+        if name == "flint" and not hasattr(mod, "arb"):
+            found[name] = "not-python-flint"
+    return found
+
+
+def require_oracle():
+    """Exit nonzero unless this is the oracle venv with exactly the four pinned versions and no ~/.local on sys.path. Returns mpmath."""
+    probs = oracle_problems(_found_versions(), sys.prefix, sys.base_prefix, sys.path)
+    if probs:
+        raise SystemExit("goldlib: oracle check failed (run with %s or GOLDENS_PYTHON pointing to it): %s" % (ORACLE_PY, "; ".join(probs)))
+    import mpmath
+    return mpmath
 
 
 def require_mpmath():
-    """Import mpmath and exit nonzero unless it is exactly 1.2.1 (run with /usr/bin/python3; the python3 on PATH has no mpmath on Pop)."""
-    try:
-        import mpmath
-    except ImportError:
-        raise SystemExit("goldlib: mpmath is not importable (run with /usr/bin/python3, mpmath %s)" % MPMATH_VERSION)
-    if mpmath.__version__ != MPMATH_VERSION:
-        raise SystemExit("goldlib: needs mpmath %s (run with /usr/bin/python3); found %s" % (MPMATH_VERSION, mpmath.__version__))
-    return mpmath
+    """Kept for the generators: the full oracle check, then mpmath."""
+    return require_oracle()
+
+
+require_oracle()   # at import: every generator imports goldlib before mpmath
 
 
 # ---- splitmix64: mirrors tests/common/rng.rs and tests/common/seeds.rs -------------------------------------------------------
@@ -255,6 +306,18 @@ def _check(cond, msg):
 
 
 def selftest():
+    # oracle startup check (pure part): each mismatch must be reported, the good case must be clean
+    venv = "/home/u/.local/oracle-venv"
+    good = {"mpmath": "1.3.0", "sympy": "1.14.0", "gmpy2": "2.3.2", "flint": "0.9.0"}
+    vpath = ["", "/usr/local/lib/python3.12", venv + "/lib/python3.12/site-packages"]
+    _check(oracle_problems(good, venv, "/usr/local", vpath, venv, "/home/u/.local") == [], "good oracle reported a problem")
+    for name, bad in (("mpmath", "1.2.1"), ("sympy", "1.12"), ("gmpy2", "not importable"), ("flint", "not-python-flint"), ("mpmath", "9.9.9")):
+        f = dict(good)
+        f[name] = bad
+        _check(len(oracle_problems(f, venv, "/usr/local", vpath, venv, "/home/u/.local")) == 1, "%s %s not reported" % (name, bad))
+    _check(oracle_problems(good, "/usr", "/usr", vpath, venv, "/home/u/.local") != [], "system prefix not reported")
+    _check(oracle_problems(good, venv, venv, vpath, venv, "/home/u/.local") != [], "prefix == base_prefix (not a venv) not reported")
+    _check(oracle_problems(good, venv, "/usr/local", vpath + ["/home/u/.local/lib/python3.12/site-packages"], venv, "/home/u/.local") != [], "~/.local on sys.path not reported")
     # splitmix64: the same reference values as tests/harness/*_selftest.rs (computed independently of Rust)
     g = SplitMix64(0)
     _check([g.next() for _ in range(3)] == [0xE220A8397B1DCDAF, 0x6E789E6AA1B965F4, 0x06C45D188009454F], "seed 0 reference outputs")
@@ -339,4 +402,4 @@ if __name__ == "__main__":
     if sys.argv[1:] == ["--selftest"]:
         selftest()
     else:
-        raise SystemExit("usage: /usr/bin/python3 scripts/goldlib.py --selftest")
+        raise SystemExit("usage: ~/.local/oracle-venv/bin/python scripts/goldlib.py --selftest")

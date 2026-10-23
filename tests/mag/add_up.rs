@@ -15,7 +15,7 @@ pub fn verify(a: &MagV, b: &MagV, r: &MagV) -> Result<(), String> {
         // CONTRACT 14.3: the result is the larger operand plus one unit in its last place = succ(larger)
         let larger = match dcmp(&da, &db)? {
             Ordering::Less => b,
-            _ => a,
+            Ordering::Equal | Ordering::Greater => a,
         };
         let want = succ(larger);
         if *r == want {

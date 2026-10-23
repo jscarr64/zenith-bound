@@ -1,9 +1,10 @@
+#!/home/jsc64/.local/oracle-venv/bin/python
 """
 Generates tests/goldens/ball_exact_ops.txt (TEST_PLAN section 9, L0b exact-input rows): the exact result of add, sub, mul, div and sqrt on exact
-dyadic inputs, rounded to PREC bits under each of the six modes. Run with /usr/bin/python3 (mpmath 1.2.1):
-    /usr/bin/python3 scripts/gen_ball_goldens.py              write tests/goldens/ball_exact_ops.txt
-    /usr/bin/python3 scripts/gen_ball_goldens.py --check DIR  regenerate into DIR (never tests/goldens) and compare byte for byte
-    /usr/bin/python3 scripts/gen_ball_goldens.py --selftest   the generator's own negative tests
+dyadic inputs, rounded to PREC bits under each of the six modes. Run with ~/.local/oracle-venv/bin/python (goldlib.require_oracle):
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_goldens.py              write tests/goldens/ball_exact_ops.txt
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_goldens.py --check DIR  regenerate into DIR (never tests/goldens) and compare byte for byte
+    ~/.local/oracle-venv/bin/python scripts/gen_ball_goldens.py --selftest   the generator's own negative tests
 
 INDEPENDENCE. The expected value comes from exact Fractions and goldlib.round_fraction (sqrt: integer square root with a sticky half unit, which
 cannot cross a rounding boundary). It never touches zenith-float. Every row is cross-checked against mpmath.libmp (mpf_add, mpf_sub, mpf_mul,
@@ -44,7 +45,7 @@ HEADER = [
     "# zero results: add and sub: x + (-x) and (+0) + (-0) are +0 except under Down (-0), (+0)+(+0) is +0 and (-0)+(-0) is -0 (IEEE 754), sub(a, b) is add(a, -b);",
     "# mul and div: the sign is the xor of the signs; sqrt(+0) is +0 and sqrt(-0) is -0; no row has a zero divisor or a negative nonzero sqrt operand",
     "# rows are sorted by (OP order above, PREC, RM order above, row text), duplicates removed; operand draws: goldlib.SplitMix64 from stream_seed(2, 0), not bit-identical to the Rust draws",
-    "# generated with mpmath 1.2.1 by /usr/bin/python3; see scripts/README.md",
+    "# generated in the oracle venv (mpmath 1.3.0, sympy 1.14.0, gmpy2 2.3.2, python-flint 0.9.0); see scripts/README.md",
 ]
 
 
@@ -584,7 +585,7 @@ def main(argv):
         return 0
     if argv == ["--selftest"]:
         return 0
-    raise SystemExit("usage: /usr/bin/python3 scripts/gen_ball_goldens.py [--check DIR | --selftest]")
+    raise SystemExit("usage: ~/.local/oracle-venv/bin/python scripts/gen_ball_goldens.py [--check DIR | --selftest]")
 
 
 if __name__ == "__main__":

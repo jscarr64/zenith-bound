@@ -1,5 +1,7 @@
-//! splitmix64 (Steele, Lea, Flood): one `u64` state, integer-only, all arithmetic wrapping.
+//! splitmix64 (Steele, Lea, Flood): one `u64` state, integer-only, all arithmetic modulo 2^64 through `modular` (no `wrapping_*`).
 //! The draw order is frozen; changing it changes every case of every suite and bumps `seeds::GENERATOR_VERSION`.
+
+use super::modular::{add_u64, mul_u64};
 
 const INCREMENT: u64 = 0x9E37_79B9_7F4A_7C15;
 const MUL1: u64 = 0xBF58_476D_1CE4_E5B9;
@@ -15,10 +17,10 @@ impl SplitMix64 {
     }
 
     pub fn next_u64(&mut self) -> u64 {
-        self.state = self.state.wrapping_add(INCREMENT);
+        self.state = add_u64(self.state, INCREMENT);
         let mut z = self.state;
-        z = (z ^ (z >> 30)).wrapping_mul(MUL1);
-        z = (z ^ (z >> 27)).wrapping_mul(MUL2);
+        z = mul_u64(z ^ (z >> 30), MUL1);
+        z = mul_u64(z ^ (z >> 27), MUL2);
         z ^ (z >> 31)
     }
 

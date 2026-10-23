@@ -113,7 +113,7 @@ impl Dy {
                     Some(self.n.cmp(&other.n.shl(shift)))
                 }
             }
-            ord => Some(ord),
+            ord @ (Ordering::Less | Ordering::Greater) => Some(ord),
         }
     }
 }

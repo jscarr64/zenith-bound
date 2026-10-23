@@ -18,12 +18,14 @@
 #              or on the Trait / Type of an `impl Trait for Type` name)
 # Parser limits (rustfmt layout assumed): an impl/mod/enum block opens with `{` and its members start on later lines; macro-generated items are not seen.
 # Name coverage is deliberately weak; the mutation matrix (tools/mutate.sh) is the strong check.
+# shellcheck source=tools/runlog.sh
+. "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap pubfn_coverage "$@"   # run log (tools/runlog.sh)
 set -u
 export LC_ALL=C
 root=${PUBFN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 exempt=${PUBFN_EXEMPT:-$root/tools/pubfn_coverage_exempt.txt}
 cd "$root" || { echo "pubfn_coverage: cannot cd to $root"; exit 2; }
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d); runlog_on_exit "rm -rf \"$tmp\""
 
 # ---- 1. items -------------------------------------------------------------------------------------------------------
 extract() { # extract <file> <modpath> <prefix>

@@ -4,13 +4,20 @@
 mod common;
 
 mod ball_goldens_selftest;
+mod edges_selftest;
+mod enclosure_selftest;
 mod fuzz_mag;
+mod fuzz_mag_l0a5;
 mod fuzz_mag_props;
 mod fuzz_mag_props_selftest;
 mod generators_selftest;
 mod goldens_selftest;
+mod grid_digests;
+mod modular_selftest;
+mod points_selftest;
 mod replay_selftest;
 mod rng_selftest;
 mod seeds_selftest;
 mod shrink_selftest;
+mod tightness_selftest;
 mod w1_translation;

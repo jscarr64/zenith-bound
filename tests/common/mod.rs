@@ -5,12 +5,17 @@
 //! so every `pub` item added to common MUST be used by the harness target (its self-tests count), or the build fails with a
 //! `never used` error. Add the item and its use in the same commit.
 pub mod ballrows;
+pub mod digest;
+pub mod edges;
 pub mod generators;
 pub mod goldens;
+pub mod modular;
+pub mod points;
 pub mod replay;
 pub mod rng;
 pub mod seeds;
 pub mod shrink;
+pub mod tightness;
 
 use core::fmt::Debug;
 

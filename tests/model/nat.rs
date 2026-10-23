@@ -134,7 +134,7 @@ impl Nat {
             for (a, b) in self.limbs.iter().rev().zip(other.limbs.iter().rev()) {
                 match a.cmp(b) {
                     Ordering::Equal => continue,
-                    other => return other,
+                    other @ (Ordering::Less | Ordering::Greater) => return other,
                 }
             }
             Ordering::Equal
