@@ -10,6 +10,7 @@
 
 pub mod array;
 pub mod ball;
+pub mod enclosure;
 pub mod error;
 pub mod mag;
 pub mod policy;
