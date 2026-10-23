@@ -28,7 +28,7 @@ lints() { # the [lints.*] tables of the repo's Cargo.toml; arg: keep | strip (no
 }
 grep -q '^wildcard_enum_match_arm = "deny"$' "$root/Cargo.toml" || fail "Cargo.toml [lints.clippy] has no wildcard_enum_match_arm = \"deny\" line"
 grep -q '^match_wildcard_for_single_variants = "deny"$' "$root/Cargo.toml" || fail "Cargo.toml [lints.clippy] has no match_wildcard_for_single_variants = \"deny\" line"
-lints | grep -q '^\[lints.clippy\]' || fail "Cargo.toml has no [lints.clippy] table"
+lints | grep -c '^\[lints.clippy\]' > /dev/null || fail "Cargo.toml has no [lints.clippy] table"
 
 mkcrate() { # mkcrate <dir> <strip|keep> <bad|good>
   mkdir -p "$1/src"
@@ -76,14 +76,14 @@ run() { (cd "$1" && CARGO_TARGET_DIR="$1/target" cargo clippy --offline --all-ta
 
 mkcrate "$t/bad" keep bad;  out=$(run "$t/bad");  rc=$?
 [ "$rc" != 0 ] || fail "the bad sample passed clippy with the repo's lints: $out"
-echo "$out" | grep -q 'wildcard match will also match any future added variants\|wildcard_enum_match_arm' || fail "the bad sample failed, but not on the wildcard lint: $out"
+echo "$out" | grep -c 'wildcard match will also match any future added variants\|wildcard_enum_match_arm' > /dev/null || fail "the bad sample failed, but not on the wildcard lint: $out"
 mkcrate "$t/stripped" strip bad; out=$(run "$t/stripped"); rc=$?
 [ "$rc" = 0 ] || fail "the bad sample fails even without the wildcard lint line (so the lint line proves nothing): $out"
 mkcrate "$t/good" keep good; out=$(run "$t/good"); rc=$?
 [ "$rc" = 0 ] || fail "the good sample was rejected: $out"
 mkcrate "$t/single" keep single; out=$(run "$t/single"); rc=$?
 [ "$rc" != 0 ] || fail "the single-variant sample passed clippy with the repo's lints: $out"
-echo "$out" | grep -q 'wildcard matches only a single variant' || fail "the single-variant sample failed, but not on the single-variant lint: $out"
+echo "$out" | grep -c 'wildcard matches only a single variant' > /dev/null || fail "the single-variant sample failed, but not on the single-variant lint: $out"
 mkcrate "$t/single2" stripsingle single; out=$(run "$t/single2"); rc=$?
 [ "$rc" = 0 ] || fail "the single-variant sample fails even without the single-variant lint line (so that line proves nothing): $out"
 mkcrate "$t/wildonly" strip single; out=$(run "$t/wildonly"); rc=$?

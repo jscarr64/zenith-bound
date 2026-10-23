@@ -77,7 +77,7 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
   else
     (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$ttl" cargo test --test "$suite" >"$tgt/run.log" 2>&1 </dev/null); rc=$?
     if [ "$rc" = 0 ]; then
-      if [ -f "$equiv" ] && grep -v -E '^[[:space:]]*(#|$)' "$equiv" | cut -f1 | grep -qxF -- "$id"; then
+      if [ -f "$equiv" ] && awk -F'\t' -v id="$id" '!/^[[:space:]]*(#|$)/ && $1 == id { f = 1 } END { exit !f }' "$equiv"; then
         echo "SURVIVED-EQUIVALENT $id ($fnpath, suite $suite): documented in $(basename "$equiv")"; ne=$((ne + 1))
       else
         echo "SURVIVED $id ($fnpath, suite $suite): the suite passed on the mutant"; ns=$((ns + 1))

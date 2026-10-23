@@ -61,42 +61,42 @@ setm() { cp "$r/$1" "$r/tools/mutants/manifest.txt"; }
 
 # 0 mutants: a header-only manifest FAILS (Spence review: the gate's mutants step must run at least one mutant)
 printf '# empty\n' > "$r/tools/mutants/manifest.txt"
-out="$(run)" && fail "empty manifest passed (0 mutants proves nothing): $out"; echo "$out" | grep -q "0 mutants ran" || fail "empty manifest: wrong message: $out"
+out="$(run)" && fail "empty manifest passed (0 mutants proves nothing): $out"; echo "$out" | grep -c "0 mutants ran" > /dev/null || fail "empty manifest: wrong message: $out"
 
 # a real mutant must be KILLED
 setm m.killed; out="$(run)" || fail "killable mutant not accepted: $out"
-echo "$out" | grep -q "^KILLED 001-add-mul" || fail "killed: wrong report: $out"
+echo "$out" | grep -c "^KILLED 001-add-mul" > /dev/null || fail "killed: wrong report: $out"
 
 # a surviving mutant makes the runner exit nonzero and is reported as SURVIVED
 setm m.surv; out="$(run)" && fail "surviving mutant passed (runner exited 0)"
-echo "$out" | grep -q "^SURVIVED 002-add-commute" || fail "survivor: wrong report: $out"
+echo "$out" | grep -c "^SURVIVED 002-add-commute" > /dev/null || fail "survivor: wrong report: $out"
 # ... unless it is documented as equivalent (reported differently, exit 0)
 printf '002-add-commute\taddition commutes\n' > "$r/tools/mutants/EQUIVALENT.txt"
 out="$(run)" || fail "documented-equivalent survivor failed the run: $out"
-echo "$out" | grep -q "^SURVIVED-EQUIVALENT 002-add-commute" || fail "equivalent: wrong report: $out"
+echo "$out" | grep -c "^SURVIVED-EQUIVALENT 002-add-commute" > /dev/null || fail "equivalent: wrong report: $out"
 printf '# header only\n' > "$r/tools/mutants/EQUIVALENT.txt"
 
 # a mutant that does not build and a patch that does not apply are INVALID (nonzero)
-setm m.nobuild; out="$(run)" && fail "non-building mutant passed"; echo "$out" | grep -q "^INVALID 003-nobuild" || fail "nobuild: wrong report: $out"
-setm m.bad; out="$(run)" && fail "non-applying patch passed"; echo "$out" | grep -q "^INVALID 005-badpatch" || fail "badpatch: wrong report: $out"
+setm m.nobuild; out="$(run)" && fail "non-building mutant passed"; echo "$out" | grep -c "^INVALID 003-nobuild" > /dev/null || fail "nobuild: wrong report: $out"
+setm m.bad; out="$(run)" && fail "non-applying patch passed"; echo "$out" | grep -c "^INVALID 005-badpatch" > /dev/null || fail "badpatch: wrong report: $out"
 
 # a hang is killed by the timeout
 setm m.hang; out="$(MUTATE_TIMEOUT=5s run)" || fail "hanging mutant not accepted as killed: $out"
-echo "$out" | grep -q "^KILLED 004-hang.*timed out" || fail "hang: wrong report: $out"
+echo "$out" | grep -c "^KILLED 004-hang.*timed out" > /dev/null || fail "hang: wrong report: $out"
 
 # --only selects one row; an unknown id is an error
 cat m.killed m.surv > "$r/tools/mutants/manifest.txt"
-out="$(run --only 001-add-mul)" || fail "--only killed row failed: $out"; echo "$out" | grep -q "1 mutants" || fail "--only: wrong count: $out"
+out="$(run --only 001-add-mul)" || fail "--only killed row failed: $out"; echo "$out" | grep -c "1 mutants" > /dev/null || fail "--only: wrong count: $out"
 run --only nope >/dev/null 2>&1 && fail "unknown --only id passed"
 
 # MUTATE_TARGET: a persistent target dir is reused and kept (same verdicts), the fixed worktree is still removed; bad values are refused
 pt="$t/persist-target"; setm m.killed
 out="$(MUTATE_TARGET="$pt" run)" || fail "persistent target: killable mutant not accepted: $out"
-echo "$out" | grep -q "^KILLED 001-add-mul" || fail "persistent target: wrong report: $out"
+echo "$out" | grep -c "^KILLED 001-add-mul" > /dev/null || fail "persistent target: wrong report: $out"
 [ -d "$pt/debug" ] || fail "persistent target: $pt/debug was not kept"
 touch "$pt/marker"
 setm m.surv; out="$(MUTATE_TARGET="$pt" run)" && fail "persistent target: surviving mutant passed"
-echo "$out" | grep -q "^SURVIVED 002-add-commute" || fail "persistent target: survivor wrong report: $out"
+echo "$out" | grep -c "^SURVIVED 002-add-commute" > /dev/null || fail "persistent target: survivor wrong report: $out"
 [ -f "$pt/marker" ] || fail "persistent target: the dir was not reused (marker gone)"
 [ -e "$t/zb-mutate.persist" ] && fail "persistent target: fixed worktree left behind"
 MUTATE_TARGET="relative/dir" run >/dev/null 2>&1 && fail "relative MUTATE_TARGET accepted"

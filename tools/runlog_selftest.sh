@@ -102,7 +102,7 @@ grep -q "SUB-RUN START selftest/full_gate" "$gl" || fail "full_gate did not join
 grep -q "STEP END unsafe-scan verdict=FAIL" "$gl" || fail "failing gate step not FAIL in the log: $(cat "$gl")"
 grep -q "src/lib.rs:1:fn f() { unsafe" "$gl" || fail "the failing step's output is not in the log: $(cat "$gl")"
 grep -q "^RESULT: FAIL" "$gl" || fail "poprun footer not FAIL for a failed nested gate: $(tail -6 "$gl")"
-find "$POPLOG_ROOT/selftest" -name '*-full_gate.log' | grep -q . && fail "nested full_gate opened its own log"
+find "$POPLOG_ROOT/selftest" -name '*-full_gate.log' | grep -c . > /dev/null && fail "nested full_gate opened its own log"
 # a wrapped script's own cleanup goes through runlog_on_exit and the run still finishes: footer, cleanup ran, RUNNING.tsv row gone
 cat > "$t/clean.sh" <<'JOB'
 #!/usr/bin/env bash
@@ -114,7 +114,7 @@ T_DIR="$t" bash "$t/clean.sh" > "$t/clean.out" 2>&1 || fail "clean-job exited no
 cl=$(find "$POPLOG_ROOT/selftest" -name '*-clean-job.log' | head -1)
 [ -f "$t/cleaned" ] || fail "runlog_on_exit cleanup did not run"
 grep -q "^RESULT: PASS" "$cl" || fail "run with an on-exit cleanup has no PASS footer: $(tail -4 "$cl")"
-awk -F'\t' '$2=="clean-job"' "$POPLOG_ROOT/RUNNING.tsv" | grep -q . && fail "clean-job RUNNING.tsv row left behind"
+awk -F'\t' '$2=="clean-job"' "$POPLOG_ROOT/RUNNING.tsv" | grep -c . > /dev/null && fail "clean-job RUNNING.tsv row left behind"
 # every wrapped tool must keep runlog's EXIT trap: no raw EXIT trap (it replaces the finish) and no exec of a command (no trap runs)
 for f in "$here"/*.sh; do
   [ "$f" = "$here/runlog.sh" ] && continue
@@ -124,7 +124,15 @@ for f in "$here"/*.sh; do
 done
 # one-shot mode
 bash "$here/runlog.sh" oneshot --tests -- bash -c 'echo "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"' > /dev/null 2>&1 && fail "one-shot zero-test run passed"
-find "$POPLOG_ROOT/selftest" -name '*-oneshot.log' | grep -q . || fail "one-shot wrote no log"
+find "$POPLOG_ROOT/selftest" -name '*-oneshot.log' | grep -c . > /dev/null || fail "one-shot wrote no log"
+# runlog_wrap sets pipefail: a failing command before a pipe is not hidden by the pipe's last stage
+cat > "$t/pf.sh" <<'JOB'
+#!/usr/bin/env bash
+. "$RUNLOG_LIB"; runlog_wrap pf-job "$@"
+false | true; echo "pf rc=$?"
+JOB
+bash "$t/pf.sh" > "$t/pf.out" 2>&1
+grep -q "pf rc=1" "$t/pf.out" || fail "runlog_wrap does not set pipefail: $(cat "$t/pf.out")"
 # missing poplog.sh is a hard failure (not a warning); RUNLOG_PLAIN=1 is the explicit fixture-only plain mode
 env -u RUNLOG_PLAIN RUNLOG_POPLOG=/nonexistent bash "$here/runlog.sh" nolib -- true > "$t/nolib.out" 2>&1 && fail "a run with poplog.sh missing passed"
 grep -q 'missing' "$t/nolib.out" || fail "missing poplog.sh not named: $(cat "$t/nolib.out")"

@@ -31,6 +31,7 @@ _rl_exit() { # EXIT trap: finish the (sub-)run; a failed step makes the script e
 runlog_wrap() { # runlog_wrap JOB "$@"
   local job=$1; shift
   trap _rl_exit EXIT
+  set -o pipefail   # Spence review 5: a failing stage before a pipe must not be masked by the last stage
   if [ "${RUNLOG_PLAIN:-0}" = 1 ]; then return 0; fi   # fixture-only plain mode, set explicitly by self-tests
   if [ ! -f "$RUNLOG_POPLOG" ]; then echo "runlog: FAIL $RUNLOG_POPLOG missing; refusing to run $job without a run log" >&2; exit 2; fi
   # shellcheck source=/dev/null

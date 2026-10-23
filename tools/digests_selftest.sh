@@ -23,8 +23,8 @@ mkdir -p "$t/ok"; printf '# header arch=x86_64\n%s\n' "$ROWS" > "$t/ok/host-debu
 # 2. a changed digest: fail, naming the file and the line
 mkdir -p "$t/bad1"; cp "$t/ok/host-debug-t1.txt" "$t/bad1/"; sed 's/^mag_grid 5288814 923017e7fb7370da$/mag_grid 5288814 923017e7fb7370db/' "$t/ok/i686-release-t7.txt" > "$t/bad1/i686-release-t7.txt"
 out=$("$d" compare "$t/bad1" "$t/expected.txt" 2>&1); [ $? -ne 0 ] || fail "a changed digest was accepted"
-echo "$out" | grep -q 'i686-release-t7.txt' || fail "the differing run is not named: $out"
-echo "$out" | grep -q 'mag_grid 5288814 923017e7fb7370db' || fail "the first differing line is not shown: $out"
+echo "$out" | grep -c 'i686-release-t7.txt' > /dev/null || fail "the differing run is not named: $out"
+echo "$out" | grep -c 'mag_grid 5288814 923017e7fb7370db' > /dev/null || fail "the first differing line is not shown: $out"
 # 3. a changed word count
 mkdir -p "$t/bad2"; sed 's/^splitmix 65536 /splitmix 65535 /' "$t/ok/host-debug-t1.txt" > "$t/bad2/host-debug-t1.txt"
 "$d" compare "$t/bad2" "$t/expected.txt" >/dev/null 2>&1 && fail "a changed word count was accepted"
@@ -56,7 +56,7 @@ export DIGESTS_CARGO="$t/fakecargo" DIGESTS_TMP="$t/tmp" FAKE_LOG="$t/log" FAKE_
 "$d" run "$t/manifest.txt" "$t/runs" >/dev/null 2>&1 || fail "run failed with a working fake cargo"
 [ "$(ls "$t/runs"/*.txt | wc -l)" = 8 ] || fail "run did not collect 2 targets x 2 profiles x 2 thread counts: $(ls "$t/runs")"
 [ "$(wc -l < "$t/log")" = 8 ] || fail "run made $(wc -l < "$t/log") cargo calls, want 8"
-grep -q -- '--release .*--target i686-unknown-linux-musl' "$t/log" || grep -q -- '--target i686-unknown-linux-musl.*--release' "$t/log" || fail "no release run for the cross target: $(cat "$t/log")"
+grep -q -- '--release .*--target i686-unknown-linux-musl' "$t/log" || grep -c -- '--target i686-unknown-linux-musl.*--release' "$t/log" > /dev/null || fail "no release run for the cross target: $(cat "$t/log")"
 [ "$(grep -c -- '--target' "$t/log")" = 4 ] || fail "the host runs must not pass --target"
 [ "$(grep -c -- '--test-threads=1' "$t/log")" = 4 ] && [ "$(grep -c -- '--test-threads=7' "$t/log")" = 4 ] || fail "thread counts 1 and 7 are not both run for every cell"
 "$d" compare "$t/runs" "$t/expected.txt" >/dev/null 2>&1 || fail "the collected fake runs do not compare equal"
