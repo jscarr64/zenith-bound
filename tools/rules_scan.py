@@ -659,10 +659,13 @@ def main(argv):
     with_count = False
     if "--diff-file" in argv:
         text = open(argv[argv.index("--diff-file") + 1], errors="replace").read()
-    elif "--staged" in argv:
-        text = git("diff", "--cached", "--no-color", "--no-ext-diff", "-U0").stdout
-    elif "--working" in argv:
-        text = git("diff", "HEAD", "--no-color", "--no-ext-diff", "-U0").stdout
+    elif "--staged" in argv or "--working" in argv:
+        what = ["--cached"] if "--staged" in argv else ["HEAD"]
+        r = git("diff", *what, "--no-color", "--no-ext-diff", "-U0")
+        if r.returncode != 0:  # never a vacuous "0 flagged" when git cannot diff
+            print("rules_scan: git diff %s failed: %s" % (what[0], r.stderr.strip()))
+            return 2
+        text = r.stdout
     else:
         args = [a for a in argv if not a.startswith("--")]
         rng = args[0] if args else "origin/main..HEAD"

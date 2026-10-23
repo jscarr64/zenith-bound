@@ -384,4 +384,11 @@ out="$(scan --count-only)" && fail "wrapped pub use rename under tests/ passed -
 echo "$out" | grep -q "tests/y.rs:3 \[type_rename\]" || fail "rename under tests/ not reported at its line: $out"
 rm -rf tests; printf 'fn a() {}\n' > src/x.rs
 scan --count-only >/dev/null || fail "tree not clean after the alias fixtures: $(scan --count-only)"
+# no vacuous pass: --working and --staged outside a git repo (git diff fails) must exit nonzero, not report "0 flagged"
+nogit=$(mktemp -d /tmp/rules-nogit.XXXXXX)
+for mode in --working --staged; do
+  out="$(RULES_SCAN_ROOT="$nogit" python3 "$here/rules_scan.py" $mode 2>&1)" && { rm -rf "$nogit"; fail "$mode passed although git diff failed: $out"; }
+  echo "$out" | grep -q "git diff .*failed" || { rm -rf "$nogit"; fail "$mode: no git failure message: $out"; }
+done
+rm -rf "$nogit"
 echo "rules_scan selftest: ok"
