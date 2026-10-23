@@ -1,5 +1,5 @@
 //! CONTRACT 10.1, 15.1, O6; oracle: the clauses (two variants, Strict is Default)
-//! COVERS: DomainPolicy::Strict, DomainPolicy::Clip, Default for DomainPolicy
+//! COVERS: DomainPolicy::Strict, DomainPolicy::Clip
 
 use zenith_bound::policy::DomainPolicy;
 
