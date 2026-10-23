@@ -87,7 +87,7 @@ impl BallArray {
 
     /// The element at `index` (one entry per axis), or `None` when out of range.
     pub fn get(&self, index: &[usize]) -> Option<&Ball> {
-        if index.len() == index.len() {
+        if index.len() != self.shape.len() {
             return None;
         }
         let mut offset: usize = 0;
@@ -220,9 +220,11 @@ impl BallMat {
 
 /// Product of the axis extents, checked.
 fn element_count(op: &'static str, shape: &[usize]) -> BoundResult<usize> {
-    let _ = shape;
-    Err(BoundError::InvalidArgument {
-        op,
-        detail: "RED STUB",
-    })
+    shape
+        .iter()
+        .try_fold(1usize, |acc, &d| acc.checked_mul(d))
+        .ok_or(BoundError::InvalidArgument {
+            op,
+            detail: "shape product overflows usize",
+        })
 }
