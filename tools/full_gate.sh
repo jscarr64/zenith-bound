@@ -2,16 +2,16 @@
 # Canonical full gate for zenith-bound. usage: tools/full_gate.sh TAG
 # Every step runs under `timeout` (STEP_TIMEOUT, default 20m); the rc of each step is written to $T/TAG.rc and its
 # output to $T/TAG-<step>.log (T defaults to /tmp/zb-gate-logs). REPO selects the checkout (default: this one);
-# CARGO_TARGET_DIR is honoured and must be fresh for this run (build-debug/build-release reject test binaries built before the gate started;
-# on Pop use a per-job subdir /tmp/target-harper/<job> and delete it after).
+# CARGO_TARGET_DIR is honoured and may be reused across runs (build-debug/build-release reject test binaries from outside it; a per-job
+# subdir /tmp/target-harper/<job> is optional).
 #
 # rules-scan runs the scan self-test, then the scan over SCAN_ARGS (default: RATCHET_BASE..HEAD with RATCHET_BASE defaulting to 3c9f36f,
 # the commit main was at when the gate was added; set SCAN_ARGS=--working after `git add -A` to scan uncommitted work).
 # build-tests (cargo build --tests; not `cargo test --no-run`, which poplog counts as a zero-test step) separates a compile error from a red test: build-debug/build-release run the tests.
 # manifest-scan: no compile-time env!(CARGO_MANIFEST_DIR) (it bakes one checkout's absolute path into the test binary; a binary reused from
 # another worktree then reads that worktree's files). Read the variable at run time (cargo test sets it) instead.
-# build-debug/build-release run through tools/fresh_test_run.sh: zero test binaries, or a binary not built during this run inside
-# CARGO_TARGET_DIR (a stale or foreign reuse), fails the step; zero tests fails it too (runlog_step --tests).
+# build-debug/build-release run through tools/fresh_test_run.sh: zero test binaries, or a binary outside CARGO_TARGET_DIR (a foreign
+# reuse), fails the step; zero tests fails it too (runlog_step --tests).
 # derive-scan sees a derive that spans several lines (grep -Pz); no-panic-scan also covers unwrap_or_default/unwrap_unchecked/unwrap_err/expect_err and the assert! family.
 # The rules are the zero-clone, no-unwrap/expect/panic/unreachable/todo/unimplemented (test code included), no-allow, no-unsafe,
 # no-float rules.
@@ -27,7 +27,6 @@ export PYTHONNOUSERSITE=1
 T=${T:-/tmp/zb-gate-logs}; mkdir -p "$T"
 cd "${REPO:-$(cd "$(dirname "$0")/.." && pwd)}" || exit 2
 tag=${1:?usage: tools/full_gate.sh TAG}; : > "$T/$tag.rc"
-gate_t0=$(date +%s)   # build-debug/build-release fail if a test binary they run is older than this (tools/fresh_test_run.sh)
 # NO VACUOUS PASS: every step starts with `require <tools>` (exit 127 naming the missing tool), and the scans go through no_hits, which
 # fails on a hit (rc 1) AND on a grep error or a missing grep (rc 2/127) instead of the old `! grep ... 2>/dev/null` (passed if grep was absent).
 # GATE_STEPS="a b" runs only the named steps (used by tools/full_gate_selftest.sh); unset runs all.
@@ -54,8 +53,8 @@ run() { name=$1; shift
   echo "$name=$rc" >> "$T/$tag.rc"; [ "$rc" = 0 ] || gate_rc=1; }
 run toolchain "require rustc cargo sed && tools/toolchain_check_selftest.sh && tools/toolchain_check.sh"
 run build-tests "require cargo && cargo build --tests"
-run build-debug "require cargo && tools/fresh_test_run.sh $gate_t0 cargo test -- --test-threads=\${RUST_TEST_THREADS:-8}"
-run build-release "require cargo && tools/fresh_test_run.sh $gate_t0 cargo test --release -- --test-threads=\${RUST_TEST_THREADS:-8}"
+run build-debug "require cargo && tools/fresh_test_run.sh cargo test -- --test-threads=\${RUST_TEST_THREADS:-8}"
+run build-release "require cargo && tools/fresh_test_run.sh cargo test --release -- --test-threads=\${RUST_TEST_THREADS:-8}"
 run rules-scan "require python3 git grep && tools/rules_scan_selftest.sh && tools/rules_scan.sh \${SCAN_ARGS:-\${RATCHET_BASE:-3c9f36f}..HEAD}"
 run fmt "require cargo rustfmt && cargo fmt --all -- --check"
 run clippy "require cargo cargo-clippy && cargo clippy --all-targets -- -D warnings"
