@@ -75,17 +75,11 @@ impl Enclosure for Ball {
         if upper <= *self.rad() {
             return Tri::True;
         }
-        let lower = if lo.is_positive() && !lo.is_zero() {
-            Mag::from_exact_num_lower(&lo)
-        } else if hi.is_negative() && !hi.is_zero() {
-            Mag::from_exact_num_lower(&hi)
-        } else {
-            Mag::zero()
-        };
-        if lower > *self.rad() {
-            Tri::False
-        } else {
-            Tri::Unknown
+        // Tight: a rad zenith-float can hold is exact at p (64-bit mantissa, p >= MIN_PREC + GUARD_BITS), and directed
+        // rounding is monotone and fixes representable values, so hi > rad (or lo < -rad) decides |mid - x| > rad.
+        match self.rad().to_exact_num() {
+            Ok(_) => Tri::False,
+            Err(_) => Tri::Unknown,
         }
     }
 }
