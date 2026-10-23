@@ -32,17 +32,16 @@ fn tri_is_exhaustive_with_exactly_three_values() -> Result<(), String> {
     // Gap F2 (API freeze): Tri is NOT #[non_exhaustive]; this wildcard-free match in an
     // external crate stops compiling if it ever becomes so (checked by hand: adding it gives E0004, log 1555-zb-l0b-f2-red).
     let all = [Tri::True, Tri::False, Tri::Unknown];
-    let mut seen = [false; 3];
+    let mut seen = 0u8;
     for t in &all {
-        let i = match t {
-            Tri::True => 0,
-            Tri::False => 1,
-            Tri::Unknown => 2,
+        seen |= match t {
+            Tri::True => 1,
+            Tri::False => 2,
+            Tri::Unknown => 4,
         };
-        seen[i] = true;
     }
     match seen {
-        [true, true, true] => Ok(()),
-        other => Err(format!("variants seen {:?}", other)),
+        7 => Ok(()),
+        other => Err(format!("variant mask {:b}", other)),
     }
 }
