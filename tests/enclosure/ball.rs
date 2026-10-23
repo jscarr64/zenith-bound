@@ -198,3 +198,20 @@ fn contains_stays_unknown_when_rad_is_past_zenith_float_range() -> Result<(), St
     }
     Ok(())
 }
+
+#[test]
+fn infinite_points_are_outside_even_a_rad_past_zenith_float_range() -> Result<(), String> {
+    // Kills 127-C-naninf under the tight rule: with an in-range rad, +-Inf already falls out as False, so the
+    // explicit is_inf test shows only when rad is no zf value (the overflowing bracket alone would say Unknown).
+    let m = Mag::from_exact_num(&ExactNum::max_value(64));
+    let exp = m.exp().ok_or("exp")?.checked_add(1).ok_or("exp+1")?;
+    let rad = Mag::finite(m.mant().ok_or("mant")?, exp).map_err(|e| format!("{:?}", e))?;
+    let b = Ball::from_mid_rad(n(0), rad, 64).map_err(|e| format!("{:?}", e))?;
+    for x in [INF_POS, -INF_POS] {
+        let t = b.contains(&x);
+        if t != Tri::False {
+            return Err(format!("0 ± 2 max vs {:?}: want False, got {:?}", x, t));
+        }
+    }
+    Ok(())
+}
