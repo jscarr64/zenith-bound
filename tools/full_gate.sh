@@ -2,11 +2,16 @@
 # Canonical full gate for zenith-bound. usage: tools/full_gate.sh TAG
 # Every step runs under `timeout` (STEP_TIMEOUT, default 20m); the rc of each step is written to $T/TAG.rc and its
 # output to $T/TAG-<step>.log (T defaults to /tmp/zb-gate-logs). REPO selects the checkout (default: this one);
-# CARGO_TARGET_DIR is honoured.
+# CARGO_TARGET_DIR is honoured and must be fresh for this run (build-debug/build-release reject test binaries built before the gate started;
+# on Pop use a per-job subdir /tmp/target-harper/<job> and delete it after).
 #
 # rules-scan runs the scan self-test, then the scan over SCAN_ARGS (default: RATCHET_BASE..HEAD with RATCHET_BASE defaulting to 3c9f36f,
 # the commit main was at when the gate was added; set SCAN_ARGS=--working after `git add -A` to scan uncommitted work).
-# build-tests (cargo test --no-run) separates a compile error from a red test: build-debug/build-release run the tests.
+# build-tests (cargo build --tests; not `cargo test --no-run`, which poplog counts as a zero-test step) separates a compile error from a red test: build-debug/build-release run the tests.
+# manifest-scan: no compile-time env!(CARGO_MANIFEST_DIR) (it bakes one checkout's absolute path into the test binary; a binary reused from
+# another worktree then reads that worktree's files). Read the variable at run time (cargo test sets it) instead.
+# build-debug/build-release run through tools/fresh_test_run.sh: zero test binaries, or a binary not built during this run inside
+# CARGO_TARGET_DIR (a stale or foreign reuse), fails the step; zero tests fails it too (runlog_step --tests).
 # derive-scan sees a derive that spans several lines (grep -Pz); no-panic-scan also covers unwrap_or_default/unwrap_unchecked/unwrap_err/expect_err and the assert! family.
 # The rules are the zero-clone, no-unwrap/expect/panic/unreachable/todo/unimplemented (test code included), no-allow, no-unsafe,
 # no-float rules.
@@ -22,6 +27,7 @@ export PYTHONNOUSERSITE=1
 T=${T:-/tmp/zb-gate-logs}; mkdir -p "$T"
 cd "${REPO:-$(cd "$(dirname "$0")/.." && pwd)}" || exit 2
 tag=${1:?usage: tools/full_gate.sh TAG}; : > "$T/$tag.rc"
+gate_t0=$(date +%s)   # build-debug/build-release fail if a test binary they run is older than this (tools/fresh_test_run.sh)
 # NO VACUOUS PASS: every step starts with `require <tools>` (exit 127 naming the missing tool), and the scans go through no_hits, which
 # fails on a hit (rc 1) AND on a grep error or a missing grep (rc 2/127) instead of the old `! grep ... 2>/dev/null` (passed if grep was absent).
 # GATE_STEPS="a b" runs only the named steps (used by tools/full_gate_selftest.sh); unset runs all.
@@ -44,9 +50,9 @@ run() { name=$1; shift
   local tf=(); case $name in build-debug|build-release) tf=(--tests) ;; esac   # a test step that runs zero tests fails (runlog_step)
   echo "start $name $(date +%T)" >> "$T/$tag.rc"; runlog_step "${tf[@]}" "$name" -- timeout "${STEP_TIMEOUT:-20m}" bash -c "$*" > "$T/$tag-$name.log" 2>&1; echo "$name=$?" >> "$T/$tag.rc"; }
 run toolchain "require rustc cargo sed && tools/toolchain_check_selftest.sh && tools/toolchain_check.sh"
-run build-tests "require cargo && cargo test --no-run"
-run build-debug "require cargo && cargo test"
-run build-release "require cargo && cargo test --release"
+run build-tests "require cargo && cargo build --tests"
+run build-debug "require cargo && tools/fresh_test_run.sh $gate_t0 cargo test -- --test-threads=\${RUST_TEST_THREADS:-8}"
+run build-release "require cargo && tools/fresh_test_run.sh $gate_t0 cargo test --release -- --test-threads=\${RUST_TEST_THREADS:-8}"
 run rules-scan "require python3 git grep && tools/rules_scan_selftest.sh && tools/rules_scan.sh \${SCAN_ARGS:-\${RATCHET_BASE:-3c9f36f}..HEAD}"
 run fmt "require cargo rustfmt && cargo fmt --all -- --check"
 run clippy "require cargo cargo-clippy && cargo clippy --all-targets -- -D warnings"
@@ -55,7 +61,8 @@ run no-float-scan "no_hits ':[0-9]+:\s*(//|\*)' -rn --include='*.rs' -E '\bf32\b
 run no-panic-scan "no_hits ':[0-9]+:\s*(//|\*)' -rn --include='*.rs' -E '\bunwrap\(|\bexpect\(|\bpanic!|\bunreachable!|\btodo!|\bunimplemented!|\bunwrap_or_default\(|\bunwrap_unchecked\(|\bunwrap_err\(|\bunwrap_err_unchecked\(|\bexpect_err\(|\b(debug_)?assert(_eq|_ne)?!|\bassert_matches!'"
 run no-clone-scan "no_hits ':[0-9]+:\s*(//|\*)' -rn --include='*.rs' -E '\.clone\(|\.clone_from\(|\.to_vec\(|\.cloned\(|\.copied\(|\.to_owned\(|Clone::clone|derive\([^)]*(Clone|Copy)|impl(<[^>]*>)?\s+(Clone|Copy)\s+for'"
 run derive-scan "no_hits '' -rPzl --include='*.rs' '#\\[derive\\([^)]*\\b(Clone|Copy)\\b'"
-run gate-selftest "require mktemp ln sed grep wc && tools/full_gate_selftest.sh"
+run manifest-scan "no_hits ':[0-9]+:\s*(//|\*|//!)' -rn --include='*.rs' -F 'env!(\"CARGO_MANIFEST_DIR\")'"
+run gate-selftest "require mktemp ln sed grep wc stat tee touch && tools/full_gate_selftest.sh && tools/fresh_test_run_selftest.sh"
 run pubfn-coverage "require awk grep git && tools/pubfn_coverage_selftest.sh && tools/pubfn_coverage.sh"
 run goldens-regen "require sha256sum grep cmp && tools/goldens_regen.sh"
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Gate rerun fixes (Jeff, 2026-10-23 10:33 AM CT). These touch protected `tools/` files, so they need Spence's review:
+  - `tools/runlog.sh` v3 relies on poplog's FAIL verdict and exit code. The `/dev/null` stdout workaround and the zb-fail markers are gone. A nested full_gate under poprun now exits nonzero, shows FAIL and writes step output into the parent log. There is a red-first selftest case for this.
+  - Harness goldens resolve at runtime through `common::goldens::repo_root()`, not compile-time `env!("CARGO_MANIFEST_DIR")`. A binary built in one worktree used to read another worktree's goldens. The new gate step `manifest-scan` bans the `env!` form.
+  - A wrapped tool registers its exit cleanup with `runlog_on_exit`, not a raw `trap ... EXIT`, and does not `exec` a command. Both used to skip poplog's finish, which left logs without a footer and RUNNING.tsv rows stuck in RUNNING. Self-tests call `runlog_detach_children` so their deliberately failing fixtures do not FAIL the self-test's own run. A lint in `runlog_selftest.sh` enforces both rules, red first.
+  - The gate's build-tests step runs `cargo build --tests`. poplog treats any `cargo test` command as a test step, so the old `cargo test --no-run` read as zero tests and FAILed (first seen in the 11:15 AM CT gate). `full_gate_selftest.sh` now rejects the old form.
+  - New `tools/fresh_test_run.sh` is used by build-debug and build-release. It fails if a step runs 0 test binaries, a binary from outside `CARGO_TARGET_DIR`, or a binary older than the gate start. As a result, the gate needs a fresh per-job target dir, `/tmp/target-harper/<job>`.
+
 - Run logs now go through the shared Pop logger (Jeff, 2026-10-23 9:59 AM CT; Paul and Rusty): `tools/runlog.sh` sources
   `~/pop-logs/bin/poplog.sh` instead of writing logs and `RUNNING.tsv` itself, so logs, the canonical 8-column `RUNNING.tsv` row (lock
   `RUNNING.tsv.lock`) and 30-day pruning (`poprotate`) are poplog's. zb keeps a thin layer: step output still on stdout, a failed or zero-test

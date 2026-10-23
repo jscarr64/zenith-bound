@@ -15,7 +15,7 @@ GENERATORS="scripts/gen_goldens.py scripts/gen_ball_goldens.py scripts/gen_ball_
 # stdout generators (no --check): name and committed file
 STDOUT_GENERATORS="scripts/gen_review_goldens.py:mag_ops_review.txt"
 cd "$root" || exit 2
-tmp=$(mktemp -d /tmp/zb-goldens-regen.XXXXXX); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d /tmp/zb-goldens-regen.XXXXXX); runlog_on_exit "rm -rf \"$tmp\""
 rc=0
 runlog_step goldlib-selftest -- "$PY" scripts/goldlib.py --selftest || rc=1
 for g in $GENERATORS; do

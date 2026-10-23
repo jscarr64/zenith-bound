@@ -3,9 +3,10 @@
 # any other version (older, a longer prefix such as 1.990), a missing or unpinned toolchain file, or a missing rustc fails.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap toolchain_check_selftest "$@"   # run log (tools/runlog.sh)
+runlog_detach_children
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
-t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
+t=$(mktemp -d); runlog_on_exit "rm -rf \"$t\""
 fail() { echo "toolchain_check selftest FAIL: $*"; exit 1; }
 mkfake() { # mkfake <dir> <rustc version line> <cargo version line>
   mkdir -p "$1"

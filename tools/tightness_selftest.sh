@@ -5,9 +5,10 @@
 # The RESULTS fixture below is byte-identical to the text pinned by tests/harness/tightness_selftest.rs (the Rust writer): format agreement.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap tightness_selftest "$@"   # run log (tools/runlog.sh)
+runlog_detach_children
 set -u
 export LC_ALL=C PYTHONNOUSERSITE=1
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/tightness-selftest.XXXXXX)"; trap 'rm -rf "$t"' EXIT
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/tightness-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""
 tool=("/usr/bin/python3" "$here/tightness_report.py")
 fail() { echo "tightness SELFTEST FAIL: $*"; exit 1; }
 expect_rc() { # expect_rc <rc> <label> <cmd...>

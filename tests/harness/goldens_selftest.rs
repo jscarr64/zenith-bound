@@ -1,9 +1,9 @@
-//! COVERS: common::goldens::golden_dir
+//! COVERS: common::goldens::golden_dir, common::goldens::repo_root
 //! Every golden file exists, is non-empty and starts with its expected header line; every *.txt in tests/goldens has a table row and a
 //! SHA256SUMS line and vice versa. (The sha256 values themselves are checked by tools/goldens_regen.sh, not here: no hashing crate.)
 
 use crate::common::expect_eq;
-use crate::common::goldens::{golden_dir, GOLDEN_FILES};
+use crate::common::goldens::{golden_dir, repo_root, GOLDEN_FILES};
 
 #[test]
 fn golden_dir_exists() -> Result<(), String> {
@@ -12,6 +12,25 @@ fn golden_dir_exists() -> Result<(), String> {
     } else {
         Err(format!("{:?} is not a directory", golden_dir()))
     }
+}
+
+/// The goldens are read from the checkout the test runs in (cargo test runs it from the package root), never from a path baked in at
+/// compile time: a test binary built in one worktree and run in another must read the second worktree's files.
+#[test]
+fn goldens_come_from_the_checkout_the_test_runs_in() -> Result<(), String> {
+    let canon =
+        |p: std::path::PathBuf| std::fs::canonicalize(&p).map_err(|e| format!("{:?}: {}", p, e));
+    let here = canon(std::env::current_dir().map_err(|e| format!("current_dir: {}", e))?)?;
+    expect_eq(
+        "repo_root() is the directory the test runs in",
+        &canon(repo_root())?,
+        &here,
+    )?;
+    expect_eq(
+        "golden_dir() is <checkout>/tests/goldens",
+        &canon(golden_dir())?,
+        &here.join("tests").join("goldens"),
+    )
 }
 
 #[test]

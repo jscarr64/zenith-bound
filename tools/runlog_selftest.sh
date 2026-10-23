@@ -3,14 +3,19 @@
 # Fixtures only, under a throwaway POPLOG_ROOT, using the real poplog.sh: a --tests step that runs zero tests is FAIL and returns 1, a passing
 # cargo-style step is counted, the canonical 8-column RUNNING.tsv row (ISO-8601 times with offset, state RUNNING, slot -) is added and removed
 # on exit and on TERM with other agents' rows kept, the heartbeat fires (POPLOG_HEARTBEAT=1), header and footer are poplog's, a piped run
-# ends when the run ends, a wrapped script inside a wrapped run or inside poprun opens no log of its own, and one-shot mode fails zero tests.
+# ends when the run ends, a wrapped script inside a wrapped run or inside poprun opens no log of its own, a nested full_gate under poprun
+# with a failing step exits non-zero with FAIL and the step's output in poprun's log, a wrapped script's own cleanup (runlog_on_exit) still lets the run finish, no wrapped tool sets a raw EXIT
+# trap or execs a command, and one-shot mode fails zero tests.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap runlog_selftest "$@"   # run log (tools/runlog.sh)
+runlog_detach_children
 set -u
 export LC_ALL=C
 here=$(cd "$(dirname "$0")" && pwd)
 fail() { echo "runlog selftest FAIL: $*"; exit 1; }
-t=$(mktemp -d /tmp/zb-runlog-selftest.XXXXXX); trap 'rm -rf "$t"' EXIT
+t=$(mktemp -d /tmp/zb-runlog-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""
+# fixtures run in a subshell: they repoint POPLOG_ROOT and unset POPLOG_*, which this script's own run log still needs at exit
+(
 lib=${RUNLOG_POPLOG:-$HOME/pop-logs/bin/poplog.sh}
 [ -f "$lib" ] || fail "shared logger $lib missing"
 export POPLOG_ROOT="$t/pop-logs" RUNLOG_AGENT=selftest RUNLOG_LIB="$here/runlog.sh"
@@ -87,7 +92,38 @@ T_DIR="$t" bash "$t/outer.sh" > /dev/null 2>&1 || fail "outer run failed"
 [ "$(find "$POPLOG_ROOT/selftest" -name '*-ok-job.log' | wc -l)" = "$before" ] || fail "nested run opened its own log"
 prl=$(find "$POPLOG_ROOT/selftest" -name '*-pr-outer.log' | head -1)
 grep -q "STEP END t verdict=PASS" "$prl" || fail "step of a script under poprun not in poprun's log: $(cat "$prl")"
+# a nested full_gate under poprun with one failing step: non-zero exit, FAIL in poprun's log, the step's output in that log
+fx="$t/fx"; mkdir -p "$fx/src"; printf 'fn f() { unsafe { } }\n' > "$fx/src/lib.rs"
+"$(dirname "$lib")/poprun" --agent selftest --job pr-gate -- env REPO="$fx" GATE_STEPS="unsafe-scan" T="$t/gl" bash "$here/full_gate.sh" fx > "$t/gate.out" 2>&1 \
+  && fail "nested full_gate with a failing step exited 0 under poprun: $(cat "$t/gate.out")"
+gl=$(find "$POPLOG_ROOT/selftest" -name '*-pr-gate.log' | head -1)
+[ -n "$gl" ] || fail "poprun wrote no pr-gate log"
+grep -q "SUB-RUN START selftest/full_gate" "$gl" || fail "full_gate did not join poprun's log as a sub-run: $(cat "$gl")"
+grep -q "STEP END unsafe-scan verdict=FAIL" "$gl" || fail "failing gate step not FAIL in the log: $(cat "$gl")"
+grep -q "src/lib.rs:1:fn f() { unsafe" "$gl" || fail "the failing step's output is not in the log: $(cat "$gl")"
+grep -q "^RESULT: FAIL" "$gl" || fail "poprun footer not FAIL for a failed nested gate: $(tail -6 "$gl")"
+find "$POPLOG_ROOT/selftest" -name '*-full_gate.log' | grep -q . && fail "nested full_gate opened its own log"
+# a wrapped script's own cleanup goes through runlog_on_exit and the run still finishes: footer, cleanup ran, RUNNING.tsv row gone
+cat > "$t/clean.sh" <<'JOB'
+#!/usr/bin/env bash
+. "$RUNLOG_LIB"; runlog_wrap clean-job "$@"
+runlog_on_exit 'touch "$T_DIR/cleaned"'
+echo body
+JOB
+T_DIR="$t" bash "$t/clean.sh" > "$t/clean.out" 2>&1 || fail "clean-job exited non-zero: $(cat "$t/clean.out")"
+cl=$(find "$POPLOG_ROOT/selftest" -name '*-clean-job.log' | head -1)
+[ -f "$t/cleaned" ] || fail "runlog_on_exit cleanup did not run"
+grep -q "^RESULT: PASS" "$cl" || fail "run with an on-exit cleanup has no PASS footer: $(tail -4 "$cl")"
+awk -F'\t' '$2=="clean-job"' "$POPLOG_ROOT/RUNNING.tsv" | grep -q . && fail "clean-job RUNNING.tsv row left behind"
+# every wrapped tool must keep runlog's EXIT trap: no raw EXIT trap (it replaces the finish) and no exec of a command (no trap runs)
+for f in "$here"/*.sh; do
+  [ "$f" = "$here/runlog.sh" ] && continue
+  grep -q 'runlog_wrap' "$f" || continue
+  grep -nE "trap .*EXIT" "$f" | grep -v runlog_on_exit && fail "${f##*/} sets its own EXIT trap; use runlog_on_exit so the run log is finished"
+  grep -nE '(^|[;&|]) *exec +[^0-9 <>]' "$f" && fail "${f##*/} execs a command, so the run log is never finished"
+done
 # one-shot mode
 bash "$here/runlog.sh" oneshot --tests -- bash -c 'echo "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"' > /dev/null 2>&1 && fail "one-shot zero-test run passed"
 find "$POPLOG_ROOT/selftest" -name '*-oneshot.log' | grep -q . || fail "one-shot wrote no log"
 echo "runlog selftest: ok"
+)

@@ -219,7 +219,7 @@ fn rows_sequential() -> Result<String, String> {
 }
 
 fn expected_rows() -> Result<String, String> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    let path = crate::common::goldens::repo_root()
         .join("tools")
         .join("digest_expected.txt");
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{:?}: {}", path, e))?;

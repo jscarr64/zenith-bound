@@ -29,8 +29,16 @@ pub const GOLDEN_FILES: [GoldenFile; 4] = [
     },
 ];
 
+/// The checkout the running test binary belongs to, read at RUN time: cargo test sets CARGO_MANIFEST_DIR for the test process and runs
+/// it from the package root. Never the compile-time value, which is one checkout's absolute path baked into the binary (a binary reused
+/// from another worktree's build would then read that worktree's files).
+pub fn repo_root() -> PathBuf {
+    match std::env::var_os("CARGO_MANIFEST_DIR") {
+        Some(dir) => PathBuf::from(dir),
+        None => PathBuf::from("."),
+    }
+}
+
 pub fn golden_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("goldens")
+    repo_root().join("tests").join("goldens")
 }

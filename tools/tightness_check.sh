@@ -10,4 +10,4 @@ root=${TIGHTNESS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 results=${TIGHTNESS_RESULTS:-${CARGO_TARGET_DIR:-$root/target}/tmp/tightness_results.txt}
 tool=/usr/bin/python3
 "$tool" "$root/tools/tightness_report.py" report "$results" || exit $?
-exec "$tool" "$root/tools/tightness_report.py" check "$results" "$root/tools/tightness_baseline.txt"
+"$tool" "$root/tools/tightness_report.py" check "$results" "$root/tools/tightness_baseline.txt"; exit $?

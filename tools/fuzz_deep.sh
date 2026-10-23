@@ -67,7 +67,7 @@ if [ "$selftest" = 1 ]; then
   [ "$a" = 0000000000005eed ] || fail "selftest: shard 0 seed is $a"
   [ "$b" = 9e3779b97f4adb02 ] || fail "selftest: shard 1 seed is $b"
   if ! { [ "$a" != "$b" ] && [ "$b" != "$c" ]; }; then fail "selftest: shard seeds collide"; fi
-  t=$(mktemp -d /tmp/fuzz-deep-selftest.XXXXXX); trap 'rm -rf "$t"' EXIT
+  t=$(mktemp -d /tmp/fuzz-deep-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""
   "$me" --cases 4000 --shards 2 --out "$t" >"$t/run.txt" 2>&1 || { cat "$t/run.txt"; fail "selftest: small run failed"; }
   grep -q 'fuzz_deep: 2 shards ok, 4000 cases' "$t/run.txt" || { cat "$t/run.txt"; fail "selftest: no summary line"; }
   if ! { [ -s "$t/shard-0.log" ] && [ -s "$t/shard-1.log" ]; }; then fail "selftest: shard logs missing"; fi

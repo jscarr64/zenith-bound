@@ -5,9 +5,10 @@
 # proves `run` builds the right command lines (profile, --target, test threads) and fails when a run fails or writes no file.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap digests_selftest "$@"   # run log (tools/runlog.sh)
+runlog_detach_children
 set -u
 export LC_ALL=C
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/digests-selftest.XXXXXX)"; trap 'rm -rf "$t"' EXIT
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/digests-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""
 fail() { echo "digests SELFTEST FAIL: $*"; exit 1; }
 d="$here/digests.sh"
 ROWS='splitmix 65536 824ce7a05302bb45

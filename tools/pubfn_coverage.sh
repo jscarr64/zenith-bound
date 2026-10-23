@@ -25,7 +25,7 @@ export LC_ALL=C
 root=${PUBFN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 exempt=${PUBFN_EXEMPT:-$root/tools/pubfn_coverage_exempt.txt}
 cd "$root" || { echo "pubfn_coverage: cannot cd to $root"; exit 2; }
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d); runlog_on_exit "rm -rf \"$tmp\""
 
 # ---- 1. items -------------------------------------------------------------------------------------------------------
 extract() { # extract <file> <modpath> <prefix>

@@ -13,12 +13,13 @@
 # No repo file is touched. Offline, no dependencies. usage: tools/wildcard_enum_selftest.sh
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap wildcard_enum_selftest "$@"   # run log (tools/runlog.sh)
+runlog_detach_children
 set -u
 export LC_ALL=C
 root=${WILDCARD_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 fail() { echo "wildcard-enum selftest FAIL: $*"; exit 1; }
 [ -f "$root/Cargo.toml" ] || fail "no Cargo.toml in $root"
-t=$(mktemp -d /tmp/wildcard-selftest.XXXXXX); trap 'rm -rf "$t"' EXIT
+t=$(mktemp -d /tmp/wildcard-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""
 
 lints() { # the [lints.*] tables of the repo's Cargo.toml; arg: keep | strip (no wildcard_enum_match_arm line) | stripsingle (no match_wildcard_for_single_variants line)
   awk '/^\[lints\./ { on = 1 } /^\[/ && !/^\[lints\./ { on = 0 } on' "$root/Cargo.toml" | {

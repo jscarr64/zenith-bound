@@ -56,7 +56,7 @@ cleanup() {
   [ -n "$tgt" ] && [ -z "$persist" ] && rm -rf "$tgt"
   work=""; tgt=""
 }
-trap cleanup EXIT; trap 'cleanup; exit 130' INT TERM
+runlog_on_exit cleanup; trap 'cleanup; exit 130' INT TERM
 
 nk=0; ns=0; ne=0; ni=0; total=0
 newtgt

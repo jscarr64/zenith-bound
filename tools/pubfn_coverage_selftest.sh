@@ -4,8 +4,9 @@
 # (UNCOVERED, STALE, NOTEST), (4) honours the exemption list for UNCOVERED only. No repo files are touched.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap pubfn_coverage_selftest "$@"   # run log (tools/runlog.sh)
+runlog_detach_children
 set -u
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/pubfn-selftest.XXXXXX)"; trap 'rm -rf "$t"' EXIT
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/pubfn-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }
 chk() { PUBFN_ROOT="$1" PUBFN_EXEMPT="${2:-$1/tools/pubfn_coverage_exempt.txt}" "$here/pubfn_coverage.sh" "${@:3}"; }
 
