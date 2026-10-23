@@ -676,15 +676,35 @@ def narrow_exponent_check():
 
 def prec_width_sites():
     """API-freeze unit 5: [(relpath, line, snippet)] for every `prec` in src/ typed with a concrete integer width
-    instead of the `Prec` alias."""
-    return []
+    instead of the `Precision` alias: `prec`-named params, fields and bindings, and `fn *prec*(..) -> int` returns. Private
+    `const` items (zf-side container sizes such as `ZERO_PREC: usize`) are not a precision API and are skipped."""
+    width = r"(?:(?:core|std)::primitive::)?[ui](?:8|16|32|64|128|size)\b"
+    rxs = [
+        re.compile(r"\b[A-Za-z_]*prec\w*\s*:(?!:)\s*" + width, re.I),
+        re.compile(r"\bfn\s+\w*prec\w*\s*(?:<[^>]*>)?\s*\([^)]*\)\s*->\s*" + width, re.I),
+    ]
+    sites = []
+    for dp, dn, fn in os.walk(os.path.join(ROOT, "src")):
+        dn[:] = sorted(dn)
+        for f in sorted(fn):
+            if not f.endswith(".rs"):
+                continue
+            path = os.path.join(dp, f)
+            text = blank_code(open(path, errors="replace").read())
+            for rx in rxs:
+                for m in rx.finditer(text):
+                    bol = text.rfind("\n", 0, m.start()) + 1
+                    if re.search(r"\b(?:const|static)\s+$", text[bol:m.start()]):
+                        continue
+                    sites.append((os.path.relpath(path, ROOT), text.count("\n", 0, m.start()) + 1, " ".join(m.group(0).split())))
+    return sites
 
 
 def prec_width_check():
     sites = prec_width_sites()
     for rel, line, snippet in sites:
         print("%s:%d [prec_concrete_width] %s" % (rel, line, snippet[:120]))
-    print("rules_scan: prec typed with a concrete integer width: %d (no baseline, any hit fails; use Prec)" % len(sites))
+    print("rules_scan: prec typed with a concrete integer width: %d (no baseline, any hit fails; use Precision)" % len(sites))
     return 1 if sites else 0
 
 

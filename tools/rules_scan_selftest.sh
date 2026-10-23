@@ -397,9 +397,9 @@ printf 'pub const E: zenith_float_num::Exponent = 0;\npub type T = i32;\n' > src
 printf 'fn a() {}\n' > src/x.rs
 scan --count-only >/dev/null || fail "tree not clean after the narrow-exponent fixtures: $(scan --count-only)"
 
-# API-freeze unit 5: every prec in src/ uses the `Prec` alias, never a concrete integer width (params, fields, fn prec returns)
-printf 'pub type Prec = u64;\npub struct B { prec: Prec }\npub fn f(prec: Prec) -> Prec { prec }\npub trait E { fn prec(&self) -> Prec; }\n// fn g(prec: u32)\nfn h(n: u32) {}\n' > src/x.rs
-scan --count-only >/dev/null || fail "Prec alias flagged: $(scan --count-only)"
+# API-freeze unit 5: every prec in src/ uses the `Precision` alias, never a concrete integer width (params, fields, fn prec returns)
+printf 'pub type Precision = usize;\npub struct B { prec: Precision }\npub fn f(prec: Precision) -> Precision { prec }\npub trait E { fn prec(&self) -> Precision; }\n// fn g(prec: u32)\nfn h(n: u32) {}\n' > src/x.rs
+scan --count-only >/dev/null || fail "Precision alias flagged: $(scan --count-only)"
 for bad in 'pub fn f(prec: u32) {}' 'pub fn f(x: u8, mid_prec: usize) {}' 'struct B { prec: u64 }' 'pub trait E { fn prec(&self) -> u32; }' 'pub fn prec(\n    &self,\n) -> i64 { 0 }' 'fn f(prec: core::primitive::u128) {}'; do
   printf "$bad\n" > src/x.rs
   out="$(scan --count-only)" && fail "concrete prec width passed: $bad"
