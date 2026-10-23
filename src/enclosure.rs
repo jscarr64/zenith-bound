@@ -7,6 +7,7 @@ use zenith_float_num::{ExactNum, RoundingMode};
 
 use crate::ball::Ball;
 use crate::mag::Mag;
+use crate::precision::Precision;
 use crate::tri::Tri;
 
 mod sealed {
@@ -26,7 +27,7 @@ pub trait Enclosure: sealed::Sealed {
     type Point;
 
     /// The requested midpoint precision in bits.
-    fn prec(&self) -> u32;
+    fn prec(&self) -> Precision;
 
     /// Structural identity: same midpoint value, same radius, same `prec` (CONTRACT 6.5 b, O20).
     fn identical(&self, other: &Self) -> bool;
@@ -40,7 +41,7 @@ impl sealed::Sealed for Ball {}
 impl Enclosure for Ball {
     type Point = ExactNum;
 
-    fn prec(&self) -> u32 {
+    fn prec(&self) -> Precision {
         Ball::prec(self)
     }
 

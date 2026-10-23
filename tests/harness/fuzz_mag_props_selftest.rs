@@ -281,11 +281,11 @@ fn wrong_sqrt_flip(a: &Mag) -> Mag {
     }
 }
 
-fn wrong_smaller(x: &Mag, mid: i64, prec: u32) -> bool {
+fn wrong_smaller(x: &Mag, mid: i64, prec: usize) -> bool {
     x.smaller_than_half_ulp(mid, prec.checked_add(1).unwrap_or(prec))
 }
 
-fn wrong_smaller_inverted(x: &Mag, mid: i64, prec: u32) -> bool {
+fn wrong_smaller_inverted(x: &Mag, mid: i64, prec: usize) -> bool {
     !x.smaller_than_half_ulp(mid, prec)
 }
 

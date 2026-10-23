@@ -14,6 +14,7 @@ use zenith_float_num::ExactNum;
 
 use crate::ball::Ball;
 use crate::error::{BoundError, BoundResult};
+use crate::precision::Precision;
 
 /// Precision of the exact zero midpoint used by [`BallArray::zeros`].
 const ZERO_PREC: usize = 64;
@@ -50,7 +51,7 @@ impl BallArray {
     /// # Errors
     /// `InvalidArgument` when `prec == 0` or the shape's product overflows; `Resource` when
     /// the storage cannot be allocated.
-    pub fn zeros(shape: Box<[usize]>, prec: u32) -> BoundResult<BallArray> {
+    pub fn zeros(shape: Box<[usize]>, prec: Precision) -> BoundResult<BallArray> {
         let len = element_count("BallArray::zeros", &shape)?;
         let mut balls = Vec::new();
         balls

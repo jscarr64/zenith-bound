@@ -187,7 +187,17 @@ fn infinity_radius_is_canonical_all_reals() -> Result<(), String> {
 
 #[test]
 fn prec_is_stored_as_requested() -> Result<(), String> {
-    for p in [1u32, 2, 63, 64, 65, 4096, u32::MAX] {
+    for p in [
+        1usize,
+        2,
+        63,
+        64,
+        65,
+        4096,
+        0xFFFF_FFFF,
+        1 << 32,
+        zenith_bound::MAX_PRECISION,
+    ] {
         let b = ok("exact(1, p)", Ball::exact(num(1), p))?;
         if b.prec() != p {
             return Err(format!("prec {}: got {}", p, b.prec()));

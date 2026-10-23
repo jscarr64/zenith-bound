@@ -8,6 +8,7 @@
 
 use crate::error::{BoundError, BoundResult};
 use crate::mag::Mag;
+use crate::precision::{Precision, MAX_PRECISION, MIN_PRECISION};
 use zenith_float_num::ExactNum;
 
 /// zf precision of a canonical +0 midpoint (any value works: zero has no mantissa bits; 64 is zf's smallest container).
@@ -18,7 +19,7 @@ const ZERO_PREC: usize = 64;
 pub struct Ball {
     mid: ExactNum,
     rad: Mag,
-    prec: u32,
+    prec: Precision,
 }
 
 impl Ball {
@@ -26,7 +27,7 @@ impl Ball {
     ///
     /// # Errors
     /// `InvalidArgument` when `prec == 0`; `Representation` when `mid` is NaN or infinite.
-    pub fn exact(mid: ExactNum, prec: u32) -> BoundResult<Ball> {
+    pub fn exact(mid: ExactNum, prec: Precision) -> BoundResult<Ball> {
         check_prec("Ball::exact", prec)?;
         Ball::from_mid_rad(mid, Mag::zero(), prec)
     }
@@ -35,7 +36,7 @@ impl Ball {
     ///
     /// # Errors
     /// `InvalidArgument` when `prec == 0`; `Representation` when `mid` is NaN or infinite.
-    pub fn from_mid_rad(mid: ExactNum, rad: Mag, prec: u32) -> BoundResult<Ball> {
+    pub fn from_mid_rad(mid: ExactNum, rad: Mag, prec: Precision) -> BoundResult<Ball> {
         check_prec("Ball::from_mid_rad", prec)?;
         if mid.is_nan() || mid.is_inf() {
             return Err(BoundError::Representation {
@@ -57,7 +58,7 @@ impl Ball {
     ///
     /// # Errors
     /// `InvalidArgument` when `prec == 0`.
-    pub fn all_reals(prec: u32) -> BoundResult<Ball> {
+    pub fn all_reals(prec: Precision) -> BoundResult<Ball> {
         check_prec("Ball::all_reals", prec)?;
         Ok(Ball {
             mid: ExactNum::new(ZERO_PREC),
@@ -77,7 +78,7 @@ impl Ball {
     }
 
     /// The requested midpoint precision (never read back from zenith-float, CONTRACT 8.1).
-    pub fn prec(&self) -> u32 {
+    pub fn prec(&self) -> Precision {
         self.prec
     }
 
@@ -92,19 +93,25 @@ impl Ball {
     }
 
     /// Moves the parts out: `(mid, rad, prec)`.
-    pub fn into_parts(self) -> (ExactNum, Mag, u32) {
+    pub fn into_parts(self) -> (ExactNum, Mag, Precision) {
         (self.mid, self.rad, self.prec)
     }
 }
 
-/// `prec == 0` is rejected before zenith-float sees it (CONTRACT 8.1, O17-W).
-fn check_prec(op: &'static str, prec: u32) -> Result<(), BoundError> {
-    match prec {
-        0 => Err(BoundError::InvalidArgument {
+/// A prec outside `MIN_PRECISION..=MAX_PRECISION` is rejected before zenith-float sees it (CONTRACT 8.1, O17-W).
+fn check_prec(op: &'static str, prec: Precision) -> Result<(), BoundError> {
+    if prec < MIN_PRECISION {
+        Err(BoundError::InvalidArgument {
             op,
-            detail: "prec must be at least 1",
-        }),
-        1..=u32::MAX => Ok(()),
+            detail: "prec must be at least MIN_PRECISION (1)",
+        })
+    } else if prec > MAX_PRECISION {
+        Err(BoundError::InvalidArgument {
+            op,
+            detail: "prec must be at most MAX_PRECISION",
+        })
+    } else {
+        Ok(())
     }
 }
 

@@ -1,14 +1,26 @@
 //! CONTRACT 14.7, 3.2, 3.3; oracle: i128 placement of the power of two (exponent field
 //! `pre_round_exp - prec + 1` for `ulp_mag`, `mid_exp - prec` for `half_ulp`), and the
-//! dyadic model for in-range values. `prec` is the full `u32`.
+//! dyadic model for in-range values. `prec` is the full `Precision` (usize).
 
 use crate::model::dyadic::{Dy, MagV};
 use crate::model::oracle::TWO63;
 use crate::support::{dcmp, dy_of, to_magv};
 use core::cmp::Ordering;
 use zenith_bound::mag::Mag;
+use zenith_bound::MAX_PRECISION;
 
-const PRECS: [u32; 8] = [0, 1, 2, 31, 32, 33, 1 << 31, u32::MAX];
+const PRECS: [usize; 10] = [
+    0,
+    1,
+    2,
+    31,
+    32,
+    33,
+    1 << 31,
+    0xFFFF_FFFF,
+    MAX_PRECISION,
+    usize::MAX,
+];
 const EXPS: [i64; 7] = [i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX];
 
 fn placed(mag_exp: i128) -> Result<MagV, String> {
@@ -26,16 +38,16 @@ fn placed(mag_exp: i128) -> Result<MagV, String> {
     }
 }
 
-fn ulp_field(pre_round_exp: i64, prec: u32) -> Result<i128, String> {
+fn ulp_field(pre_round_exp: i64, prec: usize) -> Result<i128, String> {
     i128::from(pre_round_exp)
-        .checked_sub(i128::from(prec))
+        .checked_sub(i128::try_from(prec).map_err(|e| format!("prec {}: {}", prec, e))?)
         .and_then(|diff| diff.checked_add(1))
         .ok_or_else(|| format!("ulp field overflow at {pre_round_exp}, {prec}"))
 }
 
-fn half_field(mid_exp: i64, prec: u32) -> Result<i128, String> {
+fn half_field(mid_exp: i64, prec: usize) -> Result<i128, String> {
     i128::from(mid_exp)
-        .checked_sub(i128::from(prec))
+        .checked_sub(i128::try_from(prec).map_err(|e| format!("prec {}: {}", prec, e))?)
         .ok_or_else(|| format!("half-ulp field overflow at {mid_exp}, {prec}"))
 }
 
@@ -107,13 +119,22 @@ fn half_ulp_prec_zero_is_two_to_the_mid_exp_minus_one() -> Result<(), String> {
 #[test]
 fn smaller_than_half_ulp_uses_the_full_prec_width() -> Result<(), String> {
     let mants = [TWO63, TWO63 + 1, u64::MAX];
-    let precs = [0u32, 1, 31, 32, 1 << 31, u32::MAX];
+    let precs = [
+        0usize,
+        1,
+        31,
+        32,
+        1 << 31,
+        0xFFFF_FFFF,
+        MAX_PRECISION,
+        usize::MAX,
+    ];
     let mids = [i64::MIN, 0, 10, i64::MAX];
     let exps = [i64::MIN, i64::MIN + 1, 0, 5, i64::MAX];
     for &mid_exp in mids.iter() {
         for &prec in precs.iter() {
             let threshold = match i128::from(mid_exp)
-                .checked_sub(i128::from(prec))
+                .checked_sub(i128::try_from(prec).map_err(|e| format!("prec {}: {}", prec, e))?)
                 .and_then(|diff| diff.checked_sub(1))
             {
                 Some(threshold) => threshold,

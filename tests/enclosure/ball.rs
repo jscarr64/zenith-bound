@@ -15,16 +15,16 @@ fn n(v: i64) -> ExactNum {
 }
 
 /// `v ± 2^k` at `prec`.
-fn ball(v: i64, k: i64, prec: u32) -> Result<Ball, String> {
+fn ball(v: i64, k: i64, prec: usize) -> Result<Ball, String> {
     let rad = Mag::finite(TOP, k.checked_add(1).ok_or("k")?).map_err(|e| format!("{:?}", e))?;
     Ball::from_mid_rad(n(v), rad, prec).map_err(|e| format!("{:?}", e))
 }
 
-fn point(v: i64, prec: u32) -> Result<Ball, String> {
+fn point(v: i64, prec: usize) -> Result<Ball, String> {
     Ball::exact(n(v), prec).map_err(|e| format!("{:?}", e))
 }
 
-fn generic_prec<E: Enclosure>(e: &E) -> u32 {
+fn generic_prec<E: Enclosure>(e: &E) -> usize {
     e.prec()
 }
 

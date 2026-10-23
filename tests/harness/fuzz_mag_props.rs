@@ -33,9 +33,9 @@ pub struct Ops {
     pub div_lower: fn(&Mag, &Mag) -> Mag,
     pub sqrt_up: fn(&Mag) -> Mag,
     pub sqrt_lower: fn(&Mag) -> Mag,
-    pub ulp_mag: fn(i64, u32) -> Mag,
-    pub half_ulp: fn(i64, u32) -> Mag,
-    pub smaller_than_half_ulp: fn(&Mag, i64, u32) -> bool,
+    pub ulp_mag: fn(i64, usize) -> Mag,
+    pub half_ulp: fn(i64, usize) -> Mag,
+    pub smaller_than_half_ulp: fn(&Mag, i64, usize) -> bool,
 }
 
 /// The real library.
@@ -346,7 +346,7 @@ pub fn check_bracket(up: &Out, down: &Out) -> Result<(), String> {
 /// What a failed case reports: the operation, the precision of the draw and the operands as text (the replay line fields).
 pub struct Bad {
     pub op: &'static str,
-    pub prec: u32,
+    pub prec: usize,
     pub a: String,
     pub b: String,
     pub msg: String,
@@ -354,7 +354,7 @@ pub struct Bad {
 
 /// One draw: two finite nonzero operands `0.m * 2^e` (`mant` has the top bit set).
 pub struct Case {
-    pub prec: u32,
+    pub prec: usize,
     pub ea: i64,
     pub ma: u64,
     pub eb: i64,
@@ -425,7 +425,7 @@ pub fn draw_case(rng: &mut SplitMix64, rel: &Rel) -> Result<Case, String> {
         _ => free,
     };
     Ok(Case {
-        prec,
+        prec: api_prec(prec),
         ea,
         ma,
         eb,
@@ -644,8 +644,8 @@ pub fn mono_case(ops: &Ops, which: &Mono, rng: &mut SplitMix64) -> Result<u8, Ba
     };
     let c = draw_case(rng, &rel).map_err(bare)?;
     let mut run = || -> Result<u8, String> {
-        let ((alo_e, alo_m), (ahi_e, ahi_m)) = draw_partner(rng, c.prec, c.ea, c.ma)?;
-        let ((blo_e, blo_m), (bhi_e, bhi_m)) = draw_partner(rng, c.prec, c.eb, c.mb)?;
+        let ((alo_e, alo_m), (ahi_e, ahi_m)) = draw_partner(rng, gen_prec(c.prec)?, c.ea, c.ma)?;
+        let ((blo_e, blo_m), (bhi_e, bhi_m)) = draw_partner(rng, gen_prec(c.prec)?, c.eb, c.mb)?;
         let (alo, ahi) = (mag_from(alo_m, alo_e)?, mag_from(ahi_m, ahi_e)?);
         let (blo, bhi) = (mag_from(blo_m, blo_e)?, mag_from(bhi_m, bhi_e)?);
         match which {
@@ -766,7 +766,7 @@ pub fn sqrt_exact_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
         _ => free_t,
     };
     let c = Case {
-        prec,
+        prec: api_prec(prec),
         ea: es,
         ma: t,
         eb: 0,
@@ -878,8 +878,8 @@ fn meets(got: &Out, want: &Want, a: &Out, b: &Out) -> bool {
 pub fn canonical_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
     let c = draw_case(rng, &Rel::Sum).map_err(bare)?;
     let mut run = || -> Result<u8, String> {
-        let a = operand(rng, c.prec, c.ea)?;
-        let b = operand(rng, c.prec, c.eb)?;
+        let a = operand(rng, gen_prec(c.prec)?, c.ea)?;
+        let b = operand(rng, gen_prec(c.prec)?, c.eb)?;
         let (oa, ob) = (out_of(&a)?, out_of(&b)?);
         for (name, f) in [
             ("add_up", ops.add_up),
@@ -923,16 +923,31 @@ pub fn canonical_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
     run().map_err(|m| bad("canonical", &c, m))
 }
 
+/// A generator precision (`u32`) as the API's `Precision` (`usize`, at least 32 bits on every supported target).
+fn api_prec(prec: u32) -> usize {
+    usize::try_from(prec).unwrap_or(usize::MAX)
+}
+
+/// An API precision back to the generator's `u32` (the generators draw at most `MAX_PREC` bits).
+fn gen_prec(prec: usize) -> Result<u32, String> {
+    u32::try_from(prec).map_err(|_| format!("prec {} is not a generator precision", prec))
+}
+
+/// A `Precision` in `i128` (always fits).
+fn prec_i128(prec: usize) -> Result<i128, String> {
+    i128::try_from(prec).map_err(|_| format!("prec {} does not fit i128", prec))
+}
+
 // ---- ulp helpers --------------------------------------------------------------------------------------------------------------
 
-fn draw_prec_wide(rng: &mut SplitMix64) -> Result<u32, String> {
+fn draw_prec_wide(rng: &mut SplitMix64) -> Result<usize, String> {
     match rng.below(8) {
-        0..=2 => draw_precision(rng, &PrecSource::Schedule),
+        0..=2 => draw_precision(rng, &PrecSource::Schedule).map(api_prec),
         3 => Ok(0),
-        4 => Ok(u32::MAX),
+        4 => Ok(usize::MAX),
         5 => Ok(1 << 31),
         6 => Ok((1 << 31) - 1),
-        _ => u32::try_from(rng.below(1 << 32)).map_err(|_| String::from("precision draw")),
+        _ => usize::try_from(rng.below(1 << 32)).map_err(|_| String::from("precision draw")),
     }
 }
 
@@ -961,7 +976,7 @@ pub fn ulp_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
     let free_e = exp_of(rng, anchor_prec, mid).map_err(bare)?;
     let xm = draw_mantissa(rng, anchor_prec).map_err(bare)?.value;
     let delta = i128::from(rng.below(5)) - 2;
-    let thr = ex(mid) - i128::from(pw) - 1;
+    let thr = ex(mid) - prec_i128(pw).map_err(bare)? - 1;
     let near = i64::try_from(thr + delta).unwrap_or(free_e);
     let c = Case {
         prec: pw,
@@ -973,7 +988,7 @@ pub fn ulp_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
     let run = || -> Result<u8, String> {
         let mut class = 0u8;
         let ulp = out_of(&(ops.ulp_mag)(mid, pw))?;
-        class |= expect_pow2("ulp_mag", &ulp, ex(mid) - i128::from(pw))?;
+        class |= expect_pow2("ulp_mag", &ulp, ex(mid) - prec_i128(pw)?)?;
         let half = out_of(&(ops.half_ulp)(mid, pw))?;
         class |= expect_pow2("half_ulp", &half, thr)?;
         if let Some(p1) = pw.checked_sub(1) {

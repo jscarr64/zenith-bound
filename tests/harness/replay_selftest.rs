@@ -70,7 +70,7 @@ fn replay_line_has_the_documented_shape_and_round_trips() -> Result<(), String> 
 #[test]
 fn malformed_replay_lines_are_errors_not_panics() -> Result<(), String> {
     let good = sample().format_line()?;
-    let bad: [(&str, String); 12] = [
+    let bad: [(&str, String); 13] = [
         ("empty", String::new()),
         ("missing key", good.replace(" b=-0~r=zero", "")),
         ("extra token", format!("{} extra=1", good)),
@@ -89,7 +89,14 @@ fn malformed_replay_lines_are_errors_not_panics() -> Result<(), String> {
         ),
         ("non-numeric case", good.replace("case=42", "case=x")),
         ("negative prec", good.replace("prec=53", "prec=-1")),
-        ("prec too big", good.replace("prec=53", "prec=99999999999")),
+        (
+            "prec too big",
+            good.replace("prec=53", "prec=99999999999999999999"),
+        ),
+        (
+            "prec above MAX_PRECISION",
+            good.replace("prec=53", "prec=1152921504606846976"),
+        ),
         (
             "seed overflow",
             good.replace("0123456789abcdef", "10123456789abcdef"),
