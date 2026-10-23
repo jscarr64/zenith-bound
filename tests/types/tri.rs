@@ -30,7 +30,7 @@ fn tri_variants_are_distinct_and_named() -> Result<(), String> {
 #[test]
 fn tri_is_exhaustive_with_exactly_three_values() -> Result<(), String> {
     // Gap F2 (API freeze): Tri is NOT #[non_exhaustive]; this wildcard-free match in an
-    // external crate stops compiling if it ever becomes so (mutant 172-T-nonexh).
+    // external crate stops compiling if it ever becomes so (checked by hand: adding it gives E0004, log 1555-zb-l0b-f2-red).
     let all = [Tri::True, Tri::False, Tri::Unknown];
     let mut seen = [false; 3];
     for t in &all {
