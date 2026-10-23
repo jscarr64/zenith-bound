@@ -17,7 +17,7 @@
 #   KILLED               the suite failed (a test failed, or the run timed out)
 #   SURVIVED             the suite passed on the mutant: exit 1 (unless the id is in EQUIVALENT.txt: SURVIVED-EQUIVALENT, not a failure)
 #   INVALID              the patch does not apply or the mutant does not build (proves nothing): exit 1
-# Exit 0 only if every mutant was KILLED or SURVIVED-EQUIVALENT (0 mutants is exit 0).
+# Exit 0 only if at least one mutant ran and every mutant was KILLED or SURVIVED-EQUIVALENT (0 mutants is a failure).
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap mutate "$@"   # run log (tools/runlog.sh)
 set -u
@@ -90,4 +90,5 @@ done <<< "$rows"
 fi
 if [ -n "$only" ] && [ "$total" = 0 ]; then echo "mutate: no mutant with id $only"; exit 2; fi
 echo "mutate: $total mutants: $nk killed, $ns survived, $ne survived-equivalent, $ni invalid"
+[ "$total" -gt 0 ] || { echo "mutate: FAIL 0 mutants ran (an empty manifest proves nothing)"; exit 1; }
 [ "$ns" = 0 ] && [ "$ni" = 0 ]

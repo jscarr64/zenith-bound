@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Self-test for tools/mutate.sh: a tiny fixture crate (a toy function and a toy suite) is generated under /tmp at run time as its own git repo.
 # Proves the runner KILLS a real mutant, reports a surviving mutant as SURVIVED (exit nonzero), accepts it only when documented as
-# equivalent, flags a non-building mutant and a non-applying patch as INVALID, counts a timeout as a kill, passes with 0 mutants,
+# equivalent, flags a non-building mutant and a non-applying patch as INVALID, counts a timeout as a kill, FAILS with 0 mutants,
 # and ALWAYS removes its worktree. The repo under test is never touched.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap mutate_selftest "$@"   # run log (tools/runlog.sh)
@@ -59,9 +59,9 @@ run() { MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@"; 
 leftovers() { git -C "$r" worktree list | grep -c 'zb-mutate\.' ; find "$t" -maxdepth 1 \( -name "zb-mutate.*" -o -name "zb-mutate-target.*" \) | wc -l; }
 setm() { cp "$r/$1" "$r/tools/mutants/manifest.txt"; }
 
-# 0 mutants: header-only manifest passes
+# 0 mutants: a header-only manifest FAILS (Spence review: the gate's mutants step must run at least one mutant)
 printf '# empty\n' > "$r/tools/mutants/manifest.txt"
-out="$(run)" || fail "empty manifest failed: $out"; echo "$out" | grep -q "0 mutants" || fail "empty manifest: wrong summary: $out"
+out="$(run)" && fail "empty manifest passed (0 mutants proves nothing): $out"; echo "$out" | grep -q "0 mutants ran" || fail "empty manifest: wrong message: $out"
 
 # a real mutant must be KILLED
 setm m.killed; out="$(run)" || fail "killable mutant not accepted: $out"
