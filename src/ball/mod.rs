@@ -27,6 +27,7 @@ impl Ball {
     /// # Errors
     /// `InvalidArgument` when `prec == 0`; `Representation` when `mid` is NaN or infinite.
     pub fn exact(mid: ExactNum, prec: u32) -> BoundResult<Ball> {
+        check_prec("Ball::exact", prec)?;
         Ball::from_mid_rad(mid, Mag::zero(), prec)
     }
 
@@ -35,7 +36,7 @@ impl Ball {
     /// # Errors
     /// `InvalidArgument` when `prec == 0`; `Representation` when `mid` is NaN or infinite.
     pub fn from_mid_rad(mid: ExactNum, rad: Mag, prec: u32) -> BoundResult<Ball> {
-        check_prec(prec)?;
+        check_prec("Ball::from_mid_rad", prec)?;
         if mid.is_nan() || mid.is_inf() {
             return Err(BoundError::Representation {
                 op: "Ball::from_mid_rad",
@@ -57,7 +58,7 @@ impl Ball {
     /// # Errors
     /// `InvalidArgument` when `prec == 0`.
     pub fn all_reals(prec: u32) -> BoundResult<Ball> {
-        check_prec(prec)?;
+        check_prec("Ball::all_reals", prec)?;
         Ok(Ball {
             mid: ExactNum::new(ZERO_PREC),
             rad: Mag::infinity(),
@@ -97,10 +98,10 @@ impl Ball {
 }
 
 /// `prec == 0` is rejected before zenith-float sees it (CONTRACT 8.1, O17-W).
-fn check_prec(prec: u32) -> Result<(), BoundError> {
+fn check_prec(op: &'static str, prec: u32) -> Result<(), BoundError> {
     match prec {
         0 => Err(BoundError::InvalidArgument {
-            op: "Ball",
+            op,
             detail: "prec must be at least 1",
         }),
         1..=u32::MAX => Ok(()),

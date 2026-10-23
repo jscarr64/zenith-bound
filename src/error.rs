@@ -57,12 +57,26 @@ pub enum BoundError {
 impl BoundError {
     /// The operation that refused.
     pub fn op(&self) -> &'static str {
-        STUB
+        match self {
+            BoundError::Representation { op, .. } => op,
+            BoundError::InvalidArgument { op, .. } => op,
+            BoundError::Domain { op, .. } => op,
+            BoundError::Resource { op, .. } => op,
+            BoundError::NotPositiveDefinite { op, .. } => op,
+            BoundError::Singular { op, .. } => op,
+        }
     }
 
     /// The short reason given by the operation.
     pub fn detail(&self) -> &'static str {
-        STUB
+        match self {
+            BoundError::Representation { detail, .. } => detail,
+            BoundError::InvalidArgument { detail, .. } => detail,
+            BoundError::Domain { detail, .. } => detail,
+            BoundError::Resource { detail, .. } => detail,
+            BoundError::NotPositiveDefinite { detail, .. } => detail,
+            BoundError::Singular { detail, .. } => detail,
+        }
     }
 
     fn kind_text(&self) -> &'static str {
@@ -77,11 +91,15 @@ impl BoundError {
     }
 }
 
-const STUB: &str = "";
-
 impl fmt::Display for BoundError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.kind_text())
+        write!(
+            f,
+            "{} in {}: {}",
+            self.kind_text(),
+            self.op(),
+            self.detail()
+        )
     }
 }
 
