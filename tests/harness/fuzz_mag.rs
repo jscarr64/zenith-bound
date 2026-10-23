@@ -3,8 +3,10 @@
 //! in `fuzz_mag_props.rs` and adds them to `PROPS` below). What is here: the seeded, deterministic case draw (S2 generators: edge-weighted
 //! exponents, mantissa patterns, controlled exponent gaps, zero and `Infinity` operands), the runner (`run`) with `ZB_FUZZ_SEED`, `ZB_FUZZ_CASES`
 //! and `ZB_REPLAY` from tests/common/replay.rs, the shrinker hookup (tests/common/shrink.rs), and the failure report. A failing property returns
-//! an `Err` whose first line is ONE replay line (`suite=fuzz_mag seed=<hex> case=<n> op=<property> prec=<p> rm=none a=<enc> b=<enc>`, the case
-//! already shrunk) and whose second line says why. Re-run it with `ZB_REPLAY=<seed>:<case> cargo test --test harness fuzz_mag_gate`.
+//! an `Err` that is ONE replay line (`suite=l0a_mag seed=<hex> case=<n> op=<property> prec=<p> rm=none a=<enc> b=<enc>`, the case
+//! already shrunk), then ` -- `, then why. Spence's rng-driven checkers (fuzz_mag_props.rs) plug in through the property-runner contract:
+//! `run_cfg` / `run_property` / `config_for` over any failure type implementing `CaseFailure` (same report format, per-property streams,
+//! `ZB_FUZZ_DEEP` deep stream, non-vacuity check on outcome-class counts). Re-run it with `ZB_REPLAY=<seed>:<case> cargo test --test harness fuzz_mag_gate`.
 //! The gate test `fuzz_mag_gate` runs `GATE_CASES` cases (1,000,000) by default; `tools/fuzz_deep.sh` runs the deep counts outside the gate.
 //! Only properties that follow from CONTRACT 14.1/14.2 (lower <= exact <= upper) are built in, as a smoke set; nothing proposed-only (CONTRACT
 //! 10.2a-d, O13-C) is asserted. The properties take an `Ops` table, so a self-test can hand them a deliberately wrong op and require rejection.
@@ -13,11 +15,13 @@ use crate::common::expect_eq;
 use crate::common::generators::{
     draw_exponent, draw_exponent_pair, draw_mantissa, draw_precision, ExpDomain, PrecSource,
 };
+use crate::common::modular;
 use crate::common::replay::{
     config_from_env, parse_config, parse_hex_u64, FuzzConfig, ReplayLine, ReplayTarget,
 };
+use crate::common::rng::splitmix64;
 use crate::common::rng::SplitMix64;
-use crate::common::seeds::{seed_for, CASE_CLASS_GATE};
+use crate::common::seeds::{seed_for, CASE_CLASS_DEEP, CASE_CLASS_GATE};
 use crate::common::shrink::{shrink, ShrinkCase, SHRINK_STEP_CAP};
 use zenith_bound::mag::Mag;
 
@@ -348,7 +352,7 @@ fn report(
         Ok(()) => String::from("(the shrunk case no longer fails: shrinker bug)"),
     };
     let line = ReplayLine {
-        suite: String::from("fuzz_mag"),
+        suite: String::from(SUITE),
         seed: base_seed,
         case: case_index,
         op: String::from(prop.name),
@@ -357,7 +361,7 @@ fn report(
         a: shrunk.case.a.encode(),
         b: shrunk.case.b.encode(),
     };
-    Ok(format!("{}\nwhy: {}", line.format_line()?, why))
+    Ok(format!("{} -- {}", line.format_line()?, why))
 }
 
 /// Runs every property on every case of `cfg` (`0..cases`, or just the replayed case). `Err` is the report of the first failure.
@@ -386,6 +390,122 @@ fn run(ops: &Ops, props: &[FuzzMagProp], cfg: &FuzzConfig) -> Result<RunStats, S
 fn gate_seed() -> Result<u64, String> {
     seed_for("l0a_mag", CASE_CLASS_GATE)
         .ok_or_else(|| String::from("suite l0a_mag is not in the seeds table"))
+}
+
+// ---- property-runner contract (Spence's rng-driven checkers in fuzz_mag_props.rs plug in here) ---------------------------------
+
+/// Outcome-class bits a property returns for a passing case; `Counts` is indexed by bit position.
+pub const OUT_FINITE: u8 = 1;
+pub const OUT_INFINITY: u8 = 2;
+pub const OUT_ZERO: u8 = 4;
+pub const OUT_EXACT: u8 = 8;
+
+/// Per-class pass counts `[finite, Infinity, zero, exact]`.
+pub type Counts = [u64; 4];
+
+/// The suite name in replay lines and the seeds table.
+const SUITE: &str = "l0a_mag";
+
+/// Offset of the per-property streams from the suite seed.
+const PROP_BASE: u64 = 1000;
+
+/// Below this many cases (or in a replay) the non-vacuity check is skipped.
+pub const NON_VACUITY_CASES: u64 = 100_000;
+
+/// What a failed case reports: the replay-line fields and the reason. Spence's `Bad` implements this in the post-merge glue.
+pub trait CaseFailure {
+    fn op(&self) -> &str;
+    fn prec(&self) -> u32;
+    fn a(&self) -> &str;
+    fn b(&self) -> &str;
+    fn why(&self) -> &str;
+}
+
+/// Base seed of property `prop_index`, gate or deep stream (no wrapping arithmetic: tests/common/modular.rs).
+fn property_seed(prop_index: u64, deep: bool) -> Result<u64, String> {
+    let class = if deep {
+        CASE_CLASS_DEEP
+    } else {
+        CASE_CLASS_GATE
+    };
+    let s = seed_for(SUITE, class)
+        .ok_or_else(|| String::from("suite l0a_mag is not in the seeds table"))?;
+    Ok(splitmix64(modular::add_u64(
+        modular::add_u64(s, PROP_BASE),
+        prop_index,
+    )))
+}
+
+/// The configuration of property `prop_index` at `cases` cases: `ZB_FUZZ_DEEP` picks the deep stream; the environment overrides.
+pub fn config_for(prop_index: u64, cases: u64) -> Result<FuzzConfig, String> {
+    let deep = std::env::var_os("ZB_FUZZ_DEEP").is_some();
+    config_from_env(property_seed(prop_index, deep)?, cases)
+}
+
+/// Runs the cases of `cfg` for one rng-driven property and counts outcome classes. `Err` is `<replay line> -- <why>` of the first failure.
+pub fn run_cfg<E: CaseFailure>(
+    cfg: &FuzzConfig,
+    f: &dyn Fn(&mut SplitMix64) -> Result<u8, E>,
+) -> Result<Counts, String> {
+    let mut counts: Counts = [0; 4];
+    for case in cfg.case_range()? {
+        let mut rng = SplitMix64::new(cfg.seed_of(case));
+        match f(&mut rng) {
+            Ok(flags) => {
+                for (bit, slot) in counts.iter_mut().enumerate() {
+                    if (flags >> bit) & 1 == 1 {
+                        *slot += 1;
+                    }
+                }
+            }
+            Err(bad) => {
+                let line = ReplayLine {
+                    suite: String::from(SUITE),
+                    seed: match &cfg.replay {
+                        Some(t) => t.seed,
+                        None => cfg.seed,
+                    },
+                    case,
+                    op: String::from(bad.op()),
+                    prec: bad.prec(),
+                    rm: String::from("none"),
+                    a: String::from(bad.a()),
+                    b: String::from(bad.b()),
+                };
+                return Err(format!("{} -- {}", line.format_line()?, bad.why()));
+            }
+        }
+    }
+    Ok(counts)
+}
+
+/// One property at `cases` (environment overrides); `need` lists outcome classes that must occur, so a property cannot pass vacuously.
+pub fn run_property<E: CaseFailure>(
+    prop_index: u64,
+    label: &str,
+    need: &[(u8, &str)],
+    cases: u64,
+    f: &dyn Fn(&mut SplitMix64) -> Result<u8, E>,
+) -> Result<(), String> {
+    let cfg = config_for(prop_index, cases)?;
+    let counts = run_cfg(&cfg, f)?;
+    eprintln!(
+        "fuzz_mag property {} ({}): cases={} [finite, Infinity, zero, exact] = {:?}",
+        prop_index, label, cfg.cases, counts
+    );
+    if cfg.replay.is_none() && cfg.cases >= NON_VACUITY_CASES {
+        for (bit, name) in need {
+            let idx =
+                usize::try_from(bit.trailing_zeros()).map_err(|_| String::from("bit index"))?;
+            if counts.get(idx).map_or(0, |n| *n) == 0 {
+                return Err(format!(
+                    "property {} ({}): no case had the outcome class `{}` in {} cases ({:?}), the property is vacuous",
+                    prop_index, label, name, cfg.cases, counts
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 // ---- tests ------------------------------------------------------------------------------------------------------------------
@@ -518,13 +638,13 @@ fn a_wrong_op_is_caught_with_a_replay_line_that_reproduces_it() -> Result<(), St
         Err(m) => m,
     };
     let (first, rest) = msg
-        .split_once('\n')
-        .ok_or_else(|| format!("report has no second line: {:?}", msg))?;
-    if !rest.starts_with("why: mul: lower ") {
+        .split_once(" -- ")
+        .ok_or_else(|| format!("report has no reason: {:?}", msg))?;
+    if !rest.starts_with("mul: lower ") {
         return Err(format!("unexpected reason: {:?}", rest));
     }
     let line = ReplayLine::parse_line(first)?;
-    expect_eq("suite", &line.suite.as_str(), &"fuzz_mag")?;
+    expect_eq("suite", &line.suite.as_str(), &SUITE)?;
     expect_eq("op", &line.op.as_str(), &"lower_not_above_upper")?;
     expect_eq("seed", &line.seed, &cfg.seed)?;
     // the replay of (seed, case) re-draws the original case and fails the same way, with the same shrunk report
@@ -576,9 +696,7 @@ fn a_wrong_add_up_is_caught_by_the_dominance_property() -> Result<(), String> {
     };
     match run(&ops, &PROPS[1..], &cfg) {
         Ok(s) => Err(format!("the forgetful add_up passed {:?}", s)),
-        Err(m) if m.contains("op=add_up_dominates_operands") && m.contains("\nwhy: add_up ") => {
-            Ok(())
-        }
+        Err(m) if m.contains("op=add_up_dominates_operands") && m.contains(" -- add_up ") => Ok(()),
         Err(m) => Err(format!("unexpected report {:?}", m)),
     }
 }
@@ -652,6 +770,144 @@ fn the_shrinker_reaches_a_minimal_case_for_a_known_failure() -> Result<(), Strin
     }
     if !fails(&Ops::lib(), &prop, &s.case) {
         return Err(String::from("the shrunk case does not fail"));
+    }
+    Ok(())
+}
+
+// ---- self-tests of the property-runner contract (run_cfg, run_property, config_for) -------------------------------------------
+
+/// A planted failure for the runner self-tests (Spence's `Bad` plays this role for the real properties).
+struct Planted {
+    why: &'static str,
+}
+
+impl CaseFailure for Planted {
+    fn op(&self) -> &str {
+        "planted"
+    }
+    fn prec(&self) -> u32 {
+        5
+    }
+    fn a(&self) -> &str {
+        "00000000000000a1e1"
+    }
+    fn b(&self) -> &str {
+        "-"
+    }
+    fn why(&self) -> &str {
+        self.why
+    }
+}
+
+fn planted_on_three(rng: &mut SplitMix64) -> Result<u8, Planted> {
+    if rng.next_u64() % 7 == 3 {
+        Err(Planted {
+            why: "planted failure",
+        })
+    } else {
+        Ok(OUT_FINITE)
+    }
+}
+
+#[test]
+fn run_cfg_counts_outcome_classes_and_stops_at_the_first_failure_with_a_replay_line(
+) -> Result<(), String> {
+    let cfg = FuzzConfig {
+        seed: 0xABCD,
+        cases: 1000,
+        replay: None,
+    };
+    let counts = run_cfg(&cfg, &|rng| -> Result<u8, Planted> {
+        Ok(if rng.next_u64().is_multiple_of(2) {
+            OUT_FINITE | OUT_EXACT
+        } else {
+            OUT_ZERO
+        })
+    })?;
+    let [finite, infinity, zero, exact] = counts;
+    expect_eq(
+        "finite + zero = cases",
+        &modular::add_u64(finite, zero),
+        &1000,
+    )?;
+    expect_eq("exact = finite", &exact, &finite)?;
+    expect_eq("no Infinity", &infinity, &0)?;
+    let text = match run_cfg(&cfg, &planted_on_three) {
+        Err(t) => t,
+        Ok(c) => return Err(format!("the planted failure was not found: {:?}", c)),
+    };
+    let (line, why) = text
+        .split_once(" -- ")
+        .ok_or_else(|| format!("no separator in {:?}", text))?;
+    expect_eq("reason", &why, &"planted failure")?;
+    let parsed = ReplayLine::parse_line(line)?;
+    expect_eq("seed", &parsed.seed, &0xABCD)?;
+    expect_eq("op", &parsed.op.as_str(), &"planted")?;
+    expect_eq("suite", &parsed.suite.as_str(), &SUITE)?;
+    let replay = parse_config(
+        &|name: &str| {
+            Ok(if name == "ZB_REPLAY" {
+                Some(format!("{:x}:{}", parsed.seed, parsed.case))
+            } else {
+                None
+            })
+        },
+        0,
+        1000,
+    )?;
+    match run_cfg(&replay, &planted_on_three) {
+        Err(t) if t.contains(&format!("case={}", parsed.case)) => Ok(()),
+        other => Err(format!("replay of the failing case: {:?}", other)),
+    }
+}
+
+#[test]
+fn run_property_refuses_a_vacuous_property_and_accepts_a_covering_one() -> Result<(), String> {
+    let need = [(OUT_FINITE, "finite"), (OUT_INFINITY, "Infinity")];
+    let only_finite = |_: &mut SplitMix64| -> Result<u8, Planted> { Ok(OUT_FINITE) };
+    match run_property(3, "vacuous", &need, NON_VACUITY_CASES, &only_finite) {
+        Err(m) if m.contains("`Infinity`") && m.contains("vacuous") => {}
+        other => {
+            return Err(format!(
+                "a property that never reaches Infinity passed: {:?}",
+                other
+            ))
+        }
+    }
+    let both = |rng: &mut SplitMix64| -> Result<u8, Planted> {
+        Ok(if rng.next_u64().is_multiple_of(3) {
+            OUT_INFINITY
+        } else {
+            OUT_FINITE
+        })
+    };
+    run_property(3, "covering", &need, NON_VACUITY_CASES, &both)?;
+    match run_property(3, "failing", &need, NON_VACUITY_CASES, &planted_on_three) {
+        Err(m) if m.contains(" -- planted failure") => Ok(()),
+        other => Err(format!("a failing property passed: {:?}", other)),
+    }
+}
+
+#[test]
+fn property_streams_are_distinct_per_index_and_class() -> Result<(), String> {
+    let g0 = property_seed(0, false)?;
+    let g1 = property_seed(1, false)?;
+    let d0 = property_seed(0, true)?;
+    if g0 == g1 || g0 == d0 || g1 == d0 {
+        return Err(format!(
+            "property seeds collide: {:x} {:x} {:x}",
+            g0, g1, d0
+        ));
+    }
+    expect_eq("deterministic", &property_seed(1, false)?, &g1)?;
+    // known answers computed outside Rust (Python, same SplitMix64 + seeds formula): the streams keep L0a-5's numbering
+    // (`splitmix64(seed_for(l0a_mag, class) + 1000 + index)`), so replay lines written against 93c8b49 stay valid
+    expect_eq("gate stream 0", &g0, &0x3979_fa53_2cd0_15a8)?;
+    expect_eq("gate stream 1", &g1, &0x5ec5_e017_70d3_6fab)?;
+    expect_eq("deep stream 0", &d0, &0x8485_a395_1d0a_4533)?;
+    let cfg = config_for(1, 77)?;
+    if std::env::var_os("ZB_FUZZ_SEED").is_none() && std::env::var_os("ZB_FUZZ_DEEP").is_none() {
+        expect_eq("config seed", &cfg.seed, &g1)?;
     }
     Ok(())
 }
