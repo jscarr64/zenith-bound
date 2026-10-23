@@ -10,6 +10,7 @@ fail() { echo "toolchain_check selftest FAIL: $*"; exit 1; }
 t=$(mktemp -d) || fail "mktemp"; runlog_on_exit "rm -rf \"$t\""
 mkfake() { # mkfake <dir> <rustc version line> <cargo version line>
   mkdir -p "$1"
+  # shellcheck disable=SC2016 # shim body expands when the shim runs, not here
   printf '#!/bin/sh\necho "%s"\n' "$2" > "$1/rustc"; printf '#!/bin/sh\necho "%s"\n' "$3" > "$1/cargo"; chmod +x "$1/rustc" "$1/cargo"
 }
 printf '[toolchain]\nchannel = "1.99"\ncomponents = ["clippy"]\n' > "$t/pinned.toml"
@@ -34,4 +35,18 @@ chk "$t/ok" "$t/stable.toml" && fail "unpinned channel accepted"
 mkdir -p "$t/none"; chk "$t/none" "$t/pinned.toml" && fail "missing rustc accepted"
 # (Under RUNLOG_PLAIN=1, e.g. full_gate_selftest's fixture gate, nothing logs anywhere, so there is nothing to check.)
 [ "${RUNLOG_PLAIN:-0}" = 1 ] || [ -n "$(find "$plr" -name '*-toolchain_check*.log' -print -quit)" ] || fail "fixture runs did not log under POPLOG_ROOT=$plr (isolation not exercised)"
+# Both mktemp guards: rerun this selftest (plain, no logging, no recursion) with a mktemp that fails on call N.
+if [ -z "${MKTEMP_GUARD_INNER:-}" ]; then
+  real=$(command -v mktemp); mkdir -p "$t/mkshim"
+  # shellcheck disable=SC2016 # shim body expands when the shim runs, not here
+  printf '#!/bin/sh\nn=$(( $(cat "$MKSHIM_COUNT") + 1 )); echo "$n" > "$MKSHIM_COUNT"\n[ "$n" -lt "$MKSHIM_FAIL" ] && exec "%s" "$@"\nexit 1\n' "$real" > "$t/mkshim/mktemp"
+  chmod +x "$t/mkshim/mktemp"
+  for n in 1 2; do
+    echo 0 > "$t/mkcount"
+    MKTEMP_GUARD_INNER=1 RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 MKSHIM_COUNT="$t/mkcount" MKSHIM_FAIL=$n PATH="$t/mkshim:$PATH" \
+      bash "$here/toolchain_check_selftest.sh" > "$t/mkout" 2>&1 && fail "mktemp failure on call $n not caught"
+    grep -q 'FAIL: mktemp$' "$t/mkout" || fail "mktemp failure on call $n: wrong failure: $(cat "$t/mkout")"
+    [ "$(cat "$t/mkcount")" = "$n" ] || fail "mktemp failure on call $n: ran on after it ($(cat "$t/mkcount") calls)"
+  done
+fi
 echo "toolchain_check selftest: ok"
