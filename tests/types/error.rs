@@ -1,13 +1,14 @@
 //! CONTRACT 6.4, 15.3, O11-W; PLAN C5 rulings a/b (2026-10-23): struct variants {op, detail},
-//! #[non_exhaustive], NotPositiveDefinite and Singular.
-//! COVERS: BoundError::Representation, BoundError::InvalidArgument, BoundError::Domain, BoundError::Resource, BoundError::NotPositiveDefinite, BoundError::Singular, BoundError::op, BoundError::detail, Display for BoundError, Error for BoundError
+//! #[non_exhaustive], NotPositiveDefinite and Singular; NotConverged (Paul 2026-10-23: an iteration out of budget, e.g.
+//! eig past max_sweeps, returns NotConverged, never a silently loose answer).
+//! COVERS: BoundError::Representation, BoundError::InvalidArgument, BoundError::Domain, BoundError::Resource, BoundError::NotPositiveDefinite, BoundError::Singular, BoundError::NotConverged, BoundError::op, BoundError::detail, Display for BoundError, Error for BoundError
 
 use zenith_bound::ball::Ball;
 use zenith_bound::error::{BoundError, BoundResult};
 use zenith_bound::mag::Mag;
 use zenith_float_num::ExactNum;
 
-fn all() -> [BoundError; 6] {
+fn all() -> [BoundError; 7] {
     [
         BoundError::Representation {
             op: "op-rep",
@@ -33,6 +34,10 @@ fn all() -> [BoundError; 6] {
             op: "op-sing",
             detail: "d-sing",
         },
+        BoundError::NotConverged {
+            op: "op-conv",
+            detail: "d-conv",
+        },
     ]
 }
 
@@ -44,6 +49,7 @@ fn name(e: &BoundError) -> &'static str {
         BoundError::Resource { .. } => "Resource",
         BoundError::NotPositiveDefinite { .. } => "NotPositiveDefinite",
         BoundError::Singular { .. } => "Singular",
+        BoundError::NotConverged { .. } => "NotConverged",
         _ => "unknown",
     }
 }
@@ -186,6 +192,7 @@ fn each_variant_matches_its_own_pattern() -> Result<(), String> {
             BoundError::NotPositiveDefinite { op: "op-npd", .. }
         ),
         matches!(all()[5], BoundError::Singular { op: "op-sing", .. }),
+        matches!(all()[6], BoundError::NotConverged { op: "op-conv", .. }),
     ];
     match checks.iter().position(|ok| !ok) {
         None => Ok(()),
@@ -203,6 +210,7 @@ fn display_kind_text_per_variant() -> Result<(), String> {
         "resource limit reached",
         "matrix not positive definite",
         "matrix singular",
+        "iteration did not converge",
     ];
     for (e, w) in all().iter().zip(want.iter()) {
         if !format!("{}", e).starts_with(w) {
