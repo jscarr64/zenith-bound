@@ -433,7 +433,7 @@ Budgets are proposals, unmeasured `[NV]`; item S0 measures first and sets the fi
 | L1 elementary | every row of 8.3 tested for each of the 25 items; exact cases return in bounded work under all modes; both policies at every domain edge; goldens at the PS-fast precisions at gate and all PS in nightly, containment 0 failures, tight/loose within factors; P14 findings exist for every function (L1 does not start without them, PLAN; they are zenith-float Stage B, with P11 and Option A for the functions L1 calls, DECIDED 2026-10-16, Paul under Jeff's delegation); mutation and coverage clean |
 | L2 | rows of 8.4; Rect/Disk conversions only enlarge; singular/ill-conditioned paths return errors; specials goldens including zeta at 0, -1, 1 from mpmath; compounds and equivalent-form checks; coverage and mutation clean |
 | L3 | rows of 8.5; budgets are counts; no narrow uncertified result in any adversarial set; coverage and mutation clean |
-| L4 | rows of 8.6; the failure rule (error or `Infinity` radius on every failed enclosure) asserted on every refusal path; Hilbert n = 5..12 contain the exact solution or fail; coverage and mutation clean |
+| L4 | rows of 8.6; L4-v4-SWEEPS row (32×32 @16384 bits converges within 64 sweeps, count recorded; out of sweeps ⇒ `NotConverged`) checked off; the failure rule (error or `Infinity` radius on every failed enclosure) asserted on every refusal path; Hilbert n = 5..12 contain the exact solution or fail; coverage and mutation clean |
 | Whole crate (before ship) | all levels closed; full nightly set green twice in a row at different extra seeds; cross-target digest diff clean; no surviving non-equivalent mutant; no open item from section 17 that blocks an assertion |
 
 ## 15. What depends on the final zenith-float pin SHA (pending)
@@ -788,6 +788,7 @@ What I could check: 2027-02-12 minus 2027-01-02 is 41 calendar days, which match
 
 **L4**
 - [ ] L4-1 adaptive precision, root isolation (multiple/clustered), verified solve (Hilbert 5..32, singular), verified SPD solve, GLS, eigen (symmetric verified eigenpairs, general Gershgorin), residuals, ODE sets (§22)
+- [ ] L4-v4-SWEEPS (tracked placeholder; Paul 2026-10-23, eig not in L0b): when symmetric eigen lands, a gate test at 32×32 and 16384 bits must converge within `EigOpts::max_sweeps = 64` and record the actual sweep count used (the default is measured, not assumed); running out of sweeps must return `BoundError::NotConverged`, never a loose answer. **Owner: the L4-v4 builder. Blocks: L4 exit (§14) and the 2.0 gate.**
 - [ ] L4-2 failure-rule assertion on every refusal path, goldens, fuzz, mutants, coverage, exit review
 
 **Whole crate**
