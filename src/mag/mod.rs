@@ -16,6 +16,7 @@
 
 mod add;
 mod cmp;
+mod convert;
 mod div;
 mod lower;
 mod mul;

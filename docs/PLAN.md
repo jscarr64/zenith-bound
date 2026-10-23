@@ -179,6 +179,8 @@ Subnormal results in the MPFR differential only check MPFR's underflow flag, not
 
 ### C1. zf 2.1 prerequisites (status from Part K)
 
+**Interim Stage A pin (2026-10-23, Jeff):** zenith-bound depends on `zenith-float-num` by path at zf SHA **`fe5c15d`** (detached worktree `/tmp/zf-pin-fe5c15d`, `default-features = false`, no std). The pin is also recorded in `Cargo.toml`. Replace it with the released Stage A version when one is tagged.
+
 | # | Prerequisite | Status on `508a400` | Needed by |
 |---|---|---|---|
 | P1 | `exponent()` and a named leading-bit exponent | EXISTS (`exponent`); helper MISSING | Mag `from_exact_num`, `ulp_mag` |
