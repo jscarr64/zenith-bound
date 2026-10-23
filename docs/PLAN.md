@@ -31,7 +31,7 @@ zf precision is also rounded up to a multiple of 64 bits today. That would overe
 
 **Rough size: ~201–356 runs** (was ~147–268 on 10-13; ~173–331 before the outside review; ~195–345 after it, before the Gemini review). Jeff discounts AI timeline estimates, so read these only as relative sizes between items. The growth comes from the bigger zf 2.1 set (P1–P14), the contract layer, the review's added L0/L1 scope, the Gemini items (P14 audit, P15 exact-bit rounding, O(1) Mag paths), the independent truth model, `ComplexBall`/polynomial/series/matrix work, and review-sized L0 steps for the local model.
 
-zf's old `Ball` is deprecated in zf 2.1 (pointing to zenith-bound) and removed in zf 3.0. zenith-bound starts at 0.0.0 (scaffold) and 0.1.0 (L0).
+zf's old `Ball`, `ComplexBall` and `ziv_round`/`ziv_round_vec` are deleted in zf 2.0, and `zenith_float::{Ball, ComplexBall}` re-export zenith-bound's types (C2). zenith-bound starts at 0.0.0 (scaffold) and 0.1.0 (L0).
 
 ## Part A. What exists in zf (surveyed on `16141841`; rounding re-audited on `508a400` in Part K)
 
@@ -39,7 +39,7 @@ zf's old `Ball` is deprecated in zf 2.1 (pointing to zenith-bound) and removed i
 |---|---|---|---|
 | Real ball | `Ball { mid: ExactNum, rad: ExactNum }`. Has `new`, `add`, `mul`, `exp`, `sin`, `cos`, `ln`, `sqrt`, `erf`, `bessel_j0`, `bessel_j1`, `contains`, and private `strictly_positive` and `excludes_zero` | `zenith-float-num/src/ball.rs:17-239` | Partly. See gaps |
 | Complex ball | `ComplexBall { mid: ExactComplex, rad: ExactNum }`, a disk. Has `add`, `mul`, `exp`, `ln`, `sin`, `cos`, `contains` | `ball.rs:241-~360` | Partly |
-| Ziv retry | `ziv_round`, `ziv_round_vec`. They use the ball to certify correct rounding | `ball.rs:~380-430` | Yes, for its purpose |
+| Ziv retry | `ziv_round`, `ziv_round_vec`. They use the ball to certify correct rounding (deleted in zf 2.0, C2) | `ball.rs:~380-430` | Yes, for its purpose |
 | Ball goldens | `balls.jsonl`, run by `methods_oracle.rs::balls`. Covers `ball_exp`, `ball_sin`, `ball_add`, `ball_mul`. It checks only that the truth is inside the ball, not how tight the ball is | `zenith-float-num/tests/oracle/goldens/balls.jsonl`, `tests/methods_oracle.rs:336-360,429` | Inclusion only |
 | Rounding modes | `RoundingMode { None=1, Up=2, Down=4, ToZero=8, FromZero=16, ToEven=32, ToOdd=64 }`. `Up`/`Down` are directed (the docs wrongly say "round half") | `zenith-float-num/src/defs.rs:251-272` | **Finite range only, tested not proven; overflow ignores the mode (Part K3).** `None` truncates, unsafe for bounds |
 | Mag / radius type | **None.** The radius is a full `ExactNum` at working precision `p` | `ball.rs:21` | — |
@@ -200,7 +200,7 @@ P1, P4, P6 and P10 exist (P10 needs validation). P2, P3, P7, P8, P9, P11 are mis
 **G1 decision: LOCKED by Jeff, 2026-10-14 (CONTRACT.md clause 5).** Exact-bit precision rounding lives in zenith-float (P15, tied to zf defect 6). zenith-bound does **not** re-chop or re-round a zf result to a smaller precision, and there is no chop fallback. Reasons: a second chop of zf's 64-bit-rounded result is double rounding, which is wrong under nearest modes, and one rounding path means one MPFR-tested implementation. If the zf 2.0.0 defect-6 fix delivers exact-bit rounding, P15 folds into 2.0.0; otherwise it stays in 2.1. If P15 slips, L0 waits.
 
 ### C2. zf's prototype `Ball` and `ComplexBall`
-Unchanged from 10-13: deprecated in zf 2.1 (pointing to zenith-bound), `contains` truncation bug fixed (`ball.rs:236`), removed in zf 3.0. `ziv_round` stays in zf. `GkResult.abs_err_est` is renamed `heuristic_err` in 3.0.
+**Replaced 2026-10-23 (zf 2.0 API surface approved, via Spence):** in zf 2.0, zf's prototype `Ball`, `ComplexBall`, their serde impls and `ziv_round`/`ziv_round_vec` are **deleted** (no deprecation cycle), and `zenith_float::{Ball, ComplexBall}` re-export zenith-bound's types. zenith-bound's `ComplexBall` (a disk) in L2a takes over `add`, `mul`, `exp`, `ln`, `sin`, `cos` and `contains`; `erf`, `bessel_j0` and `bessel_j1` go to L2d. serde for `Ball` lives in zenith-bound behind an optional feature and uses the canonical codec (Part J, CONTRACT 13). `GkResult.abs_err_est` is renamed `heuristic_err` in 3.0.
 
 ### C3. Versions and release story
 - 0.0.0 = scaffold (Part N). 0.1 = L0, 0.2 = L1, 0.3 = L2, 0.4 = L3, 0.5 = L4. 1.0 when L0–L4 are green and the Part J encoding and Part I trace format are frozen.
