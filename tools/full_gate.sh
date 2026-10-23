@@ -12,6 +12,8 @@
 # no-float rules.
 # mutants runs the mutant-runner self-test, then the WHOLE manifest (tools/mutants/manifest.txt) with a persistent MUTATE_TARGET (default
 # "$CARGO_TARGET_DIR-mutate", outside the repo); any SURVIVED (not in EQUIVALENT.txt) or INVALID mutant fails the step.
+# toolchain (first step) prints which rustc/cargo run and fails unless both match rust-toolchain.toml's channel (Pop has rustc 1.95 in
+# /usr/bin; a PATH without ~/.cargo/bin first must not build silently with it). Callers: export PATH="$HOME/.cargo/bin:$PATH".
 set -u
 # PYTHONNOUSERSITE=1: a stray ~/.local mpmath (e.g. 1.3.0) must not shadow the pinned system mpmath 1.2.1 that the golden generators require.
 export PYTHONNOUSERSITE=1
@@ -38,6 +40,7 @@ export -f require no_hits
 run() { name=$1; shift
   case " ${GATE_STEPS:-$name} " in *" $name "*) ;; *) return 0 ;; esac
   echo "start $name $(date +%T)" >> "$T/$tag.rc"; timeout "${STEP_TIMEOUT:-20m}" bash -c "$*" > "$T/$tag-$name.log" 2>&1; echo "$name=$?" >> "$T/$tag.rc"; }
+run toolchain "require rustc cargo sed && tools/toolchain_check_selftest.sh && tools/toolchain_check.sh"
 run build-tests "require cargo && cargo test --no-run"
 run build-debug "require cargo && cargo test"
 run build-release "require cargo && cargo test --release"

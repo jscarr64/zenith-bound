@@ -39,4 +39,13 @@ plant no-clone-scan 'pub fn g(x: &[u8]) -> Vec<u8> { x.to_vec() }'
 plant derive-scan '#[derive(Clone)]'
 # GATE_STEPS is honoured: only the named step ran
 [ "$(grep -c '^[a-z-]*=' "$t/logs/p-unsafe-scan.rc")" = 1 ] || fail "GATE_STEPS ran other steps"
+# 3. toolchain step: a rustc that is not the pinned channel (Pop's /usr/bin/rustc 1.95 ahead of ~/.cargo/bin) fails the gate
+mk tc; mkdir -p "$t/tc/tools"; cp "$root/tools/toolchain_check.sh" "$root/tools/toolchain_check_selftest.sh" "$t/tc/tools/"; printf '[toolchain]\nchannel = "1.99"\n' > "$t/tc/rust-toolchain.toml"
+for v in 1.95.0 1.99.1; do
+  mkdir -p "$t/fake-$v"; for c in rustc cargo; do printf '#!/bin/sh\necho "%s %s (x 2026-01-01)"\n' "$c" "$v" > "$t/fake-$v/$c"; chmod +x "$t/fake-$v/$c"; done
+  GATE_STEPS=toolchain T="$t/logs" REPO="$t/tc" PATH="$t/fake-$v:$PATH" "$root/tools/full_gate.sh" "tc-$v" > /dev/null 2>&1
+done
+[ "$(rcof tc-1.95.0 toolchain)" = 1 ] || fail "toolchain step passed with rustc 1.95.0 for channel 1.99 ($(rcof tc-1.95.0 toolchain))"
+grep -q 'TOOLCHAIN MISMATCH' "$t/logs/tc-1.95.0-toolchain.log" || fail "toolchain step does not name the mismatch"
+[ "$(rcof tc-1.99.1 toolchain)" = 0 ] || fail "toolchain step fails on the pinned rustc: $(cat "$t/logs/tc-1.99.1-toolchain.log")"
 echo "full_gate selftest: ok"
