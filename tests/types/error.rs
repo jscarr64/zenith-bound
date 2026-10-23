@@ -173,3 +173,22 @@ fn callers_name_their_op() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn each_variant_matches_its_own_pattern() -> Result<(), String> {
+    let checks = [
+        matches!(all()[0], BoundError::Representation { op: "op-rep", .. }),
+        matches!(all()[1], BoundError::InvalidArgument { op: "op-inv", .. }),
+        matches!(all()[2], BoundError::Domain { op: "op-dom", .. }),
+        matches!(all()[3], BoundError::Resource { op: "op-res", .. }),
+        matches!(
+            all()[4],
+            BoundError::NotPositiveDefinite { op: "op-npd", .. }
+        ),
+        matches!(all()[5], BoundError::Singular { op: "op-sing", .. }),
+    ];
+    match checks.iter().position(|ok| !ok) {
+        None => Ok(()),
+        Some(i) => Err(format!("variant {} did not match its pattern", i)),
+    }
+}
