@@ -2,8 +2,10 @@
 # Canonical full gate for zenith-bound. usage: tools/full_gate.sh TAG
 # Every step runs under `timeout` (STEP_TIMEOUT, default 20m); the rc of each step is written to $T/TAG.rc and its
 # output to $T/TAG-<step>.log (T defaults to /tmp/zb-gate-logs). REPO selects the checkout (default: this one);
-# CARGO_TARGET_DIR is honoured and may be reused across runs (build-debug/build-release reject test binaries from outside it; a per-job
-# subdir /tmp/target-harper/<job> is optional).
+# CARGO_TARGET_DIR is REQUIRED and belongs to one worktree (Paul, 2026-10-23: /tmp/target-<agent>-<worktree>, e.g.
+# /tmp/target-harper-zb-harper-s7); it may be reused across runs of that worktree. target-dir (right after toolchain, before any build)
+# fails if it is unset or owned by another worktree (marker $CARGO_TARGET_DIR/.worktree-owner, written by the first worktree to use it);
+# build-debug/build-release repeat that check and reject test binaries from outside it.
 #
 # rules-scan runs the scan self-test, then the scan over SCAN_ARGS (default: RATCHET_BASE..HEAD with RATCHET_BASE defaulting to 3c9f36f,
 # the commit main was at when the gate was added; set SCAN_ARGS=--working after `git add -A` to scan uncommitted work).
@@ -52,6 +54,7 @@ run() { name=$1; shift
   echo "start $name $(date +%T)" >> "$T/$tag.rc"; runlog_step "${tf[@]}" "$name" -- timeout "${STEP_TIMEOUT:-20m}" bash -c "$*" > "$T/$tag-$name.log" 2>&1; rc=$?
   echo "$name=$rc" >> "$T/$tag.rc"; [ "$rc" = 0 ] || gate_rc=1; }
 run toolchain "require rustc cargo sed && tools/toolchain_check_selftest.sh && tools/toolchain_check.sh"
+run target-dir "require git && tools/fresh_test_run.sh --claim"
 run build-tests "require cargo && cargo build --tests"
 run build-debug "require cargo && tools/fresh_test_run.sh cargo test -- --test-threads=\${RUST_TEST_THREADS:-8}"
 run build-release "require cargo && tools/fresh_test_run.sh cargo test --release -- --test-threads=\${RUST_TEST_THREADS:-8}"
@@ -70,6 +73,6 @@ run goldens-regen "require sha256sum grep cmp && tools/goldens_regen.sh"
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"
-run mutants "require cargo git timeout grep && tools/mutate_selftest.sh && MUTATE_TARGET=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:-/tmp/zb-target}/mutate} tools/mutate.sh"
+run mutants "require cargo git timeout grep && tools/mutate_selftest.sh && MUTATE_TARGET=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:?}/mutate} tools/mutate.sh"
 if [ "$gate_rc" = 0 ]; then echo "done" >> "$T/$tag.rc"; else echo "failed" >> "$T/$tag.rc"; fi
 exit "$gate_rc"

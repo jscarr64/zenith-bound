@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- One target dir per worktree (Paul, 2026-10-23 1:02 PM CT, protected `tools/`, red-first): `tools/fresh_test_run.sh` fails if `CARGO_TARGET_DIR` is unset or the dir is owned by another worktree (marker `$CARGO_TARGET_DIR/.worktree-owner`, written by the first worktree to use it; `--claim` runs only this check). New gate step `target-dir` runs it before any build; `mutants` no longer falls back to `/tmp/zb-target`. Selftest: two worktrees on one dir fail (SHARED, naming the owner), an unset `CARGO_TARGET_DIR` fails. CONTRIBUTING updated.
 - Spence review fixes for c471eca..7b64d57 (2026-10-23, protected `tools/`, red-first):
   - No silent pass (BLOCK): `full_gate.sh` keeps a running `gate_rc`, writes `done` only when every step passed (`failed` otherwise) and ends with `exit $gate_rc`. `runlog.sh`: a missing or unloadable poplog.sh is a hard failure (exit 2); `RUNLOG_PLAIN=1` is the explicit fixture-only plain mode. `runlog_step --tests` enforces 0-tests=FAIL in the zb layer too (with or without poplog). New selftest cases: missing poplog, failed step exits non-zero and writes no `done`, plain-mode zero tests.
   - `fresh_test_run.sh` (Spence's ruling): the age test is gone; a test binary must lie inside `$CARGO_TARGET_DIR`. The 0-binaries check and the manifest-scan gate step stay. The gate may reuse a target dir again; per-job subdirs are optional. Usage is now `tools/fresh_test_run.sh CMD...`.
