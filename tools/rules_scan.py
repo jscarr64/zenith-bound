@@ -636,8 +636,34 @@ def alias_tree_check():
 
 
 def narrow_exponent_sites():
-    """API-freeze unit 4: [(relpath, line, snippet)] for every public signature in src/ naming zf's `Exponent` or `i32`."""
-    return []
+    """API-freeze unit 4: [(relpath, line, snippet)] for every public signature in src/ naming zf's `Exponent` or `i32`.
+    Covers `pub fn` signatures (up to the body or `;`, wrapped forms included), `pub const/static/type` items and `pub`
+    fields; `pub(crate)` and private items are not public API. Comments and strings are blanked first."""
+    narrow = re.compile(r"\b(?:i32|Exponent)\b")
+    starts = [
+        re.compile(r"\bpub\s+(?:(?:const|async|unsafe|extern)\s+)*fn\b"),
+        re.compile(r"\bpub\s+(?:const|static|type)\b"),
+        re.compile(r"\bpub\s+[A-Za-z_]\w*\s*:(?!:)"),
+    ]
+    sites = []
+    for dp, dn, fn in os.walk(os.path.join(ROOT, "src")):
+        dn[:] = sorted(dn)
+        for f in sorted(fn):
+            if not f.endswith(".rs"):
+                continue
+            path = os.path.join(dp, f)
+            text = blank_code(open(path, errors="replace").read())
+            for rx in starts:
+                for m in rx.finditer(text):
+                    end = len(text)
+                    for stop in ("{", ";", ",", "}") if rx is starts[2] else ("{", ";"):
+                        k = text.find(stop, m.end())
+                        if k != -1:
+                            end = min(end, k)
+                    sig = text[m.start():end]
+                    if narrow.search(sig):
+                        sites.append((os.path.relpath(path, ROOT), text.count("\n", 0, m.start()) + 1, " ".join(sig.split())))
+    return sites
 
 
 def narrow_exponent_check():
