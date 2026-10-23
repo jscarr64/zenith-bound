@@ -39,7 +39,6 @@ src/mag/lower.rs:sub_wide	021-L7	021-L7.patch	mag
 src/mag/lower.rs:sub_wide	022-L9	022-L9.patch	mag
 src/mag/lower.rs:sub_wide	023-L10	023-L10.patch	mag
 src/mag/lower.rs:sub_wide	024-L11	024-L11.patch	mag
-src/mag/lower.rs:sub_wide	025-L12	025-L12.patch	mag
 src/mag/lower.rs:sub_checked	026-L13	026-L13.patch	mag
 src/mag/lower.rs:Mag::mul_lower	027-L14	027-L14.patch	mag
 src/mag/lower.rs:sub_checked	028-L15	028-L15.patch	mag

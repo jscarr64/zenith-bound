@@ -1,5 +1,4 @@
 diff --git a/src/mag/lower.rs b/src/mag/lower.rs
-index d225a6c..1466613 100644
 --- a/src/mag/lower.rs
 +++ b/src/mag/lower.rs
 @@ -70,7 +70,7 @@ fn sub_checked(ea: i64, ma: NonZeroU64, eb: i64, mb: NonZeroU64) -> Option<Mag>
@@ -8,6 +7,6 @@ index d225a6c..1466613 100644
  fn sub_wide(ea: i64, ma: NonZeroU64, gap: i128, mb: NonZeroU64) -> Option<Mag> {
 -    let wide = u128::from(ma.get()) << 63;
 +    let wide = u128::from(ma.get()) << 62;
-     // Units of 2^(ea - 127): the subtrahend is mb / 2^(gap - 63), rounded up. A shift of 128 or
-     // more leaves only the fraction, which still rounds up to one unit.
-     let (subtrahend, frac) = match u32::try_from(gap.checked_sub(63)?) {
+     // Units of 2^(ea - 127): the subtrahend is mb / 2^(gap - 63), rounded up. shift >= 1 (gap >= 64).
+     // A shift of 64 or more leaves only the fraction (mb < 2^64), which still rounds up to one unit:
+     // for 64 <= shift < 128 the shifted arm would give `mb >> shift == 0` and, because the mask keeps
