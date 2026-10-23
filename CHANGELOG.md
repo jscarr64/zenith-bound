@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `Enclosure::contains` for `Ball` is tight (Paul's ruling, 2026-10-23): when `rad` is a zenith-float value, False is returned exactly when `|mid - x| > rad` (e.g. `1 ± 1` vs `-2^-300` is now False, was Unknown). Unknown remains only for NaN-producing input, an overflowing working precision, or a `rad` outside zenith-float's exponent range. The lower-bracket fallback is gone. Exact-order property tests in `tests/mag/contains_exact.rs`.
+- Options: `SolveOpts { refine_steps }` and `EigOpts { max_sweeps, cluster }`, both `#[non_exhaustive]` with `Default` (2; 64, true); `DomainPolicy` is `#[non_exhaustive]` ({Strict, Clip}). CONTRACT 10.1.
 - Spence review fixes for c471eca..7b64d57 (2026-10-23, protected `tools/`, red-first):
   - No silent pass (BLOCK): `full_gate.sh` keeps a running `gate_rc`, writes `done` only when every step passed (`failed` otherwise) and ends with `exit $gate_rc`. `runlog.sh`: a missing or unloadable poplog.sh is a hard failure (exit 2); `RUNLOG_PLAIN=1` is the explicit fixture-only plain mode. `runlog_step --tests` enforces 0-tests=FAIL in the zb layer too (with or without poplog). New selftest cases: missing poplog, failed step exits non-zero and writes no `done`, plain-mode zero tests.
   - `fresh_test_run.sh` (Spence's ruling): the age test is gone; a test binary must lie inside `$CARGO_TARGET_DIR`. The 0-binaries check and the manifest-scan gate step stay. The gate may reuse a target dir again; per-job subdirs are optional. Usage is now `tools/fresh_test_run.sh CMD...`.
