@@ -1,6 +1,6 @@
 //! CONTRACT 10.1, 15.1 (options unit, Paul's rulings 2026-10-23); oracle: the clauses (SolveOpts { refine_steps },
 //! EigOpts { max_sweeps, cluster }, both #[non_exhaustive] + Default; DomainPolicy #[non_exhaustive] { Strict, Clip })
-//! COVERS: SolveOpts::default, EigOpts::default
+//! COVERS: DomainPolicy::Strict, DomainPolicy::Clip
 
 use zenith_bound::policy::{DomainPolicy, EigOpts, SolveOpts};
 

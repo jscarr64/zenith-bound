@@ -174,3 +174,10 @@ src/array.rs:BallMat::from_array	156-A-matrank	156-A-matrank.patch	array
 src/array.rs:BallMat::ncols	157-A-ncols	157-A-ncols.patch	array
 src/array.rs:BallMat::nrows	158-A-nrows	158-A-nrows.patch	array
 src/array.rs:BallVec::from_balls	159-A-vecshape	159-A-vecshape.patch	array
+# options unit (Spence, 2026-10-23): defaults and #[non_exhaustive] markers
+src/policy.rs:SolveOpts::default	160-O-solvedef	160-O-solvedef.patch	types
+src/policy.rs:EigOpts::default	161-O-eigsweeps	161-O-eigsweeps.patch	types
+src/policy.rs:EigOpts::default	162-O-eigcluster	162-O-eigcluster.patch	types
+src/policy.rs:SolveOpts	163-O-solvene	163-O-solvene.patch	types
+src/policy.rs:EigOpts	164-O-eigne	164-O-eigne.patch	types
+src/policy.rs:DomainPolicy	165-O-dpne	165-O-dpne.patch	types
