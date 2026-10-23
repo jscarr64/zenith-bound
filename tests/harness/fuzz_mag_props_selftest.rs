@@ -683,8 +683,9 @@ fn the_real_operations_pass_every_property_for_a_short_run() -> Result<(), Strin
         cases: 5000,
         replay: None,
     };
+    let first: &dyn Fn(&Ops, &mut SplitMix64) -> Result<u8, Bad> = &props::add_up_case;
     for f in [
-        &props::add_up_case as &dyn Fn(&Ops, &mut SplitMix64) -> Result<u8, Bad>,
+        first,
         &props::sub_lower_case,
         &props::mul_case,
         &props::div_case,

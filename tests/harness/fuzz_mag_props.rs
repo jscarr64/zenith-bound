@@ -607,13 +607,11 @@ impl Mono {
     }
 }
 
+/// One operand as (exponent, mantissa).
+type Raw = (i64, u64);
+
 /// Draws a second operand that is at or above `(e, m)`: the next larger value, a fresh draw ordered against it, or the same value.
-fn draw_partner(
-    rng: &mut SplitMix64,
-    prec: u32,
-    e: i64,
-    m: u64,
-) -> Result<((i64, u64), (i64, u64)), String> {
+fn draw_partner(rng: &mut SplitMix64, prec: u32, e: i64, m: u64) -> Result<(Raw, Raw), String> {
     let pick = rng.below(4);
     let fresh_e = exp_of(rng, prec, e)?;
     let fresh_m = draw_mantissa(rng, prec)?.value;
