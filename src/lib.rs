@@ -8,6 +8,7 @@
     clippy::arithmetic_side_effects
 )]
 
+pub mod array;
 pub mod ball;
 pub mod error;
 pub mod mag;
