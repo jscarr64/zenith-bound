@@ -183,3 +183,5 @@ src/error.rs:BoundError::op	169-E-op-conv	169-E-op-conv.patch	types
 src/error.rs:BoundError::detail	170-E-det-conv	170-E-det-conv.patch	types
 src/error.rs:BoundError::kind_text	171-E-kind-conv	171-E-kind-conv.patch	types
 src/array.rs:BallArray::zeros	172-A-allocres	172-A-allocres.patch	array
+src/array.rs:element_count	173-A-zerodim	173-A-zerodim.patch	array
+src/array.rs:element_count	174-A-zerodimone	174-A-zerodimone.patch	array

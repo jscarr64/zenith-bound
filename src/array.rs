@@ -30,8 +30,8 @@ impl BallArray {
     /// Builds an array of the given shape from `balls` in row-major order.
     ///
     /// # Errors
-    /// `InvalidArgument` when the product of `shape` overflows `usize` or differs from
-    /// `balls.len()`.
+    /// `InvalidArgument` when the product of `shape` overflows `usize` (a shape with a zero
+    /// extent never overflows: it has 0 elements) or differs from `balls.len()`.
     pub fn from_balls(shape: Box<[usize]>, balls: Vec<Ball>) -> BoundResult<BallArray> {
         let len = element_count("BallArray::from_balls", &shape)?;
         if len != balls.len() {
@@ -219,8 +219,12 @@ impl BallMat {
     }
 }
 
-/// Product of the axis extents, checked.
+/// Product of the axis extents, checked; 0 when any extent is 0.
 fn element_count(op: &'static str, shape: &[usize]) -> BoundResult<usize> {
+    // Any zero extent empties the array, whatever the other extents (WR-ND).
+    if shape.contains(&0) {
+        return Ok(0);
+    }
     shape
         .iter()
         .try_fold(1usize, |acc, &d| acc.checked_mul(d))

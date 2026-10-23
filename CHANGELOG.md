@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `BallArray` shapes with a zero extent are empty arrays even beside extents whose product would overflow (`[usize::MAX, 2, 0]` was `InvalidArgument`). WR-ND tests: ranks 0..6, empty dims on every axis, overflow at every rank and axis.
 - Container/LA op signature rule frozen (API freeze F8; CONTRACT 15.6): explicit `prec: Precision`, no rounding mode, `BoundResult` return.
 - Allocation failure is `Resource`, never an abort, for storage zenith-bound sizes from caller input (API freeze F7; CONTRACT 15.5). `BallArray::zeros` with a shape too large to allocate returns `Resource`.
 - `Tri` is documented as exhaustive (API freeze F2): `{True, False, Unknown}` is the complete set; no `#[non_exhaustive]`. CONTRACT 15.2.
