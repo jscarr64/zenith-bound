@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Spence review fixes for c471eca..7b64d57 (2026-10-23, protected `tools/`, red-first):
+  - No silent pass (BLOCK): `full_gate.sh` keeps a running `gate_rc`, writes `done` only when every step passed (`failed` otherwise) and ends with `exit $gate_rc`. `runlog.sh`: a missing or unloadable poplog.sh is a hard failure (exit 2); `RUNLOG_PLAIN=1` is the explicit fixture-only plain mode. `runlog_step --tests` enforces 0-tests=FAIL in the zb layer too (with or without poplog). New selftest cases: missing poplog, failed step exits non-zero and writes no `done`, plain-mode zero tests.
 - Gate rerun fixes (Jeff, 2026-10-23 10:33 AM CT). These touch protected `tools/` files, so they need Spence's review:
   - `tools/runlog.sh` v3 relies on poplog's FAIL verdict and exit code. The `/dev/null` stdout workaround and the zb-fail markers are gone. A nested full_gate under poprun now exits nonzero, shows FAIL and writes step output into the parent log. There is a red-first selftest case for this.
   - Harness goldens resolve at runtime through `common::goldens::repo_root()`, not compile-time `env!("CARGO_MANIFEST_DIR")`. A binary built in one worktree used to read another worktree's goldens. The new gate step `manifest-scan` bans the `env!` form.

@@ -7,7 +7,9 @@
 #   - runlog_wrap opens the run (or the sub-run, when started inside poprun or another wrapped script) and, at exit, finishes it and exits
 #     non-zero if any step failed, even when the script itself ends with exit 0;
 #   - runlog_step always passes --tests when asked, so a test step that ran zero tests is FAIL;
-#   - if poplog.sh is missing the script warns and runs its steps plain.
+#   - runlog_step --tests also enforces zb's own 0-tests=FAIL rule (sum of "test result:" counts), with or without poplog;
+#   - a missing or unloadable poplog.sh is a HARD failure (exit 2): no run without a run log. RUNLOG_PLAIN=1 (self-test fixtures only) runs
+#     the steps plain on purpose.
 # Use, first thing in a script:   . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap JOB "$@"
 #   runlog_step [--tests] NAME -- CMD...     runlog_warn MESSAGE
 # One-shot (verify and test runs): tools/runlog.sh JOB [--tests] -- CMD...
@@ -29,9 +31,10 @@ _rl_exit() { # EXIT trap: finish the (sub-)run; a failed step makes the script e
 runlog_wrap() { # runlog_wrap JOB "$@"
   local job=$1; shift
   trap _rl_exit EXIT
-  if [ ! -f "$RUNLOG_POPLOG" ]; then echo "runlog: WARNING $RUNLOG_POPLOG missing; running $job without a run log" >&2; return 0; fi
+  if [ "${RUNLOG_PLAIN:-0}" = 1 ]; then return 0; fi   # fixture-only plain mode, set explicitly by self-tests
+  if [ ! -f "$RUNLOG_POPLOG" ]; then echo "runlog: FAIL $RUNLOG_POPLOG missing; refusing to run $job without a run log" >&2; exit 2; fi
   # shellcheck source=/dev/null
-  . "$RUNLOG_POPLOG" || { echo "runlog: WARNING cannot source $RUNLOG_POPLOG; running $job without a run log" >&2; return 0; }
+  . "$RUNLOG_POPLOG" || { echo "runlog: FAIL cannot source $RUNLOG_POPLOG; refusing to run $job without a run log" >&2; exit 2; }
   poplog_init "$RUNLOG_AGENT" "$job" "$(git rev-parse --show-toplevel 2> /dev/null || pwd)" "$0 $*"
   trap _rl_exit EXIT
   RUNLOG_ON=1
@@ -51,12 +54,23 @@ runlog_warn() {
   echo "warning: $*" >&2
 }
 
+_rl_tee() { local f=$1; shift; "$@" 2>&1 | tee "$f"; return "${PIPESTATUS[0]}"; }
+_rl_ran() { awk '/test result: /{for(i=1;i<NF;i++) if($(i+1) ~ /^(passed|failed);?$/) s+=$i} END{print s+0}' "$1"; }
+
 runlog_step() { # runlog_step [--tests] NAME -- CMD...
-  local tflag=() name
+  local tflag=() name f rc n
   [ "${1:-}" = --tests ] && { tflag=(--tests); shift; }
   name=$1; shift; [ "${1:-}" = -- ] && shift
-  if [ -z "$RUNLOG_ON" ]; then "$@"; return $?; fi
-  poplog_run_step "$name" "${tflag[@]}" -- "$@"
+  if [ "${#tflag[@]}" = 0 ]; then
+    if [ -z "$RUNLOG_ON" ]; then "$@"; return $?; fi
+    poplog_run_step "$name" -- "$@"; return $?
+  fi
+  # zb layer: a test step must run at least one test, independently of poplog's own check
+  f=$(mktemp /tmp/zb-runlog-tests.XXXXXX) || return 2
+  if [ -z "$RUNLOG_ON" ]; then _rl_tee "$f" "$@"; else poplog_run_step "$name" --tests -- _rl_tee "$f" "$@"; fi; rc=$?
+  n=$(_rl_ran "$f"); rm -f "$f"
+  if [ "$rc" = 0 ] && [ "$n" = 0 ]; then echo "runlog: step $name ran 0 tests: FAIL" >&2; return 1; fi
+  return "$rc"
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then

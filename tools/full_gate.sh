@@ -45,10 +45,13 @@ no_hits() { # no_hits <exclude-ERE or ''> <grep args...>  (grep runs over the ex
   printf '%s\n' "$hits"; return 1
 }
 export -f require no_hits
+# gate_rc: 1 once any step failed. The gate exits $gate_rc and writes 'done' only when every step passed ('failed' otherwise): no silent pass.
+gate_rc=0
 run() { name=$1; shift
   case " ${GATE_STEPS:-$name} " in *" $name "*) ;; *) return 0 ;; esac
-  local tf=(); case $name in build-debug|build-release) tf=(--tests) ;; esac   # a test step that runs zero tests fails (runlog_step)
-  echo "start $name $(date +%T)" >> "$T/$tag.rc"; runlog_step "${tf[@]}" "$name" -- timeout "${STEP_TIMEOUT:-20m}" bash -c "$*" > "$T/$tag-$name.log" 2>&1; echo "$name=$?" >> "$T/$tag.rc"; }
+  local tf=() rc; case $name in build-debug|build-release) tf=(--tests) ;; esac   # a test step that runs zero tests fails (runlog_step)
+  echo "start $name $(date +%T)" >> "$T/$tag.rc"; runlog_step "${tf[@]}" "$name" -- timeout "${STEP_TIMEOUT:-20m}" bash -c "$*" > "$T/$tag-$name.log" 2>&1; rc=$?
+  echo "$name=$rc" >> "$T/$tag.rc"; [ "$rc" = 0 ] || gate_rc=1; }
 run toolchain "require rustc cargo sed && tools/toolchain_check_selftest.sh && tools/toolchain_check.sh"
 run build-tests "require cargo && cargo build --tests"
 run build-debug "require cargo && tools/fresh_test_run.sh $gate_t0 cargo test -- --test-threads=\${RUST_TEST_THREADS:-8}"
@@ -69,4 +72,5 @@ run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"
 run mutants "require cargo git timeout grep && tools/mutate_selftest.sh && MUTATE_TARGET=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:-/tmp/zb-target}/mutate} tools/mutate.sh"
-echo "done" >> "$T/$tag.rc"
+if [ "$gate_rc" = 0 ]; then echo "done" >> "$T/$tag.rc"; else echo "failed" >> "$T/$tag.rc"; fi
+exit "$gate_rc"
