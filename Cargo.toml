@@ -8,6 +8,9 @@ description = "Guaranteed-bounds (ball arithmetic) on zenith-float. Pre-release:
 publish = false
 
 [dependencies]
+# zenith-float Stage A interim pin (PLAN C1): fe5c15d, a dedicated detached worktree at /tmp/zf-pin-fe5c15d.
+# ExactNum lives in zenith-float-num. No std feature: zb does not need it. No other dependency is allowed.
+zenith-float-num = { path = "/tmp/zf-pin-fe5c15d/zenith-float-num", default-features = false }
 
 # Applies to every target (lib, tests/, benches/, examples/): Jeff's rules hold in test code too.
 [lints.rust]
