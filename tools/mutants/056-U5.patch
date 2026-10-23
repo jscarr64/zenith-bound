@@ -1,11 +1,10 @@
 diff --git a/src/mag/ulp.rs b/src/mag/ulp.rs
-index 94fed1e..28eb80b 100644
 --- a/src/mag/ulp.rs
 +++ b/src/mag/ulp.rs
-@@ -18,7 +18,7 @@ impl Mag {
-         // one fallback: an error term must never be too small.
-         match i128::from(pre_round_exp)
-             .checked_sub(i128::from(prec))
+@@ -20,7 +20,7 @@
+         match i128::try_from(prec)
+             .ok()
+             .and_then(|p| i128::from(pre_round_exp).checked_sub(p))
 -            .and_then(|diff| diff.checked_add(1))
 +            .and_then(|diff| diff.checked_add(0))
          {
