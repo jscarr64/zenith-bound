@@ -12,10 +12,12 @@ export LC_ALL=C
 here=$(cd "$(dirname "$0")" && pwd)
 fail() { echo "fresh_test_run selftest FAIL: $*"; exit 1; }
 t=$(mktemp -d /tmp/zb-fresh-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""
+git init -q "$t/wa" && git init -q "$t/wb" || fail "git init failed"   # two worktrees (Paul's rule: one target dir per worktree)
+# wa claims the target dir while it is empty (a non-empty unmarked dir is never claimed), then the build fixture fills it
+(cd "$t/wa" && CARGO_TARGET_DIR="$t/target" bash "$here/fresh_test_run.sh" --claim) > "$t/out" 2>&1 || fail "--claim of a missing target dir failed: $(cat "$t/out")"
 mkdir -p "$t/target/debug/deps" "$t/elsewhere"
 : > "$t/target/debug/deps/fresh-1"; : > "$t/target/debug/deps/stale-1"; touch -d '1 hour ago' "$t/target/debug/deps/stale-1"; : > "$t/elsewhere/other-1"
 fake() { printf 'echo "     Running tests/harness/main.rs (%s)"; echo "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"; exit %s\n' "$1" "$2" > "$t/fake.sh"; }
-git init -q "$t/wa" && git init -q "$t/wb" || fail "git init failed"   # two worktrees (Paul's rule: one target dir per worktree)
 ftr() { (cd "${W:-$t/wa}" && CARGO_TARGET_DIR="$t/target" bash "$here/fresh_test_run.sh" bash "$t/fake.sh") > "$t/out" 2>&1; }
 fake "$t/target/debug/deps/fresh-1" 0; ftr || fail "a fresh binary in the target dir was rejected: $(cat "$t/out")"
 grep -q "test result: ok. 1 passed" "$t/out" || fail "the command's output was not passed through"
@@ -35,4 +37,18 @@ grep -q "$(cd "$t/wa" && pwd -P)" "$t/out" || fail "shared target dir error does
 [ "$(cat "$t/tb/.worktree-owner" 2> /dev/null)" = "$(cd "$t/wb" && pwd -P)" ] || fail "--claim wrote no owner marker for wb"
 (cd "$t/wa" && env -u CARGO_TARGET_DIR bash "$here/fresh_test_run.sh" bash "$t/fake.sh") > "$t/out" 2>&1 && fail "an unset CARGO_TARGET_DIR was accepted"
 grep -q "CARGO_TARGET_DIR is unset" "$t/out" || fail "unset CARGO_TARGET_DIR not named: $(cat "$t/out")"
+# Spence (2026-10-23): a NON-EMPTY dir with no marker is never claimed (a planted foreign binary gave rc 0); an empty dir is claimed;
+# a marker naming another worktree fails
+claim() { (cd "$1" && CARGO_TARGET_DIR="$2" bash "$here/fresh_test_run.sh" --claim) > "$t/out" 2>&1; }
+mkdir -p "$t/unmarked/debug/deps"; : > "$t/unmarked/debug/deps/harness-deadbeef"
+claim "$t/wa" "$t/unmarked" && fail "--claim of a non-empty unmarked target dir was accepted: $(cat "$t/out")"
+grep -q "UNMARKED" "$t/out" || fail "non-empty unmarked target dir not named UNMARKED: $(cat "$t/out")"
+[ -e "$t/unmarked/.worktree-owner" ] && fail "a marker was written into a non-empty unmarked target dir"
+fake "$t/unmarked/debug/deps/harness-deadbeef" 0; (cd "$t/wa" && CARGO_TARGET_DIR="$t/unmarked" bash "$here/fresh_test_run.sh" bash "$t/fake.sh") > "$t/out" 2>&1 \
+  && fail "a test run on a non-empty unmarked target dir was accepted: $(cat "$t/out")"
+mkdir -p "$t/empty"; claim "$t/wa" "$t/empty" || fail "--claim of an empty target dir failed: $(cat "$t/out")"
+[ "$(cat "$t/empty/.worktree-owner" 2> /dev/null)" = "$(cd "$t/wa" && pwd -P)" ] || fail "--claim of an empty dir wrote no owner marker"
+mkdir -p "$t/foreign/debug"; printf '/some/other/worktree\n' > "$t/foreign/.worktree-owner"
+claim "$t/wa" "$t/foreign" && fail "--claim of a dir with a foreign marker was accepted: $(cat "$t/out")"
+grep -q "SHARED" "$t/out" || fail "foreign marker not named SHARED: $(cat "$t/out")"
 echo "fresh_test_run selftest: ok"

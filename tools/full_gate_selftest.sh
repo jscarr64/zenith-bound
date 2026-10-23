@@ -69,4 +69,19 @@ grep -q 'TOOLCHAIN MISMATCH' "$t/logs/tc-1.95.0-toolchain.log" || fail "toolchai
 [ "$(rcof tc-1.99.1 toolchain)" = 0 ] || fail "toolchain step fails on the pinned rustc: $(cat "$t/logs/tc-1.99.1-toolchain.log")"
 # poplog treats any step whose command says `cargo test` as a test step, so a build-only `cargo test --no-run` step reads as zero tests -> FAIL
 grep -nE '^run [a-z-]+ .*cargo test[^"]*--no-run' "${BASH_SOURCE[0]%/*}/full_gate.sh" && fail "a gate step builds with cargo test --no-run; poplog counts it as zero tests (use cargo build --tests)"
+# 4. mutants step: MUTATE_TARGET (caller-set or default) gets the same ownership claim as CARGO_TARGET_DIR (Spence, 2026-10-23); the fixture's
+# mutate.sh/mutate_selftest.sh are stubs that pass, so only the claim can fail the step
+mk mu; mkdir -p "$t/mu/tools" "$t/mu-bin"; cp "$root/tools/fresh_test_run.sh" "$root/tools/runlog.sh" "$t/mu/tools/"
+for f in mutate.sh mutate_selftest.sh; do printf '#!/bin/sh\necho stub %s\n' "$f" > "$t/mu/tools/$f"; chmod +x "$t/mu/tools/$f"; done
+printf '#!/bin/sh\nexit 0\n' > "$t/mu-bin/cargo"; chmod +x "$t/mu-bin/cargo"; git init -q "$t/mu" || fail "git init mu failed"
+mu() { "${fe[@]}" GATE_STEPS=mutants T="$t/logs" REPO="$t/mu" PATH="$t/mu-bin:$PATH" CARGO_TARGET_DIR="$t/mu-target" "$@" "$root/tools/full_gate.sh" "$tag" > /dev/null 2>&1; }
+mkdir -p "$t/mu-unmarked/debug/deps"; : > "$t/mu-unmarked/debug/deps/harness-deadbeef"
+tag=mu-unmarked; mu env MUTATE_TARGET="$t/mu-unmarked" && fail "mutants ran with a non-empty unmarked MUTATE_TARGET override"
+[ "$(rcof mu-unmarked mutants)" != 0 ] || fail "mutants step passed with a non-empty unmarked MUTATE_TARGET override"
+grep -q UNMARKED "$t/logs/mu-unmarked-mutants.log" || fail "mutants step does not name the UNMARKED MUTATE_TARGET: $(cat "$t/logs/mu-unmarked-mutants.log")"
+mkdir -p "$t/mu-foreign"; printf '/some/other/worktree\n' > "$t/mu-foreign/.worktree-owner"
+tag=mu-foreign; mu env MUTATE_TARGET="$t/mu-foreign" && fail "mutants ran with a MUTATE_TARGET owned by another worktree"
+grep -q SHARED "$t/logs/mu-foreign-mutants.log" || fail "mutants step does not name the SHARED MUTATE_TARGET: $(cat "$t/logs/mu-foreign-mutants.log")"
+tag=mu-default; mu env || fail "mutants step failed on a fresh default MUTATE_TARGET: $(cat "$t/logs/mu-default-mutants.log")"
+[ "$(cat "$t/mu-target/mutate/.worktree-owner" 2> /dev/null)" = "$(cd "$t/mu" && pwd -P)" ] || fail "default MUTATE_TARGET got no owner marker"
 echo "full_gate selftest: ok"
