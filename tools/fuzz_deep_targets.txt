@@ -1,0 +1,3 @@
+# Deep-fuzz targets for tools/fuzz_deep.sh: one `<harness module>::<test fn>` per line (run with --exact; each shard must report 1 passed).
+# Spence's port adds tests/harness/fuzz_mag_l0a5.rs and its line here in the same rebase.
+fuzz_mag::fuzz_mag_gate
