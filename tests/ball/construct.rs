@@ -218,3 +218,36 @@ fn into_parts_moves_the_fields_out() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn errors_name_the_constructor_called() -> Result<(), String> {
+    // L0b mutant 115-B-exactop: `Ball::exact` reports itself, not the `from_mid_rad` it delegates to.
+    let cases: [(&str, Result<Ball, BoundError>); 3] = [
+        ("Ball::exact", Ball::exact(num(3), 0)),
+        (
+            "Ball::from_mid_rad",
+            Ball::from_mid_rad(num(3), Mag::zero(), 0),
+        ),
+        ("Ball::all_reals", Ball::all_reals(0)),
+    ];
+    for (want, r) in cases {
+        match r {
+            Err(e) if e.op() == want => {}
+            other => return Err(format!("{}: want op {}, got {:?}", want, want, other)),
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn positive_zero_mid_keeps_its_precision() -> Result<(), String> {
+    // L0b mutant 111-B-poszero: only a -0 midpoint is replaced; a +0 midpoint is kept as given (D15a, CONTRACT 6.3).
+    let b = ok("exact(+0 at 200 bits)", Ball::exact(ExactNum::new(200), 64))?;
+    if !is_pos_zero(b.mid()) || b.mid().precision() != ExactNum::new(200).precision() {
+        return Err(format!(
+            "+0 midpoint was rebuilt: {:?}",
+            b.mid().precision()
+        ));
+    }
+    Ok(())
+}

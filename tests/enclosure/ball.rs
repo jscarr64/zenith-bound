@@ -108,3 +108,55 @@ fn contains_on_points_and_all_reals() -> Result<(), String> {
     }
     Ok(())
 }
+
+/// `sign * 2^e` as an exact zf value (1 bit).
+fn pow2(e: i32, negative: bool) -> ExactNum {
+    let one = if negative { n(-1) } else { n(1) };
+    one.ldexp(e, 64, zenith_float_num::RoundingMode::Down)
+}
+
+#[test]
+fn contains_is_sound_when_the_difference_is_inexact() -> Result<(), String> {
+    // 1 ± 1 against x = ∓2^-300: |mid - x| = 1 + 2^-300 > 1, which needs ~300 bits, so `contains` must not say True.
+    // L0b mutants 132-C-hiadd, 134-C-loadd, 136-C-upmax (a bracket end rounded the wrong way or the min taken).
+    let one_one = ball(1, 0, 64)?;
+    if one_one.contains(&pow2(-300, true)) == Tri::True {
+        return Err("1±1 must not contain -2^-300 (distance 1 + 2^-300)".into());
+    }
+    let m_one = ball(-1, 0, 64)?;
+    if m_one.contains(&pow2(-300, false)) == Tri::True {
+        return Err("-1±1 must not contain 2^-300 (distance 1 + 2^-300)".into());
+    }
+    // and the inside cases stay decided: distance 1 - 2^-300 <= 1
+    if one_one.contains(&pow2(-300, false)) != Tri::True
+        || m_one.contains(&pow2(-300, true)) != Tri::True
+    {
+        return Err("1±1 contains 2^-300 and -1±1 contains -2^-300".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn contains_works_at_the_wider_operand_precision() -> Result<(), String> {
+    // mid = 2^200 (exact at 64 bits), x = 2^200 - 1 + 2^-300 at 600 bits, rad 1: distance 1 - 2^-300 <= 1, so True.
+    // At the narrower operand's precision the first step already rounds by 2^8 (L0b mutant 143-C-wpmin).
+    let p = 600;
+    let rm = zenith_float_num::RoundingMode::Down;
+    let x = pow2(200, false)
+        .sub(&n(1), p, rm)
+        .add(&pow2(-300, false), p, rm);
+    let mid = pow2(200, false);
+    let b = Ball::from_mid_rad(
+        mid,
+        Mag::finite(TOP, 1).map_err(|e| format!("{:?}", e))?,
+        64,
+    )
+    .map_err(|e| format!("{:?}", e))?;
+    match b.contains(&x) {
+        Tri::True => Ok(()),
+        t => Err(format!(
+            "2^200 ± 1 contains 2^200 - 1 + 2^-300: want True, got {:?}",
+            t
+        )),
+    }
+}

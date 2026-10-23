@@ -192,3 +192,27 @@ fn each_variant_matches_its_own_pattern() -> Result<(), String> {
         Some(i) => Err(format!("variant {} did not match its pattern", i)),
     }
 }
+
+#[test]
+fn display_kind_text_per_variant() -> Result<(), String> {
+    // L0b mutant 104-E-kind-npd: each variant's Display leads with its own kind text.
+    let want = [
+        "value not representable",
+        "invalid argument",
+        "input outside the domain",
+        "resource limit reached",
+        "matrix not positive definite",
+        "matrix singular",
+    ];
+    for (e, w) in all().iter().zip(want.iter()) {
+        if !format!("{}", e).starts_with(w) {
+            return Err(format!(
+                "Display of {} must start with {:?}: {}",
+                name(e),
+                w,
+                e
+            ));
+        }
+    }
+    Ok(())
+}

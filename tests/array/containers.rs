@@ -166,3 +166,12 @@ fn ball_mat_is_rank_two_row_major() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn from_balls_rejects_more_balls_than_the_shape() -> Result<(), String> {
+    // L0b mutant 148-A-fromlen2: a surplus ball is a mismatch too.
+    if !invalid(BallArray::from_balls(Box::new([2, 3]), balls(7)?)) {
+        return Err("7 balls for shape [2, 3] must be InvalidArgument".into());
+    }
+    Ok(())
+}
