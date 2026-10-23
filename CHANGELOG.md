@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Run logs now go through the shared Pop logger (Jeff, 2026-10-23 9:59 AM CT; Paul and Rusty): `tools/runlog.sh` sources
+  `~/pop-logs/bin/poplog.sh` instead of writing logs and `RUNNING.tsv` itself, so logs, the canonical 8-column `RUNNING.tsv` row (lock
+  `RUNNING.tsv.lock`) and 30-day pruning (`poprotate`) are poplog's. zb keeps a thin layer: step output still on stdout, a failed or zero-test
+  step returns nonzero and fails the run, no second log for a wrapped script inside a wrapped run or inside `poprun`, heartbeat kept off stdout.
 - Run logs (Jeff, 2026-10-23 9:42 AM CT): new `tools/runlog.sh`, sourced by every `tools/*.sh` (`runlog_wrap JOB "$@"`), and usable one-shot
   for verify and test runs: `tools/runlog.sh JOB [--tests] -- CMD`. Each run logs to `~/pop-logs/<agent>/<date>/<HHMM>-<job>.log` (header,
   per-step timing, exit code and cargo test counts, 5-minute heartbeat, PASS/FAIL footer with warnings) and holds a row in
