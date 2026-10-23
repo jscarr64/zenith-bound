@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `BoundError::NotConverged { op, detail }` (Paul, 2026-10-23): an iteration out of budget (e.g. `EigOpts::max_sweeps`) returns it, never a silently loose answer. CONTRACT O11-W.
 - `Enclosure::contains` for `Ball` is tight (Paul's ruling, 2026-10-23): when `rad` is a zenith-float value, False is returned exactly when `|mid - x| > rad` (e.g. `1 ± 1` vs `-2^-300` is now False, was Unknown). Unknown remains only for NaN-producing input, an overflowing working precision, or a `rad` outside zenith-float's exponent range. The lower-bracket fallback is gone. Exact-order property tests in `tests/mag/contains_exact.rs`.
 - Options: `SolveOpts { refine_steps }` and `EigOpts { max_sweeps, cluster }`, both `#[non_exhaustive]` with `Default` (2; 64, true); `DomainPolicy` is `#[non_exhaustive]` ({Strict, Clip}). CONTRACT 10.1.
 - Spence review fixes for c471eca..7b64d57 (2026-10-23, protected `tools/`, red-first):

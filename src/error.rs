@@ -52,6 +52,14 @@ pub enum BoundError {
         /// A short reason.
         detail: &'static str,
     },
+    /// An iteration ran out of its budget (e.g. `EigOpts::max_sweeps`) before its stopping test held
+    /// (Paul, 2026-10-23); never a silently loose answer.
+    NotConverged {
+        /// The operation that refused.
+        op: &'static str,
+        /// A short reason.
+        detail: &'static str,
+    },
 }
 
 impl BoundError {
@@ -64,6 +72,7 @@ impl BoundError {
             BoundError::Resource { op, .. } => op,
             BoundError::NotPositiveDefinite { op, .. } => op,
             BoundError::Singular { op, .. } => op,
+            BoundError::NotConverged { op, .. } => op,
         }
     }
 
@@ -76,6 +85,7 @@ impl BoundError {
             BoundError::Resource { detail, .. } => detail,
             BoundError::NotPositiveDefinite { detail, .. } => detail,
             BoundError::Singular { detail, .. } => detail,
+            BoundError::NotConverged { detail, .. } => detail,
         }
     }
 
@@ -87,6 +97,7 @@ impl BoundError {
             BoundError::Resource { .. } => "resource limit reached",
             BoundError::NotPositiveDefinite { .. } => "matrix not positive definite",
             BoundError::Singular { .. } => "matrix singular",
+            BoundError::NotConverged { .. } => "iteration did not converge",
         }
     }
 }

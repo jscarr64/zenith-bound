@@ -179,3 +179,6 @@ src/policy.rs:EigOpts::default	162-O-eigcluster	162-O-eigcluster.patch	types
 src/policy.rs:SolveOpts	163-O-solvene	163-O-solvene.patch	types
 src/policy.rs:EigOpts	164-O-eigne	164-O-eigne.patch	types
 src/policy.rs:DomainPolicy	165-O-dpne	165-O-dpne.patch	types
+src/error.rs:BoundError::op	169-E-op-conv	169-E-op-conv.patch	types
+src/error.rs:BoundError::detail	170-E-det-conv	170-E-det-conv.patch	types
+src/error.rs:BoundError::kind_text	171-E-kind-conv	171-E-kind-conv.patch	types
