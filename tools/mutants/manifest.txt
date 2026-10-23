@@ -182,3 +182,4 @@ src/policy.rs:DomainPolicy	165-O-dpne	165-O-dpne.patch	types
 src/error.rs:BoundError::op	169-E-op-conv	169-E-op-conv.patch	types
 src/error.rs:BoundError::detail	170-E-det-conv	170-E-det-conv.patch	types
 src/error.rs:BoundError::kind_text	171-E-kind-conv	171-E-kind-conv.patch	types
+src/tri.rs:Tri	172-T-nonexh	172-T-nonexh.patch	types

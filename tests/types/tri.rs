@@ -26,3 +26,23 @@ fn tri_variants_are_distinct_and_named() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[test]
+fn tri_is_exhaustive_with_exactly_three_values() -> Result<(), String> {
+    // Gap F2 (API freeze): Tri is NOT #[non_exhaustive]; this wildcard-free match in an
+    // external crate stops compiling if it ever becomes so (mutant 172-T-nonexh).
+    let all = [Tri::True, Tri::False, Tri::Unknown];
+    let mut seen = [false; 3];
+    for t in &all {
+        let i = match t {
+            Tri::True => 0,
+            Tri::False => 1,
+            Tri::Unknown => 2,
+        };
+        seen[i] = true;
+    }
+    match seen {
+        [true, true, true] => Ok(()),
+        other => Err(format!("variants seen {:?}", other)),
+    }
+}
