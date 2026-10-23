@@ -154,7 +154,7 @@ fn contains_works_at_the_wider_operand_precision() -> Result<(), String> {
     .map_err(|e| format!("{:?}", e))?;
     match b.contains(&x) {
         Tri::True => Ok(()),
-        t => Err(format!(
+        t @ (Tri::False | Tri::Unknown) => Err(format!(
             "2^200 ± 1 contains 2^200 - 1 + 2^-300: want True, got {:?}",
             t
         )),

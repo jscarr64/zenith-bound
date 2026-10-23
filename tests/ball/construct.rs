@@ -243,11 +243,11 @@ fn errors_name_the_constructor_called() -> Result<(), String> {
 fn positive_zero_mid_keeps_its_precision() -> Result<(), String> {
     // L0b mutant 111-B-poszero: only a -0 midpoint is replaced; a +0 midpoint is kept as given (D15a, CONTRACT 6.3).
     let b = ok("exact(+0 at 200 bits)", Ball::exact(ExactNum::new(200), 64))?;
-    if !is_pos_zero(b.mid()) || b.mid().precision() != ExactNum::new(200).precision() {
-        return Err(format!(
-            "+0 midpoint was rebuilt: {:?}",
-            b.mid().precision()
-        ));
+    // A zero's precision() is Some(0) whatever its buffer, so compare the buffer: 256 bits kept, 64 if rebuilt.
+    let want = ExactNum::new(200).mantissa_max_bit_len();
+    let got = b.mid().mantissa_max_bit_len();
+    if !is_pos_zero(b.mid()) || got != want {
+        return Err(format!("+0 midpoint was rebuilt: {:?} vs {:?}", got, want));
     }
     Ok(())
 }
