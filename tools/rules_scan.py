@@ -674,8 +674,22 @@ def narrow_exponent_check():
     return 1 if sites else 0
 
 
+def prec_width_sites():
+    """API-freeze unit 5: [(relpath, line, snippet)] for every `prec` in src/ typed with a concrete integer width
+    instead of the `Prec` alias."""
+    return []
+
+
+def prec_width_check():
+    sites = prec_width_sites()
+    for rel, line, snippet in sites:
+        print("%s:%d [prec_concrete_width] %s" % (rel, line, snippet[:120]))
+    print("rules_scan: prec typed with a concrete integer width: %d (no baseline, any hit fails; use Prec)" % len(sites))
+    return 1 if sites else 0
+
+
 def both_count_checks(update=False):
-    return max(count_check(update), ref_count_check(update), hidden_count_check(update), rebuild_count_check(update), alias_tree_check(), narrow_exponent_check())
+    return max(count_check(update), ref_count_check(update), hidden_count_check(update), rebuild_count_check(update), alias_tree_check(), narrow_exponent_check(), prec_width_check())
 
 
 def main(argv):
