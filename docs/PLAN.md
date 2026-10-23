@@ -236,7 +236,8 @@ Provenance: `NOTICE-puremp` at the repo root holds the full MIT text; each porte
   - `Ball { mid: ExactNum, rad: Mag, prec: u32 }` (B3). `prec` is exactly `prec` bits, through zf P15 (exact-bit rounding in zenith-float, LOCKED; Gemini G1; no re-chopping in zenith-bound). Before P15, zf stores `round_up_to_64(prec)` (K5), and L0 does not start.
   - `ComplexBall` in **two forms** (B3): `Rect { re: Ball, im: Ball }` (Arb `acb`) and `Disk { mid: ExactComplex, rad: Mag }`, with conversions that only ever enlarge (`rect→disk`: `rad = hypot_up(r_re, r_im)`; `disk→rect`: each component gets `rad`).
   - `Interval { lo, hi }` (inf–sup) with `Ball::to_interval` (lo rounded Down, hi rounded Up) and `Interval::to_ball`, for subdivision (B1).
-  - `BallPoly`, `BallSeries` (truncated power series with an order), `BallMat`, `ComplexBallMat` (B1).
+  - `BallPoly`, `BallSeries` (truncated power series with an order) (B1).
+  - **Arrays (2026-10-23, rulings c/e):** `BallArray` (dynamic rank-N, row-major, `shape: Box<[usize]>`, private fields, no `Clone`/`PartialEq`), thin `BallVec`/`BallMat` newtypes, `ComplexBallArray`/`ComplexBallVec`/`ComplexBallMat`, `MagArray`; result types `BallLu`, `BallCholesky`, `BallQr`, `GlsResult`. Ops take `prec: u32` (no `rm`), return `BoundResult`; `identical() -> bool`, `contains`/`overlaps` → `Tri`. A sealed trait `Enclosure` is implemented by `Ball` and `ComplexBall`.
   - `Tri { True, False, Unknown }`.
   - **No `PartialEq`/`PartialOrd` on `Ball`** (or on any ball container). `==` on enclosures is ambiguous. Use `identical(&self, &Ball) -> bool` (O20; `contains` and `overlaps` return `Tri`) (same mid bits, same `Mag`, same `prec`) for representation equality and the `Tri` comparisons (`lt`, `le`, `eq`, …) for value questions.
   - `DomainPolicy { Strict, Clip }` (see Part L clause 7): one enum, an **explicit last parameter** on every op that has a domain (`tan` included); `Strict` is `Default::default()` only, there are no paired `foo()`/`foo_policy()` forms (O6 decided 2026-10-16, Paul under Jeff's delegation, Rusty recommended).
@@ -245,7 +246,10 @@ Provenance: `NOTICE-puremp` at the repo root holds the full MIT text; each porte
   ```text
   enum BoundError {
       Domain { op, detail },          // ball outside the domain under DomainPolicy (Part L clause 7); division by a ball touching 0
-      Resource { op, limit },         // precision cap, iteration/evaluation budget, memory
+      Resource { op, detail },        // precision cap, iteration/evaluation budget, memory; "cannot certify at this prec"
+      NotPositiveDefinite { op, detail }, // certified not SPD (2026-10-23, ruling b)
+      Singular { op, detail },        // certified singular (ruling b)
+      // #[non_exhaustive] (ruling a)
       // plus InvalidArgument and Representation (CONTRACT O11-W); no Overflow (O2), no Indeterminate (O1)
   }
   type BoundResult<T> = Result<T, BoundError>;     // O1 decided 2026-10-16, Paul under Jeff's delegation, Rusty recommended
@@ -362,7 +366,7 @@ B2's order maps onto the layers like this: (1) contract + (2) real balls = **L0*
 
 **L2b Ball polynomials and power series.** `BallPoly` (coefficients are balls; evaluation by Horner with rounding errors accumulated in `Mag`; root bounds by Cauchy/Fujiwara rounded up). `BallSeries` (truncated power series to order `n` with ball coefficients, mul/compose/inverse/exp/log of series; the truncation error is not dropped: a series result either states its order or carries a tail bound).
 
-**L2c Ball matrices with dense linear-algebra enclosures.** `BallMat`/`ComplexBallMat`: products by the midpoint–radius formula `|A|·rB + rA·(|B| + rB)` plus a rounding bound, all in `Mag`, sequential index order (Part J). Dense enclosures: determinant, inverse, and the residual `‖I − RA‖` used by L4's verified solve.
+**L2c Ball arrays and linear algebra (all in 2.0, Jeff 2026-10-23).** L2c-1 `BallArray` rank-N + Vec/Mat + complex mirrors, elementwise ops; L2c-2 norms (`norm_inf`/`norm_1`/`norm_frob_up` → `Mag`), mid/rad split, componentwise↔normwise (enlarging only); L2c-3 dot/matvec/matmul by `|A|·rB + rA·(|B| + rB)` plus a rounding bound, all in `Mag`, sequential order (Part J); L2c-4 triangular solves; L2c-5 LU (pivots on mids) + determinant; L2c-6 verified Cholesky + `is_spd -> Tri` (`NotPositiveDefinite` when certified, `Resource` when undecided); L2c-7 `logdet_spd`, `quad_form` (rᵀC⁻¹r = ‖L⁻¹r‖²), Cholesky solve (needs L1 `ln`); L2c-8 Householder QR + least squares. Order: 1→2→3→4→(5 ‖ 6→7 ‖ 8). Units 1–6 and 8 need only L0b.
 
 **L2d Selected specials (after a–c).** Priority by Accumath use: gamma/lgamma, erf/erfc, Bessel J0/J1, zeta. **B3 rule:** erf, J0, J1 use **derivative bounds** (`erf' = 2/√π·e^{−x²}`, `J0' = −J1`, `J1' = J0 − J1/x`, each bounded over the ball). Higher specials (pFq, elliptic, polylog, expint, Airy, the rest) use **either** a series with a rigorous remainder **or** zf's correctly rounded value at the midpoint plus a separately proven bound (derivative or remainder). Anything without a proof returns `Err(Resource)` or an all-reals ball (O1; never a guess). The 10-13 method table for specials still applies:
 
@@ -397,10 +401,12 @@ Tests: sets as for L1, plus poles (gamma at −n), branch cuts approached from b
   - **Root isolation:** port puremp `bisect_root` (certified sign change) plus interval Newton / Krawczyk for existence and uniqueness; output is a list of isolating balls each tagged `Unique`/`Exists`/`Unknown`.
   - **Verified linear solve:** approximate inverse `R` in point arithmetic, then Krawczyk/Rump with L2c's `‖I − RA‖ < 1` check; enclosure `x̃ ± ‖R(b − Ax̃)‖/(1 − ‖I − RA‖)`. Reports failure, never a narrow wrong answer.
   - **Bounded residuals:** every point solution Accumath shows carries a ball residual `‖f(x̃)‖` and, where the theory allows, an error bound on `x̃`.
-  - **Eigen-enclosures** for symmetric matrices (Weyl + residual); general matrices refuse.
+  - **Verified SPD solve / inverse / logdet** (Rump residual on top of L2c-6).
+  - **GLS:** `gls(X, C, y, prec) -> BoundResult<GlsResult { beta, cov, chi2, logdet_c }>` via Cholesky whitening then QR; never forms (XᵀC⁻¹X)⁻¹ directly.
+  - **Eigen-enclosures:** symmetric: verified eigenpairs (point Jacobi, rigorous residual bound, Weyl for the radius of A, Gershgorin on X̃ᵀAX̃ for clusters); general: Gershgorin discs only (Bauer–Fike refused without certified cond(V)).
   - **ODE:** Lohner-style validated integrator (Taylor series by ball AD, Picard a-priori enclosure, QR wrapping). v1: polynomial/elementary right-hand sides, small systems.
 - **Accumath integration (B2 differentiator):** symbolic expression → certified enclosure, via Part F.
-- **Tests:** Hilbert matrices n = 5..12 as a set (contain the exact rational solution or report failure), ODE sets (`y′ = −y`, harmonic oscillator, short-horizon Lorenz), root-isolation sets with clustered and multiple roots.
+- **Tests:** Hilbert matrices n = 5..32 (gate ≤32×32 at 16384 bits; larger in deep/cloud runs, ruling d) as a set (contain the exact rational solution or report failure), ODE sets (`y′ = −y`, harmonic oscillator, short-horizon Lorenz), root-isolation sets with clustered and multiple roots.
 
 ## Part E. Test strategy (all layers; B2, B3)
 

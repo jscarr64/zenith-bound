@@ -779,7 +779,7 @@ What I could check: 2027-02-12 minus 2027-01-02 is 41 calendar days, which match
 **L2**
 - [ ] L2-1 Rect/Disk complex incl. cuts and conversions
 - [ ] L2-2 BallPoly, BallSeries
-- [ ] L2-3 BallMat/ComplexBallMat incl. singular and Hilbert
+- [ ] L2-3 BallArray/BallVec/BallMat + complex (rank-N, elementwise), norms, products, tri solve, LU/det, Cholesky + is_spd, logdet/quad_form, QR, incl. singular, indefinite and Hilbert (§22)
 - [ ] L2-4 specials (gamma, lgamma, erf, erfc, J0, J1, zeta at 0, -1, 1 from mpmath)
 - [ ] L2-5 goldens, compounds, fuzz, mutants, coverage, exit review
 
@@ -787,12 +787,19 @@ What I could check: 2027-02-12 minus 2027-01-02 is 41 calendar days, which match
 - [ ] L3-1 analytic and non-analytic sets, budgets, adversarial integrands, goldens, fuzz, mutants, coverage, exit review
 
 **L4**
-- [ ] L4-1 adaptive precision, root isolation (multiple/clustered), verified solve (Hilbert 5..12, singular), residuals, eigen, ODE sets
+- [ ] L4-1 adaptive precision, root isolation (multiple/clustered), verified solve (Hilbert 5..32, singular), verified SPD solve, GLS, eigen (symmetric verified eigenpairs, general Gershgorin), residuals, ODE sets (§22)
 - [ ] L4-2 failure-rule assertion on every refusal path, goldens, fuzz, mutants, coverage, exit review
 
 **Whole crate**
 - [ ] W-1 two consecutive green nightly full runs at different extra seeds; cross-target diff clean; mutants all killed or documented
 - [x] C-REST (closed 2026-10-15): Cassie's resend of items 9 and 10 folded into 8.2, 8.3, 17 (D15), 18.2, 18.3 (K16 to K19) and Appendix B; open remainder is S17
+
+## 22. Wide-range sections (added 2026-10-23)
+Limits: ExactNum exponent i32 at `fe5c15d` (≈10^±6.46e8); after SP-i64 `Exponent = i64` with EXPONENT_MIN/MAX = ±(2^62−1) (≈10^±1.39e18; `Mag` is wider, full i64 ≈10^±2.78e18); MAX_PRECISION = min(2^60, usize::MAX/4)−1. Rows tagged [i64] run only after zb pins Rusty's SHA.
+- **22.1 WR-E exponents [i64]:** every L0b/L1/L2c op on Rusty's i64 matrix (zf i64 plan /tmp/zf-logs/i64-exponent-plan.md): mid exponents at offsets 0, ±1, p−1, p, p+1 from EXPONENT_MIN and EXPONENT_MAX (= ±(2^62−1)), for p ∈ {64, 113, 16384, 16385, 65536}; carry-out round-up at EXPONENT_MAX (Inf or ±MAX by rounding mode; ball: all-reals); subnormals rounding up into the normal range; min_positive(p) = 2^(EXPONENT_MIN−p) shrinking as p grows; Mag→ExactNum bridge cases just inside and just outside ±(2^62−1) and at the grid floor 2^(EXPONENT_MIN−p) (outside ⇒ Representation for exact conversion, rad=Inf for an upward radius bound); i32 and i64::MIN/MAX Mag edges kept as regression rows. Oracle: MPFR via raw gmp-mpfr-sys `mpfr_set_emin`/`mpfr_set_emax` (rug caps the range at i32). Containment; overflow ⇒ all-reals (O2); no panic; matrix rows with diagonal scalings 10^±300 and 2^±(2^61) (overflow is elementwise all-reals, not an error). i32-edge rows kept as regressions.
+- **22.2 WR-P precision:** includes p ∈ {64, 113, 16384, 16385, 65536} from 22.1; prec above MAX_PRECISION rejected, not panicking; prec ∈ {1, 53, 63, 64, 65, 113, 256, 1024, 4095, 4096, 4097, 16384, 65536 smoke}; Hilbert solve/Cholesky vs exact rationals (python-flint fmpq_mat) at 4096 and 16384; radius shrinks ≈ 2^-prec·cond; per-op time/alloc cost table. Gate ≤32×32 at 16384 bits; larger sizes deep/cloud only.
+- **22.3 WR-LA:** SPD / semidefinite / indefinite (`is_spd` Tri), near-singular, cond 10^40 and 10^200, cancellation-heavy dense ±1 matrices (256×256 deep only), GLS vs fmpq exact, logdet/quad_form vs arb, eigen vs arb/mpmath (containment and cluster tagging).
+- **22.4 WR-ND:** rank 0..6, empty dimensions, shape-product overflow ⇒ `InvalidArgument`, identical/contains/overlaps over arrays (Tri-AND).
 
 ## Appendix A. Rusty's rounding-core edge list (as received 2026-10-15, folded into sections 4 to 12)
 
