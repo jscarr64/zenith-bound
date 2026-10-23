@@ -136,8 +136,11 @@ grep -q "pf rc=1" "$t/pf.out" || fail "runlog_wrap does not set pipefail: $(cat 
 # missing poplog.sh is a hard failure (not a warning); RUNLOG_PLAIN=1 is the explicit fixture-only plain mode
 env -u RUNLOG_PLAIN RUNLOG_POPLOG=/nonexistent bash "$here/runlog.sh" nolib -- true > "$t/nolib.out" 2>&1 && fail "a run with poplog.sh missing passed"
 grep -q 'missing' "$t/nolib.out" || fail "missing poplog.sh not named: $(cat "$t/nolib.out")"
+# RUNLOG_PLAIN=1 without the selftest-only marker RUNLOG_SELFTEST=1 is refused, with a message naming the marker
+env -u RUNLOG_SELFTEST RUNLOG_PLAIN=1 RUNLOG_POPLOG=/nonexistent bash "$here/runlog.sh" plainnomark -- true > "$t/pnm.out" 2>&1 && fail "RUNLOG_PLAIN=1 without RUNLOG_SELFTEST=1 ran"
+grep -q 'RUNLOG_SELFTEST' "$t/pnm.out" || fail "refused plain run does not name RUNLOG_SELFTEST: $(cat "$t/pnm.out")"
 # zb's own 0-tests=FAIL rule holds without poplog too (plain mode), and a real test count passes
-RUNLOG_PLAIN=1 RUNLOG_POPLOG=/nonexistent bash "$here/runlog.sh" plain0 --tests -- bash -c 'echo "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"' > "$t/p0.out" 2>&1 && fail "plain-mode zero-test step passed"
-RUNLOG_PLAIN=1 RUNLOG_POPLOG=/nonexistent bash "$here/runlog.sh" plain1 --tests -- bash -c 'echo "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"' > "$t/p1.out" 2>&1 || fail "plain-mode passing test step failed: $(cat "$t/p1.out")"
+RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 RUNLOG_POPLOG=/nonexistent bash "$here/runlog.sh" plain0 --tests -- bash -c 'echo "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"' > "$t/p0.out" 2>&1 && fail "plain-mode zero-test step passed"
+RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 RUNLOG_POPLOG=/nonexistent bash "$here/runlog.sh" plain1 --tests -- bash -c 'echo "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"' > "$t/p1.out" 2>&1 || fail "plain-mode passing test step failed: $(cat "$t/p1.out")"
 echo "runlog selftest: ok"
 )

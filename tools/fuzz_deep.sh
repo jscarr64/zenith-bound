@@ -70,7 +70,7 @@ run_test() { (cd "$root" && timeout "$shard_to" cargo test --release --test harn
 one_passed() { grep -q 'test result: ok\. 1 passed;' "$1"; }
 
 if [ "$selftest" = 1 ]; then
-  export RUNLOG_PLAIN=1   # fixture runs below (many expected to fail) stay out of the run log; this selftest's own log captures their output
+  export RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1   # selftest-only marker (runlog refuses RUNLOG_PLAIN alone); fixture runs below (many expected to fail) stay out of the run log; this selftest's own log captures their output
   me=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
   bad() { "$me" "$@" >/dev/null 2>&1 && fail "selftest: expected failure for: $*"; return 0; }
   bad --cases 0; bad --shards 0; bad --shards 65; bad --cases 3 --shards 7; bad --seed zz; bad --cases x; bad --bogus; bad --replay nocolon

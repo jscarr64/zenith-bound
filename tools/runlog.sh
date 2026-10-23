@@ -9,7 +9,8 @@
 #   - runlog_step always passes --tests when asked, so a test step that ran zero tests is FAIL;
 #   - runlog_step --tests also enforces zb's own 0-tests=FAIL rule (sum of "test result:" counts), with or without poplog;
 #   - a missing or unloadable poplog.sh is a HARD failure (exit 2): no run without a run log. RUNLOG_PLAIN=1 (self-test fixtures only) runs
-#     the steps plain on purpose.
+#     the steps plain on purpose, and only with the selftest-only marker RUNLOG_SELFTEST=1 too (exported only by self-test fixtures);
+#     RUNLOG_PLAIN=1 alone is refused (exit 2), so a real gate cannot be run unlogged by a stray RUNLOG_PLAIN.
 # Use, first thing in a script:   . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap JOB "$@"
 #   runlog_step [--tests] NAME -- CMD...     runlog_warn MESSAGE
 # One-shot (verify and test runs): tools/runlog.sh JOB [--tests] -- CMD...
@@ -32,7 +33,12 @@ runlog_wrap() { # runlog_wrap JOB "$@"
   local job=$1; shift
   trap _rl_exit EXIT
   set -o pipefail   # Spence review 5: a failing stage before a pipe must not be masked by the last stage
-  if [ "${RUNLOG_PLAIN:-0}" = 1 ]; then return 0; fi   # fixture-only plain mode, set explicitly by self-tests
+  if [ "${RUNLOG_PLAIN:-0}" = 1 ]; then   # fixture-only plain mode: refused unless the selftest-only marker is also set
+    if [ "${RUNLOG_SELFTEST:-0}" != 1 ]; then
+      echo "runlog: FAIL RUNLOG_PLAIN=1 without RUNLOG_SELFTEST=1; plain mode (no run log) is for self-test fixtures only, refusing to run $job" >&2; exit 2
+    fi
+    return 0
+  fi
   if [ ! -f "$RUNLOG_POPLOG" ]; then echo "runlog: FAIL $RUNLOG_POPLOG missing; refusing to run $job without a run log" >&2; exit 2; fi
   # shellcheck source=/dev/null
   . "$RUNLOG_POPLOG" || { echo "runlog: FAIL cannot source $RUNLOG_POPLOG; refusing to run $job without a run log" >&2; exit 2; }

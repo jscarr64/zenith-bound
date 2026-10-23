@@ -11,7 +11,7 @@ fail() { echo "full_gate selftest FAIL: $*"; exit 1; }
 t=$(mktemp -d /tmp/zb-gate-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""
 SCANS="unsafe-scan no-float-scan no-panic-scan no-clone-scan derive-scan manifest-scan"
 # The fixture gates run outside this self-test's own run log (their planted failures must not fail it), with no poplog at all.
-fe=(env -u POPLOG_FILE -u POPLOG_STATE_DIR -u POPLOG_PID -u POPLOG_PROGRESS_FILE RUNLOG_POPLOG=/nonexistent RUNLOG_PLAIN=1)
+fe=(env -u POPLOG_FILE -u POPLOG_STATE_DIR -u POPLOG_PID -u POPLOG_PROGRESS_FILE RUNLOG_POPLOG=/nonexistent RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1)
 rcof() { sed -n "s/^$2=//p" "$t/logs/$1.rc"; }
 
 # 1. stripped PATH: only what the gate driver itself needs; every tool a step calls (cargo, grep, python3, ...) is missing
@@ -53,6 +53,11 @@ env -u POPLOG_FILE -u POPLOG_STATE_DIR -u POPLOG_PID -u POPLOG_PROGRESS_FILE -u 
   "$root/tools/full_gate.sh" nopoplog > "$t/nopoplog.out" 2>&1 && fail "gate ran with poplog.sh missing: $(cat "$t/nopoplog.out")"
 grep -q 'missing' "$t/nopoplog.out" || fail "missing poplog not named: $(cat "$t/nopoplog.out")"
 grep -q '^unsafe-scan=' "$t/logs/nopoplog.rc" 2>/dev/null && fail "a step ran with poplog.sh missing"
+# RUNLOG_PLAIN without the selftest-only marker RUNLOG_SELFTEST=1 is refused (exit non-zero, nothing runs): plain mode is for fixtures only
+env -u POPLOG_FILE -u POPLOG_STATE_DIR -u POPLOG_PID -u POPLOG_PROGRESS_FILE -u RUNLOG_SELFTEST RUNLOG_PLAIN=1 GATE_STEPS=unsafe-scan T="$t/logs" REPO="$t/clean" \
+  "$root/tools/full_gate.sh" plainnomark > "$t/plainnomark.out" 2>&1 && fail "gate ran with RUNLOG_PLAIN=1 but no RUNLOG_SELFTEST=1: $(cat "$t/plainnomark.out")"
+grep -q 'RUNLOG_SELFTEST' "$t/plainnomark.out" || fail "refused plain run does not name RUNLOG_SELFTEST: $(cat "$t/plainnomark.out")"
+grep -q '^unsafe-scan=' "$t/logs/plainnomark.rc" 2>/dev/null && fail "a step ran with RUNLOG_PLAIN=1 but no marker"
 # 3. toolchain step: a rustc that is not the pinned channel (Pop's /usr/bin/rustc 1.95 ahead of ~/.cargo/bin) fails the gate
 mk tc; mkdir -p "$t/tc/tools"; cp "$root/tools/toolchain_check.sh" "$root/tools/toolchain_check_selftest.sh" "$t/tc/tools/"; printf '[toolchain]\nchannel = "1.99"\n' > "$t/tc/rust-toolchain.toml"
 for v in 1.95.0 1.99.1; do
