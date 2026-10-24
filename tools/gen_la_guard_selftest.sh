@@ -8,7 +8,7 @@ runlog_detach_children
 set -u
 here=$(cd "$(dirname "$0")" && pwd); gen="$here/../scripts/gen_la_goldens.py"
 fail() { echo "gen_la_guard selftest FAIL: $*"; exit 1; }
-t=$(mktemp -d) || fail "mktemp"; runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
+. "$here/scratch.sh"; t=$(mktemp -d "$(zb_scratch)/gen-la-guard-selftest.XXXXXX") || fail "mktemp"; runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 py=$(command -v python3) || fail "python3 missing"
 run() { "$@" > "$t/out" 2>&1; echo $? > "$t/rc"; }
 rc() { cat "$t/rc"; }

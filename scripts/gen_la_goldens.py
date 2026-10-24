@@ -503,6 +503,21 @@ def gls_cosmo_corpus():
     yield ("cosmo_spread.p2e1000000_32x2", bao(32, 2), lowrank_diag(d, U), ys(32), woodbury(d, U), True)
     bl = [[[P2(s) * a for a in r] for r in spd_small(8)] for s in (3000, 2000, 1000, 0, -1000, -2000, -3000, -4000)]
     yield ("cosmo_blockdiag.64x3_p2e3000", bao(64, 3), blockdiag(bl), ys(64), block_solver(bl), True)
+    # small gate rows (appended last so earlier rows keep their rng draws): one per family whose big 12-dim / 2^+-10^4 rows
+    # moved to the heavy tier (GLS_COSMO_HEAVY) to keep the LA gate set under 1 MB
+    yield ("cosmo_bao.6x2_e30", bao(6, 2), ldlt(unit_lower(6, band=2), spread(6, 30, -30, 10)), ys(6), None, True)
+    yield ("cosmo_cmb_toeplitz.6x2_e30", bao(6, 2), scale_sym(kms(6, F(9, 10)), spread(6, 15, -15, 10)), ys(6), None, True)
+    bl = [[[P10(s) * a for a in r] for r in spd_small(2)] for s in (30, 0, -30)]
+    yield ("cosmo_blockdiag.6x2_e30", bao(6, 2), blockdiag(bl), ys(6), block_solver(bl), True)
+    d = spread(6, 30, -30, 10); U = imat(6, 2)
+    yield ("cosmo_lowrank.6x2_e30", bao(6, 2), lowrank_diag(d, U), ys(6), woodbury(d, U), True)
+    d = spread(4, 1000, -1000, 2); U = imat(4, 1)
+    yield ("cosmo_spread.p2e1000_4x2", bao(4, 2), lowrank_diag(d, U), ys(4), woodbury(d, U), True)
+
+# Gate-size budget (Spence 2026-10-24: LA gate set < 1 MB): these cosmo GLS rows are small enough for the gate's dims/bits rule but
+# are emitted on the heavy tier; the small *_e30 / p2e1000_4x2 rows above keep each family on the gate.
+GLS_COSMO_HEAVY = frozenset({"cosmo_bao.12x3_e300", "cosmo_cmb_toeplitz.12x2_e300", "cosmo_blockdiag.12x4_e300",
+                             "cosmo_lowrank.12x3_e300", "cosmo_spread.p2e10000_6x2"})
 
 # ---------------------------------------------------------------- per-op emitters
 def dims_sq(A): return str(len(A))
@@ -677,9 +692,9 @@ def gen_gls():
                 outs = [q(v) for v in beta] + [q(v) for v in flat(cov)] + [q(rss)]
         rows.append((" ".join(["gls." + cid, f"{m}x{p}"] + [q(v) for v in flat(Xm)] + [q(v) for v in flat(S)] + [q(v) for v in y] + outs), is_heavy(Xm, S, y)))
     for cid, Xm, S, y, sol, spd_known in gls_cosmo_corpus():
-        m, p = len(Xm), len(Xm[0]); heavy = is_heavy(Xm, S, y)
+        m, p = len(Xm), len(Xm[0]); big = is_heavy(Xm, S, y); heavy = big or cid in GLS_COSMO_HEAVY
         if heavy and SKIP_HEAVY: continue                  # --skip-heavy: heavy cosmo rows are never computed
-        r = None if heavy and spd_known else ldl(S)       # heavy cosmo covariances are SPD by construction (D > 0 plus U U^T, blocks B B^T + I)
+        r = None if big and spd_known else ldl(S)         # heavy cosmo covariances are SPD by construction (D > 0 plus U U^T, blocks B B^T + I)
         if isinstance(r, str):
             assert not spd_known, cid; outs = ldl_err(r, "sigma")
         else:
@@ -688,7 +703,7 @@ def gen_gls():
             def Si(v, sol=sol):
                 x = (sol or gsol)(v)
                 assert matvec(S, x) == [F(a) for a in v]
-                if sol is not None and not heavy: assert x == gsol(v)
+                if sol is not None and not big: assert x == gsol(v)
                 return x
             SiX = tr([Si(col) for col in tr(Xm)]); Siy = Si(y)
             Mx = mm(tr(Xm), SiX)
@@ -705,7 +720,7 @@ def gen_gls():
     hdr = ["op: gls",
            "canonical: generalized least squares, beta = (X^T S^-1 X)^-1 X^T S^-1 y; cov = (X^T S^-1 X)^-1; rss = r^T S^-1 r with r = y - X beta. All exact rationals. Checked: X^T S^-1 r = 0.",
            "refusals: 'ERR NotPositiveDefinite sigma' / 'ERR NotSymmetric sigma' (the covariance S fails LDL^T, see la_cholesky); 'ERR Singular rank_deficient' if X^T S^-1 X is singular.",
-           "cosmo_* rows (cosmology scales): BAO-style designs X[i][k] = ((i+1)/m)^k with covariances of eigenvalue-scale spread 10^+-300 and 2^+-(10^4..10^6) (L D L^T, scaled KMS Toeplitz, block-diagonal, diag + low-rank), cond ~10^200, and non-SPD refusals. S^-1 v is exact (Woodbury for diag + low-rank, blockwise for block-diagonal, LU otherwise), checked S x = v; on the gate tier also equal to the plain LU solve. rss = chi^2 >= 0 checked.",
+           "cosmo_* rows (cosmology scales): BAO-style designs X[i][k] = ((i+1)/m)^k with covariances of eigenvalue-scale spread 10^+-300 and 2^+-(10^4..10^6) (L D L^T, scaled KMS Toeplitz, block-diagonal, diag + low-rank), cond ~10^200, and non-SPD refusals. S^-1 v is exact (Woodbury for diag + low-rank, blockwise for block-diagonal, LU otherwise), checked S x = v; for every row with dims <= 12 and inputs <= 10064 bits also equal to the plain LU solve. Tier: rows over that size, plus the 12-dim e300 rows and cosmo_spread.p2e10000_6x2 (gate-size budget, < 1 MB for the LA gate set), are in la_gls_heavy.txt; each family keeps a small gate row (*_e30, cosmo_spread.p2e1000_4x2, cosmo_cond.e200_10x2, cosmo_refuse.*). rss = chi^2 >= 0 checked.",
            "columns: case_id dims(mxp) X[m*p] S[m*m] y[m] (beta[p] cov[p*p] rss | ERR variant detail)"]
     expect = lambda m, n: (m * n + m * m + m, {n + n * n + 1})
     return hdr, rows, expect
