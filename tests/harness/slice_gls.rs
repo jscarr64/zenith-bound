@@ -102,10 +102,52 @@ fn la4_gls_row_width_rejects_a_short_row() -> Result<(), String> {
 
 /// Red until slice LA4 lands zb::gls (mutant block 1300..=1399): replays every gate row through the implementation.
 #[test]
-#[ignore = "red: zb::gls not implemented yet (slice LA4); un-ignore when src/gls.rs exports it"]
+#[ignore = "red: not implemented: zb::gls (CONTRACT LA4.1: GLS beta/cov/rss and refusals on every la_gls gate row); un-ignore when src/gls.rs exports it"]
 fn la4_gls_gate_rows_replay_through_zb() -> Result<(), String> {
     let rows = header_rows(&gls_gate_text()?)?;
     Err(format!(
         "not implemented: zb::gls API missing (src/gls.rs is an S0 stub); {rows} gate rows waiting"
     ))
+}
+
+/// The LA slices whose gate files share the 1 MB budget (Spence 2026-10-24); heavy files live outside the repo.
+const LA_SLICES: [&str; 5] = ["cholesky", "eigen", "gls", "lu", "qr"];
+const LA_GATE_BUDGET_BYTES: u64 = 1_000_000;
+
+#[test]
+fn la_gate_set_totals_under_1_mb() -> Result<(), String> {
+    let mut total = 0_u64;
+    for slice in LA_SLICES {
+        let dir = golden_dir().join("slices").join(slice);
+        for entry in std::fs::read_dir(&dir).map_err(|e| format!("cannot list {}: {e}", dir.display()))? {
+            let entry = entry.map_err(|e| format!("{}: {e}", dir.display()))?;
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("la_") && name.ends_with(".txt") && !name.ends_with("_heavy.txt") {
+                let len = entry.metadata().map_err(|e| format!("{name}: {e}"))?.len();
+                total = total.checked_add(len).ok_or("size overflow")?;
+            }
+        }
+    }
+    if total >= LA_GATE_BUDGET_BYTES {
+        return Err(format!("LA gate set is {total} bytes, budget {LA_GATE_BUDGET_BYTES}: move rows to the heavy tier"));
+    }
+    Ok(())
+}
+
+/// Every cosmo family keeps at least one gate row (Spence 2026-10-24) even when its big rows live in the heavy tier.
+fn families_present(text: &str, prefix: &str, families: &[&str]) -> Result<(), String> {
+    for fam in families {
+        let want = format!("{prefix}{fam}.");
+        if !text.lines().any(|l| l.starts_with(&want)) {
+            return Err(format!("no gate row for cosmo family {want}*"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn la4_gls_every_cosmo_family_has_a_gate_row() -> Result<(), String> {
+    let fams = ["bao", "cmb_toeplitz", "blockdiag", "lowrank", "cond", "spread", "refuse"];
+    families_present(&gls_gate_text()?, "gls.cosmo_", &fams)
 }

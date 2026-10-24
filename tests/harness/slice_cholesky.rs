@@ -91,8 +91,25 @@ fn la1_logdet_row_width_rejects_a_long_row() -> Result<(), String> {
 
 /// Red until slice LA1 lands zb logdet (LA1 mutants 1000..=1099; the LA4 cosmo rows are tracked under 1300..=1399).
 #[test]
-#[ignore = "red: zb logdet not implemented yet (slice LA1); un-ignore when src/cholesky.rs exports it"]
+#[ignore = "red: not implemented: zb logdet (CONTRACT LA4.2: sign/det/ln enclosure on the cosmo_* la_logdet gate rows; API from slice LA1); un-ignore when src/cholesky.rs exports it"]
 fn la1_logdet_gate_rows_replay_through_zb() -> Result<(), String> {
     let rows = header_rows(&logdet_gate_text()?)?;
     Err(format!("not implemented: zb logdet API missing (src/cholesky.rs is an S0 stub); {rows} gate rows waiting"))
+}
+
+/// Every cosmo family keeps at least one gate row (Spence 2026-10-24) even when its big rows live in the heavy tier.
+fn families_present(text: &str, prefix: &str, families: &[&str]) -> Result<(), String> {
+    for fam in families {
+        let want = format!("{prefix}{fam}.");
+        if !text.lines().any(|l| l.starts_with(&want)) {
+            return Err(format!("no gate row for cosmo family {want}*"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn la1_logdet_every_cosmo_family_has_a_gate_row() -> Result<(), String> {
+    let fams = ["spread", "cond", "toeplitz", "blockdiag", "lowrank", "fisher", "refuse"];
+    families_present(&logdet_gate_text()?, "logdet.cosmo_", &fams)
 }
