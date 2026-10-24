@@ -96,6 +96,16 @@ impl Ball {
     pub fn into_parts(self) -> (ExactNum, Mag, Precision) {
         (self.mid, self.rad, self.prec)
     }
+
+    /// `-self`, exact and infallible (CONTRACT 15.1): the midpoint negated with −0 normalised to +0 (6.3);
+    /// radius and prec unchanged. Crate-only: `impl Neg for Ball` lives in `arith` (slice S1).
+    pub(crate) fn negated(self) -> Ball {
+        Ball {
+            mid: positive_zero(-self.mid),
+            rad: self.rad,
+            prec: self.prec,
+        }
+    }
 }
 
 /// A prec outside `MIN_PRECISION..=MAX_PRECISION` is rejected before zenith-float sees it (CONTRACT 8.1, O17-W).
