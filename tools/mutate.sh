@@ -84,12 +84,23 @@ for inc in "$mdir"/manifest.d/*.txt; do
 done
 rows=$(printf '%s\n' "$rows" | grep -v -E '^[[:space:]]*$' || true)
 # inrange NUM: prints the include file whose range holds NUM (empty if none)
-inrange() { local olo ohi oname; while read -r olo ohi oname; do [ -n "$olo" ] && [ "$1" -ge "$olo" ] && [ "$1" -le "$ohi" ] && { echo "$oname"; return; }; done <<< "$ranges"; }
+# Contract: rc 0 on a hit AND on a miss (a miss is the normal case for central ids, so it must not trip the poplog
+# ERR trap); rc 2 + message only on a real failure (a malformed range row), which call sites leave unmasked so it is loud.
+inrange() {
+  local olo ohi oname
+  while read -r olo ohi oname; do
+    [ -n "$olo" ] || continue
+    [[ $olo =~ ^[0-9]+$ && $ohi =~ ^[0-9]+$ && $1 =~ ^[0-9]+$ ]] || { echo "mutate: internal: inrange $1: bad range row '$olo $ohi $oname'" >&2; return 2; }
+    if (( $1 >= olo && $1 <= ohi )); then echo "$oname"; return 0; fi
+  done <<< "$ranges"
+  return 0
+}
 # a central-manifest id must not sit inside a slice's range: that number is owned by the slice's include file
 while IFS=$'\t' read -r _ cid _ _; do
   [ -n "$cid" ] || continue
   cnum=${cid%%-*}; [[ $cnum =~ ^[0-9]{1,6}$ ]] || { echo "mutate: FAIL $manifest: id $cid does not start with a number"; exit 1; }
-  owner=$(inrange "$((10#$cnum))") || true   # no owning range is the normal case (rc 1): no ERR trap line
+  owner=$(inrange "$((10#$cnum))"); irc=$?   # a miss is rc 0 (empty); nonzero is a real failure: left unmasked so the ERR trap logs it
+  [ "$irc" -eq 0 ] || { echo "mutate: FAIL inrange $cid: rc $irc"; exit 1; }
   [ -z "$owner" ] || { echo "mutate: FAIL $manifest: id $cid is inside the range of manifest.d/$owner (owned by slice ${owner%.txt}); move it there"; exit 1; }
 done <<< "$(grep -v -E '^[[:space:]]*(#|$)' "$manifest" || true)"
 # manifest integrity, before any mutant runs: every id exactly once, every referenced patch file present
@@ -121,7 +132,8 @@ for e in "${equivs[@]}"; do
     { [ "$eid" != "$eline" ] && [ -n "${ereason//[[:space:]]/}" ]; } || { echo "mutate: FAIL $e: entry '$eline' needs ID<TAB>REASON"; exit 1; }
     printf '%s\n' "$ids" | grep -qxF -- "$eid" || { echo "mutate: FAIL $e: equivalent id $eid is not in the manifest"; exit 1; }
     if [ -n "$eslice" ]; then
-      enum=${eid%%-*}; erange=$(inrange "$((10#$enum))") || true
+      enum=${eid%%-*}; erange=$(inrange "$((10#$enum))"); irc=$?
+      [ "$irc" -eq 0 ] || { echo "mutate: FAIL inrange $eid: rc $irc"; exit 1; }
       [ "$erange" = "$eslice.txt" ] || { echo "mutate: FAIL $e: id $eid is not in slice $eslice's range"; exit 1; }
     fi
   done < "$e"

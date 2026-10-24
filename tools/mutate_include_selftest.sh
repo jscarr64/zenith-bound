@@ -85,7 +85,7 @@ out=$(pl quiet --list); lg=$(tail -1 <<< "$out")
 ck; grep -q '^rc=0$' <<< "$out" && [ -f "$lg" ] || fail "err-quiet: --list with out-of-range central ids failed or wrote no run log: $out"
 ck; grep -q ' ERR ' "$lg" && fail "err-quiet: out-of-range ids (no owning slice) logged ERR trap lines: $(grep -c ' ERR ' "$lg") e.g. $(grep -m1 ' ERR ' "$lg")"
 # inrange contract, on the function itself (ranges are validated before it runs, so a malformed row is an internal error)
-ir=$(awk '/^inrange\(\) \{/{f=1} f{print} f&&/^\}$|; \}$/{exit}' "$here/mutate.sh")
+ir=$(awk '/^inrange\(\) \{/{f=1;s=NR} f{print} f&&(/^\}$/||(NR==s&&/; \}$/)){exit}' "$here/mutate.sh")
 ck; [ -n "$ir" ] || fail "inrange() not found in mutate.sh"
 r=$(bash -c 'eval "$1"; ranges="200 299 s1.txt"$'"'"'\n'"'"'; o=$(inrange 5); echo "rc=$? o=[$o]"; o=$(inrange 250); echo "rc=$? o=[$o]"' _ "$ir" 2>&1)
 ck; [ "$r" = "rc=0 o=[]"$'\n'"rc=0 o=[s1.txt]" ] || fail "inrange: a miss must be rc 0 with empty output, a hit rc 0 + file; got: $r"
