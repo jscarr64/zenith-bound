@@ -119,7 +119,9 @@ fn la_gate_set_totals_under_1_mb() -> Result<(), String> {
     let mut total = 0_u64;
     for slice in LA_SLICES {
         let dir = golden_dir().join("slices").join(slice);
-        for entry in std::fs::read_dir(&dir).map_err(|e| format!("cannot list {}: {e}", dir.display()))? {
+        for entry in
+            std::fs::read_dir(&dir).map_err(|e| format!("cannot list {}: {e}", dir.display()))?
+        {
             let entry = entry.map_err(|e| format!("{}: {e}", dir.display()))?;
             let name = entry.file_name();
             let name = name.to_string_lossy();
@@ -148,6 +150,14 @@ fn families_present(text: &str, prefix: &str, families: &[&str]) -> Result<(), S
 
 #[test]
 fn la4_gls_every_cosmo_family_has_a_gate_row() -> Result<(), String> {
-    let fams = ["bao", "cmb_toeplitz", "blockdiag", "lowrank", "cond", "spread", "refuse"];
+    let fams = [
+        "bao",
+        "cmb_toeplitz",
+        "blockdiag",
+        "lowrank",
+        "cond",
+        "spread",
+        "refuse",
+    ];
     families_present(&gls_gate_text()?, "gls.cosmo_", &fams)
 }

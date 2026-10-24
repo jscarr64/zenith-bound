@@ -110,6 +110,14 @@ fn families_present(text: &str, prefix: &str, families: &[&str]) -> Result<(), S
 
 #[test]
 fn la1_logdet_every_cosmo_family_has_a_gate_row() -> Result<(), String> {
-    let fams = ["spread", "cond", "toeplitz", "blockdiag", "lowrank", "fisher", "refuse"];
+    let fams = [
+        "spread",
+        "cond",
+        "toeplitz",
+        "blockdiag",
+        "lowrank",
+        "fisher",
+        "refuse",
+    ];
     families_present(&logdet_gate_text()?, "logdet.cosmo_", &fams)
 }
