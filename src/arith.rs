@@ -1,10 +1,10 @@
-//! Slice S1: Ball core arithmetic: add, sub, neg, mul, mul by an exact scalar, sqr, powi and sqrt on `Ball`, with the
+//! Slice S1: Ball core arithmetic: add, sub, neg, mul, mul by an exact scalar, sqr, powi, sqrt, div, inv and hypot on `Ball`, with the
 //! radius rules of CONTRACT clauses 2, 3, 9 and 10 and the slice clauses in CONTRACT section 16 "Slice S1".
 //!
 //! Owner: slice S1 (Spence). Only that slice edits this file.
 //! Every midpoint is the zenith-float operation at the target `prec` rounded `ToEven` (O19); the radius is the propagated
 //! radius plus the midpoint rounding error ε (9.4, 16.S1.2), all in `Mag` rounding upward. A midpoint overflow gives the
-//! all-reals ball (10.4, O2). div, inv and a directed hypot are pending zenith-float R13 (16.S1.8).
+//! all-reals ball (10.4, O2). div, inv and hypot use zenith-float R13 (16.S1.8).
 
 use core::cmp::Ordering;
 use core::ops::Neg;
@@ -221,6 +221,75 @@ impl Ball {
             (Ordering::Less, false, Ordering::Equal) => Ball::exact(ExactNum::from(0i64), prec),
         }
     }
+    /// `(m ± r) / (n ± s) = round(m / n) ± ((|m| s + |n| r) / (|n| (|n| - s)) + ε)` when `|n| > s` (16.S1.8). The
+    /// midpoint is `div_exact` when the quotient is exact, else zenith-float `div` rounded `ToEven`.
+    ///
+    /// # Errors
+    /// `InvalidArgument` for a bad `prec`; `Domain` when the divisor is exactly `0 ± 0`. A divisor ball reaching 0
+    /// (`|n| <= s`), an infinite radius, or a midpoint overflow is `Ok(all reals)`.
+    pub fn div(self, other: &Ball, prec: Precision) -> BoundResult<Ball> {
+        const OP: &str = "Ball::div";
+        check_prec(OP, prec)?;
+        let (n, s) = (other.mid(), other.rad());
+        if n.is_zero() && s.is_zero() {
+            return Err(domain(OP, "division by the exact zero ball"));
+        }
+        let Some(n_lo) = clear_of_zero(n, s) else {
+            return Ball::all_reals(prec);
+        };
+        let (m, r, _) = self.into_parts();
+        let num = Mag::from_exact_num(&m)
+            .mul_up(s)
+            .add_up(&Mag::from_exact_num(n).mul_up(&r));
+        let rad = num.div_up(&n_lo.mul_lower(&n_lo.sub_lower(s)));
+        let q = match m.div_exact(n, prec) {
+            Ok(Some(q)) => q,
+            Ok(None) | Err(_) => m.div(n, prec, MID_RM),
+        };
+        finish(OP, q, rad, prec, false)
+    }
+
+    /// `1 / (n ± s) = round(1 / n) ± (s / (|n| (|n| - s)) + ε)` when `|n| > s` (16.S1.8).
+    ///
+    /// # Errors
+    /// `InvalidArgument` for a bad `prec`; `Domain` for the exact zero ball. A ball reaching 0, an infinite radius, or a
+    /// midpoint overflow is `Ok(all reals)`.
+    pub fn inv(self, prec: Precision) -> BoundResult<Ball> {
+        const OP: &str = "Ball::inv";
+        check_prec(OP, prec)?;
+        let (n, s, _) = self.into_parts();
+        if n.is_zero() && s.is_zero() {
+            return Err(domain(OP, "inverse of the exact zero ball"));
+        }
+        let Some(n_lo) = clear_of_zero(&n, &s) else {
+            return Ball::all_reals(prec);
+        };
+        let rad = s.div_up(&n_lo.mul_lower(&n_lo.sub_lower(&s)));
+        finish(OP, n.reciprocal(prec, MID_RM), rad, prec, false)
+    }
+
+    /// `hypot(m ± r, n ± s) = round(hypot(m, n)) ± (r + s + ε)`: hypot is 1-Lipschitz in each argument (16.S1.8).
+    ///
+    /// # Errors
+    /// `InvalidArgument` for a bad `prec`. An infinite radius or a midpoint overflow is `Ok(all reals)`.
+    pub fn hypot(self, other: &Ball, prec: Precision) -> BoundResult<Ball> {
+        const OP: &str = "Ball::hypot";
+        check_prec(OP, prec)?;
+        let (m, r, _) = self.into_parts();
+        let rad = r.add_up(other.rad());
+        finish(OP, m.hypot(other.mid(), prec, MID_RM), rad, prec, false)
+    }
+}
+
+/// A lower bound on `|n|` when the ball `n ± s` excludes 0 (`|n| > s`, decided exactly), else `None`.
+fn clear_of_zero(n: &ExactNum, s: &Mag) -> Option<Mag> {
+    if s.is_infinity() {
+        return None;
+    }
+    match cmp_abs_rad(n, s) {
+        Some(Ordering::Greater) => Some(Mag::from_exact_num_lower(n)),
+        Some(Ordering::Equal | Ordering::Less) | None => None,
+    }
 }
 
 /// The ball `[0, u]` as `round(u / 2) ± (u / 2 + ε)`; when `u` is outside zenith-float's range, `0 ± u` (16.S1.7).
@@ -311,8 +380,8 @@ fn eps(mid: &ExactNum, prec: Precision, lost: bool) -> Mag {
         return Mag::zero();
     }
     match mid.exponent() {
-        Some(e) if e > EXPONENT_MIN && !mid.is_zero() => Mag::half_ulp(i64::from(e), prec),
-        Some(_) | None => Mag::ulp_mag(i64::from(EXPONENT_MIN), 0),
+        Some(e) if e > EXPONENT_MIN && !mid.is_zero() => Mag::half_ulp(e, prec),
+        Some(_) | None => Mag::ulp_mag(EXPONENT_MIN, 0),
     }
 }
 

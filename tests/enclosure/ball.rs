@@ -110,7 +110,7 @@ fn contains_on_points_and_all_reals() -> Result<(), String> {
 }
 
 /// `sign * 2^e` as an exact zf value (1 bit).
-fn pow2(e: i32, negative: bool) -> ExactNum {
+fn pow2(e: i64, negative: bool) -> ExactNum {
     let one = if negative { n(-1) } else { n(1) };
     one.ldexp(e, 64, zenith_float_num::RoundingMode::Down)
 }
