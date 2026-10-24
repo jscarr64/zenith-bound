@@ -1,8 +1,8 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index deeda66..2f27d14 100644
+index fe2a377..122cb2f 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -180,7 +180,7 @@ impl Ball {
+@@ -192,7 +192,7 @@ impl Ball {
          // (sign of lo, sign of hi) as Ordering against 0.
          let (lo, hi) = match (neg, pos, ord) {
              (false, true, Ordering::Greater) => (Ordering::Greater, Ordering::Greater),
@@ -10,4 +10,4 @@ index deeda66..2f27d14 100644
 +            (false, true, Ordering::Equal) => (Ordering::Greater, Ordering::Greater),
              (true, false, Ordering::Greater) => (Ordering::Less, Ordering::Less),
              (true, false, Ordering::Equal) => (Ordering::Less, Ordering::Equal),
-             (false, false, Ordering::Equal | Ordering::Greater) => (Ordering::Equal, Ordering::Equal),
+             (false, false, Ordering::Equal | Ordering::Greater) => {

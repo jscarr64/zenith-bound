@@ -1,5 +1,5 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index deeda66..9a14b0f 100644
+index fe2a377..75e444f 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
 @@ -47,7 +47,7 @@ impl Ball {
@@ -8,6 +8,6 @@ index deeda66..9a14b0f 100644
          let (m, r, _) = self.into_parts();
 -        let rad = r.add_up(other.rad());
 +        let rad = r;
-         finish("Ball::add", m.add(other.mid(), prec, MID_RM), rad, prec, false)
-     }
- 
+         finish(
+             "Ball::add",
+             m.add(other.mid(), prec, MID_RM),
