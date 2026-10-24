@@ -7,8 +7,10 @@
 #   manifest.d/<slice>.txt    more manifest rows (same 4 columns; the patch path is relative to the manifest's directory, e.g.
 #                             arith/201-x.patch). Its FIRST non-blank line must be `# range: LO-HI`: every id's leading number must lie in
 #                             LO..=HI, and no two include files may have overlapping ranges. Ids stay unique over all files.
-#   equivalent.d/<slice>.txt  more EQUIVALENT.txt entries (same format).
-#   floor.d/<slice>.txt       the slice's share of the floor (same KEY<TAB>MIN rows as floor.txt; 0 allowed here). The floor checked is
+#                             Each row's patch must be under <slice>/ (the slice owns it); a central-manifest id may not sit in any slice's
+#                             range; ids sharing a NUMBER (205-a, 205-b) are duplicates; a row without 4 tab-separated columns FAILS.
+#   equivalent.d/<slice>.txt  more EQUIVALENT.txt entries (same format: ID<TAB>REASON; the id must be in the manifest and in the slice's range).
+#   floor.d/<slice>.txt       (needs manifest.d/<slice>.txt; keys killed and killed+equivalent, each exactly once) the slice's share of the floor (same KEY<TAB>MIN rows as floor.txt; 0 allowed here). The floor checked is
 #                             floor.txt plus every share. A slice raises its own share, never floor.txt.
 #   env: MUTATE_REPO=DIR            repo to mutate (default: the parent of tools/). Mutants apply to its COMMITTED HEAD.
 #        MUTATE_MANIFEST=FILE       default $MUTATE_REPO/tools/mutants/manifest.txt (patches are read from that file's directory)
@@ -48,6 +50,10 @@ done
 [ -f "$manifest" ] || { echo "mutate: no manifest at $manifest"; exit 2; }
 rows=$(grep -v -E '^[[:space:]]*(#|$)' "$manifest" || true)
 mdir=$(dirname "$manifest")
+# badrows FILE ROWS: every row needs exactly 4 non-empty tab-separated columns (a row with no tab used to slip through --list)
+badrows() { local bad; bad=$(printf '%s\n' "$2" | awk -F'\t' 'NF && (NF != 4 || $1 == "" || $2 == "" || $3 == "" || $4 == "")' | head -3)
+  [ -z "$bad" ] || { printf 'mutate: FAIL %s: row needs 4 tab-separated columns: %s\n' "$1" "$bad"; exit 1; }; }
+badrows "$manifest" "$rows"
 # per-slice includes (header above): append each file's rows after checking its `# range: LO-HI` line and its ids against it
 ranges=""
 for inc in "$mdir"/manifest.d/*.txt; do
@@ -62,28 +68,72 @@ for inc in "$mdir"/manifest.d/*.txt; do
   done <<< "$ranges"
   ranges+="$lo $hi $(basename "$inc")"$'\n'
   irows=$(grep -v -E '^[[:space:]]*(#|$)' "$inc" || true)
-  while IFS=$'\t' read -r _ iid _ _; do
+  badrows "$inc" "$irows"
+  islice=$(basename "$inc" .txt)
+  while IFS=$'\t' read -r _ iid ipatch _; do
     [ -n "$iid" ] || continue
     num=${iid%%-*}
     if [[ ! $num =~ ^[0-9]{1,6}$ ]] || [ "$((10#$num))" -lt "$lo" ] || [ "$((10#$num))" -gt "$hi" ]; then
       echo "mutate: FAIL $inc: id $iid is outside the file's range $lo-$hi"; exit 1
     fi
+    # owned by the slice: its patch lives under the slice's own patch dir
+    case "$ipatch" in "$islice"/*) ;; *) echo "mutate: FAIL $inc: id $iid: patch $ipatch is not under $islice/ (not owned by slice $islice)"; exit 1 ;; esac
   done <<< "$irows"
   [ -n "$irows" ] && rows+=$'\n'"$irows"
 done
 rows=$(printf '%s\n' "$rows" | grep -v -E '^[[:space:]]*$' || true)
+# inrange NUM: prints the include file whose range holds NUM (empty if none)
+inrange() { local olo ohi oname; while read -r olo ohi oname; do [ -n "$olo" ] && [ "$1" -ge "$olo" ] && [ "$1" -le "$ohi" ] && { echo "$oname"; return; }; done <<< "$ranges"; }
+# a central-manifest id must not sit inside a slice's range: that number is owned by the slice's include file
+while IFS=$'\t' read -r _ cid _ _; do
+  [ -n "$cid" ] || continue
+  cnum=${cid%%-*}; [[ $cnum =~ ^[0-9]{1,6}$ ]] || { echo "mutate: FAIL $manifest: id $cid does not start with a number"; exit 1; }
+  owner=$(inrange "$((10#$cnum))")
+  [ -z "$owner" ] || { echo "mutate: FAIL $manifest: id $cid is inside the range of manifest.d/$owner (owned by slice ${owner%.txt}); move it there"; exit 1; }
+done <<< "$(grep -v -E '^[[:space:]]*(#|$)' "$manifest" || true)"
 # manifest integrity, before any mutant runs: every id exactly once, every referenced patch file present
 dups=$(printf '%s\n' "$rows" | cut -f2 | grep -v '^$' | sort | uniq -d)
 if [ -n "$dups" ]; then printf 'mutate: FAIL duplicate manifest id %s\n' $dups; exit 1; fi
+# ... and every id NUMBER exactly once: suffixed ids (205-a, 205-b) must not slip past the full-id check
+ndups=$(printf '%s\n' "$rows" | cut -f2 | grep -v '^$' | sed -E 's/-.*//; s/^0+([0-9])/\1/' | sort | uniq -d)
+if [ -n "$ndups" ]; then printf 'mutate: FAIL duplicate manifest id number %s (ids sharing a number, e.g. a suffix, count as duplicates)\n' $ndups; exit 1; fi
 missing=0
 while IFS=$'\t' read -r _ mid mpatch _; do
   if [ -n "$mpatch" ] && [ ! -f "$(dirname "$manifest")/$mpatch" ]; then echo "mutate: FAIL manifest id $mid names missing patch $mpatch"; missing=1; fi
 done <<< "$rows"
 [ "$missing" = 0 ] || exit 1
-if [ "$list" = 1 ]; then printf '%s\n' "$rows" | cut -f2; exit 0; fi
+ids=$(printf '%s\n' "$rows" | cut -f2)
 equivs=()
 [ -f "$equiv" ] && equivs+=("$equiv")
 for e in "$mdir"/equivalent.d/*.txt; do [ -f "$e" ] && equivs+=("$e"); done
+# equivalent entries: ID<TAB>REASON, a known id, a non-empty reason; an equivalent.d/<slice>.txt needs manifest.d/<slice>.txt and only
+# lists ids in that slice's range
+for e in "${equivs[@]}"; do
+  eslice=""; erange=""
+  if [ "$e" != "$equiv" ]; then
+    eslice=$(basename "$e" .txt)
+    [ -f "$mdir/manifest.d/$eslice.txt" ] || { echo "mutate: FAIL $e: no manifest.d/$eslice.txt for this slice"; exit 1; }
+  fi
+  while IFS= read -r eline; do
+    case "$eline" in ''|'#'*|[[:space:]]*) continue ;; esac
+    eid=${eline%%$'\t'*}; ereason=${eline#*$'\t'}
+    { [ "$eid" != "$eline" ] && [ -n "${ereason//[[:space:]]/}" ]; } || { echo "mutate: FAIL $e: entry '$eline' needs ID<TAB>REASON"; exit 1; }
+    printf '%s\n' "$ids" | grep -qxF -- "$eid" || { echo "mutate: FAIL $e: equivalent id $eid is not in the manifest"; exit 1; }
+    if [ -n "$eslice" ]; then
+      enum=${eid%%-*}; erange=$(inrange "$((10#$enum))")
+      [ "$erange" = "$eslice.txt" ] || { echo "mutate: FAIL $e: id $eid is not in slice $eslice's range"; exit 1; }
+    fi
+  done < "$e"
+done
+# floor.d shares: a matching manifest.d slice, only the keys killed and killed+equivalent, each exactly once
+for f in "$mdir"/floor.d/*.txt; do
+  [ -f "$f" ] || continue
+  [ -f "$mdir/manifest.d/$(basename "$f")" ] || { echo "mutate: FAIL $f: no manifest.d/$(basename "$f") for this slice"; exit 1; }
+  fbad=$(awk -F'\t' '/^[[:space:]]*(#|$)/ { next } $1 != "killed" && $1 != "killed+equivalent" { print "unknown key " $1; next } { n[$1]++ }
+    END { for (k in n) if (n[k] > 1) print "duplicate key " k; if (!n["killed"]) print "no killed row"; if (!n["killed+equivalent"]) print "no killed+equivalent row" }' "$f")
+  [ -z "$fbad" ] || { echo "mutate: FAIL $f: $(printf '%s' "$fbad" | tr '\n' ';')"; exit 1; }
+done
+if [ "$list" = 1 ]; then printf '%s\n' "$ids"; exit 0; fi
 # floor_total KEY: floor.txt's row plus every floor.d share (each a plain integer, a share may be 0); fails closed
 floor_total() {
   local f v tot=0 first=1
@@ -128,6 +178,13 @@ head_sha=$(git -C "$repo" rev-parse HEAD 2>/dev/null) || { echo "mutate: FAIL ca
 dirty=$(git -C "$repo" status --porcelain 2>&1) || { echo "mutate: FAIL git status failed in $repo: $dirty"; exit 2; }
 if [ -n "$dirty" ]; then echo "mutate: FAIL dirty tree in $repo (mutants test the committed HEAD $head_sha; commit or stash first):"; printf '%s\n' "$dirty" | head -20 | sed 's/^/    /'; exit 2; fi
 echo "mutate: testing committed HEAD $head_sha"
+# Fetch every dependency ONCE, up front (Paul, 2026-10-24): a network or registry failure inside a mutant's `cargo test` used to exit
+# nonzero and read as KILLED. Here it FAILS the run before any mutant; each mutant then builds and runs --offline --frozen against the
+# fetched Cargo.lock (copied into its worktree), so it cannot fetch at all. Cargo.lock is .gitignored, so the fetch keeps the tree clean.
+if ! fout=$(cd "$repo" && timeout "$bttl" cargo fetch 2>&1 </dev/null); then
+  echo "mutate: FAIL FETCH: cargo fetch failed in $repo; no mutant ran (a fetch failure is never a kill):"; printf '%s\n' "$fout" | tail -5 | sed 's/^/    /'; exit 2
+fi
+[ -f "$repo/Cargo.lock" ] || { echo "mutate: FAIL FETCH: cargo fetch left no Cargo.lock in $repo"; exit 2; }
 nk=0; ns=0; ne=0; ni=0; total=0
 newtgt
 if [ -n "$rows" ]; then
@@ -142,10 +199,11 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
   src=${fnpath%%:*}
   if [ ! -f "$work/$src" ]; then echo "INVALID $id: $src does not exist at HEAD"; ni=$((ni + 1)); cleanup; newtgt; continue; fi
   if ! git -C "$work" apply "$pfile" >/dev/null 2>&1; then echo "INVALID $id: patch does not apply"; ni=$((ni + 1)); cleanup; newtgt; continue; fi
-  if ! (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$bttl" cargo test --test "$suite" --no-run >"$tgt/build.log" 2>&1 </dev/null); then
+  cp "$repo/Cargo.lock" "$work/Cargo.lock" || { echo "INVALID $id: cannot copy Cargo.lock into the worktree"; ni=$((ni + 1)); cleanup; newtgt; continue; }
+  if ! (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$bttl" cargo test --offline --frozen --test "$suite" --no-run >"$tgt/build.log" 2>&1 </dev/null); then
     echo "INVALID $id: mutant does not build suite $suite (see: first lines below)"; head -5 "$tgt/build.log" | sed 's/^/    /'; ni=$((ni + 1))
   else
-    (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$ttl" cargo test --test "$suite" >"$tgt/run.log" 2>&1 </dev/null); rc=$?
+    (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$ttl" cargo test --offline --frozen --test "$suite" >"$tgt/run.log" 2>&1 </dev/null); rc=$?
     if [ "$rc" = 0 ]; then
       if [ "${#equivs[@]}" -gt 0 ] && awk -F'\t' -v id="$id" '!/^[[:space:]]*(#|$)/ && $1 == id { f = 1 } END { exit !f }' "${equivs[@]}"; then
         echo "SURVIVED-EQUIVALENT $id ($fnpath, suite $suite): documented in EQUIVALENT.txt or equivalent.d"; ne=$((ne + 1))
