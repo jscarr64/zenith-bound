@@ -88,7 +88,7 @@ fn want_domain(what: &str, r: Result<Ball, BoundError>) -> Result<(), String> {
 fn want_contains(what: &str, b: &Ball, x: &ExactNum) -> Result<(), String> {
     match b.contains(x) {
         Tri::True => Ok(()),
-        t => Err(format!(
+        t @ (Tri::False | Tri::Unknown) => Err(format!(
             "{}: {:?} does not contain {:?} ({:?})",
             what, b, x, t
         )),
@@ -545,7 +545,7 @@ fn rand_rad(rng: &mut SplitMix64, e: i64) -> Result<Mag, String> {
 
 fn rand_ball(rng: &mut SplitMix64, prec: usize) -> Result<Ball, String> {
     let i = usize::try_from(rng.below(13)).map_err(|_| "i")?;
-    let e = EXPS[i];
+    let e = *EXPS.get(i).ok_or("EXPS index")?;
     let m = rand_mid(rng, e, prec)?;
     let r = rand_rad(rng, e)?;
     ball(m, r, prec)
@@ -595,7 +595,9 @@ enum Op {
 fn run_binary(op: &Op, seed: u64, cases: usize) -> Result<(), String> {
     let mut rng = SplitMix64::new(seed);
     for case in 0..cases {
-        let prec = PRECS[usize::try_from(rng.below(9)).map_err(|_| "p")?];
+        let prec = *PRECS
+            .get(usize::try_from(rng.below(9)).map_err(|_| "p")?)
+            .ok_or("PRECS index")?;
         let a = rand_ball(&mut rng, prec)?;
         // add/sub: b's exponent stays within 200 of a's. A gap of 2^29 made the exact oracle sum a 2^29-bit number
         // (minutes per case) without testing anything new: past prec + 64 bits the smaller operand only feeds ε.
@@ -684,7 +686,9 @@ fn containment_powi() -> Result<(), String> {
 fn containment_neg() -> Result<(), String> {
     let mut rng = SplitMix64::new(0x5107);
     for case in 0..200 {
-        let prec = PRECS[usize::try_from(rng.below(9)).map_err(|_| "p")?];
+        let prec = *PRECS
+            .get(usize::try_from(rng.below(9)).map_err(|_| "p")?)
+            .ok_or("PRECS index")?;
         let a = rand_ball(&mut rng, prec)?;
         let pa = points(&a)?;
         let res = -a;
@@ -703,7 +707,9 @@ fn containment_neg() -> Result<(), String> {
 fn containment_sqrt() -> Result<(), String> {
     let mut rng = SplitMix64::new(0x5108);
     for case in 0..300 {
-        let prec = PRECS[usize::try_from(rng.below(9)).map_err(|_| "p")?];
+        let prec = *PRECS
+            .get(usize::try_from(rng.below(9)).map_err(|_| "p")?)
+            .ok_or("PRECS index")?;
         let a = rand_ball(&mut rng, prec)?;
         let pa = points(&a)?;
         let lo_neg = match a.rad().to_exact_num() {
