@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- full_gate selftest (2026-10-24): its nested gate runs unset `GATE_STEPS`, so `GATE_STEPS=gate-selftest tools/full_gate.sh` no longer
+  fails with "stripped run reported too few steps" (the outer step list leaked into the fixture gates).
+
 - runlog selftest joins the gate (2026-10-24): poplog 729c861 (Rusty) prunes a row only when the pid is gone (ESRCH), so the EPERM
   pid-1 row now survives and `runlog_selftest.sh` passes all 50 cases; full_gate.sh's gate-selftest step now runs it.
 

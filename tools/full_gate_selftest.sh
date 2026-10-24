@@ -11,7 +11,7 @@ fail() { echo "full_gate selftest FAIL: $*"; exit 1; }
 t=$(mktemp -d "$(zb_scratch)"/zb-gate-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 SCANS="unsafe-scan no-float-scan no-panic-scan no-clone-scan derive-scan manifest-scan"
 # The fixture gates run outside this self-test's own run log (their planted failures must not fail it), with no poplog at all.
-fe=(env -u POPLOG_FILE -u POPLOG_STATE_DIR -u POPLOG_PID -u POPLOG_PROGRESS_FILE RUNLOG_POPLOG=/nonexistent RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1)
+fe=(env -u GATE_STEPS -u POPLOG_FILE -u POPLOG_STATE_DIR -u POPLOG_PID -u POPLOG_PROGRESS_FILE RUNLOG_POPLOG=/nonexistent RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1)
 rcof() { sed -n "s/^$2=//p" "$t/logs/$1.rc"; }
 
 # 1. stripped PATH: only what the gate driver itself needs; every tool a step calls (cargo, grep, python3, ...) is missing
