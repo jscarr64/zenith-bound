@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- mutate.sh quiet ERR trap (2026-10-24, Spence: 1207-zb-popguard-full-gate1 logged 184 `ERR rc=1 line=92` inrange misses and one
+  `ERR rc=101 line=214` per killed mutant): the inrange calls take `|| true` (no owning range is normal), the suite run captures its rc
+  explicitly (`rc=0; (...) || rc=$?`), and an unexpected rc (INVALID branch) is re-raised with `(exit "$rc")` so the ERR trap still
+  records it. mutate_selftest 34 cases (+2: logged run has no ERR line; unexpected rc 101 still logs ERR and fails).
+  Red: harper-work/popguard/zb-errquiet-red.log; green: zb-errquiet-green.log.
+
 - Pop direct-run guard (2026-10-24, 11:49 incident: a bare 58 GB goldens python run global-OOMed Pop): tools/goldens_regen.sh
   (before its first generator) and scripts/goldlib.py (at import, before the oracle check, so every mpmath generator) call
   ~/pop-logs/bin/popguard.sh and exit 3 outside a popslot/poprun memory scope (6G per job, swap 0); hosts without popguard.sh
