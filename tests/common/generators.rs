@@ -612,11 +612,28 @@ pub enum PrecSource {
     Schedule,
     /// The 18-value gate subset `PS_FAST`.
     Fast,
-    /// Uniform in `1..=MAX_PREC`.
+    /// Any `u32` precision `1..=u32::MAX` (CONTRACT 8.1; headroom far past `MAX_PREC`, Jeff 2026-10-23 12:33 PM CT): one draw in 8 is
+    /// an edge of `PREC_EDGES`, the rest log-scale (bit length `1..=32` uniform, then uniform within it).
     Uniform,
-    /// One of `op - 1`, `op`, `op + 1` for an operand precision `op` in `1..=MAX_PREC`; a result outside `1..=MAX_PREC` becomes `op`.
+    /// One of `op - 1`, `op`, `op + 1` for an operand precision `op >= 1`; a result of 0 or past `u32::MAX` becomes `op`.
     Operand(u32),
 }
+
+/// The precision edges `PrecSource::Uniform` draws on purpose: the small ones, `MAX_PREC` and both sides of it, and the top of `u32`.
+pub const PREC_EDGES: [u32; 12] = [
+    1,
+    2,
+    3,
+    MAX_PREC - 1,
+    MAX_PREC,
+    MAX_PREC + 1,
+    (1 << 31) - 1,
+    1 << 31,
+    (1 << 31) + 1,
+    u32::MAX - 2,
+    u32::MAX - 1,
+    u32::MAX,
+];
 
 /// Draws a precision (always 1 output).
 pub fn draw_precision(rng: &mut SplitMix64, source: &PrecSource) -> Result<u32, String> {
@@ -636,16 +653,25 @@ pub fn draw_precision(rng: &mut SplitMix64, source: &PrecSource) -> Result<u32, 
             }
         }
         PrecSource::Uniform => {
-            let v = u32::try_from(rng.below(u64::from(MAX_PREC)))
-                .map_err(|_| String::from("uniform precision"))?;
-            Ok(v + 1)
+            let x = rng.next_u64();
+            let low = u128::from(x & ((1u64 << 56) - 1));
+            if x >> 61 == 0 {
+                let n = u128::try_from(PREC_EDGES.len()).map_err(|_| String::from("edges"))?;
+                let i = usize::try_from((low * n) >> 56).map_err(|_| String::from("edge index"))?;
+                return PREC_EDGES
+                    .get(i)
+                    .copied()
+                    .ok_or_else(|| String::from("edge index out of range"));
+            }
+            let k = u32::try_from((x >> 56) & 31).map_err(|_| String::from("bit length"))?;
+            let top = 1u64 << k;
+            let within =
+                u64::try_from((low * u128::from(top)) >> 56).map_err(|_| String::from("within"))?;
+            u32::try_from(top | within).map_err(|_| String::from("uniform precision"))
         }
         PrecSource::Operand(op) => {
-            if *op == 0 || *op > MAX_PREC {
-                return Err(format!(
-                    "operand precision {} is outside 1..={}",
-                    op, MAX_PREC
-                ));
+            if *op == 0 {
+                return Err(String::from("operand precision 0"));
             }
             let d = rng.below(3);
             let p = match d {
@@ -654,7 +680,7 @@ pub fn draw_precision(rng: &mut SplitMix64, source: &PrecSource) -> Result<u32, 
                 _ => op.checked_add(1),
             };
             Ok(match p {
-                Some(v) if (1..=MAX_PREC).contains(&v) => v,
+                Some(v) if v >= 1 => v,
                 _ => *op,
             })
         }

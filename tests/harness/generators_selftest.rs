@@ -1,6 +1,6 @@
 //! COVERS: common::BallDesc::encode, common::ExpBand::Edge, common::ExpBand::Gap, common::ExpBand::Near0, common::ExpBand::PowerOfTwo, common::ExpBand::Uniform, common::ExpBand::from_index, common::ExpBand::index, common::ExpDomain::edge_values, common::ExpDomain::in_raw_range, common::GapClass::One, common::GapClass::P, common::GapClass::PGuard, common::GapClass::PGuardMinus1, common::GapClass::PGuardPlus1, common::GapClass::PMinus1, common::GapClass::PPlus1, common::GapClass::Random, common::GapClass::Two, common::GapClass::Zero, common::GapClass::from_index, common::GapClass::index, common::GapClass::magnitude, common::MantPattern::Aaab, common::MantPattern::AllOnes, common::MantPattern::Alt5555, common::MantPattern::C000, common::MantPattern::MaxMinus1, common::MantPattern::SingleBit, common::MantPattern::TieAtP, common::MantPattern::TieMinus1, common::MantPattern::TiePlus1, common::MantPattern::Top, common::MantPattern::TopPlus1, common::MantPattern::Uniform, common::MantPattern::from_index, common::MantPattern::index, common::ModeOrNone::None, common::ModeOrNone::Valid, common::ModeOrNone::all_with_none, common::ModeOrNone::is_valid, common::ModeOrNone::name, common::PrecSource::Fast, common::PrecSource::Operand, common::PrecSource::Schedule, common::PrecSource::Uniform, common::RadiusClass::HalfUlp, common::RadiusClass::Huge, common::RadiusClass::Infinity, common::RadiusClass::OneUlp, common::RadiusClass::RandomMag, common::RadiusClass::Zero, common::RadiusClass::from_index, common::RadiusClass::index, common::RadiusClass::tag, common::RoundingMode::Down, common::RoundingMode::FromZero, common::RoundingMode::ToEven, common::RoundingMode::ToOdd, common::RoundingMode::ToZero, common::RoundingMode::Up, common::RoundingMode::all, common::RoundingMode::index, common::RoundingMode::name, common::RoundingMode::parse, common::Sign::Minus, common::Sign::Plus, common::Sign::symbol, common::generators::check_exp_mix, common::generators::check_mant_mix, common::generators::draw_ball, common::generators::draw_exponent, common::generators::draw_exponent_pair, common::generators::draw_exponent_with, common::generators::draw_gap, common::generators::draw_mantissa, common::generators::draw_mantissa_with, common::generators::draw_mode, common::generators::draw_precision, common::generators::gap_pair, common::generators::tie_mantissa, common::generators::uniform_in, common::generators::wide_uniform_in
 //! Self-tests of tests/common/generators.rs. Oracle: the plan (TEST_PLAN section 7, 9), hand-derived expectations, and pinned counts/digests
-//! for the fixed seed `seed_for("common", CASE_CLASS_GATE)` at GENERATOR_VERSION 3 (a drift detector, produced by this generator; the band
+//! for the fixed seed `seed_for("common", CASE_CLASS_GATE)` at GENERATOR_VERSION 4 (a drift detector, produced by this generator; the band
 //! counts were also recomputed independently by scripts/goldlib.py, see the comment at EXP_BAND_COUNTS).
 
 use crate::common::expect_eq;
@@ -59,7 +59,7 @@ fn exponent_run(
     Ok((counts, digest))
 }
 
-// Pinned for GENERATOR_VERSION 3 (band counts unchanged since 1; the digest moved with the log-scale Uniform band), seed_for("common", CASE_CLASS_GATE), 10,000 draws, MAG domain, anchor 0, prec 53.
+// Pinned for GENERATOR_VERSION 4 (band counts unchanged since 1; the digest moved at 3 with the log-scale Uniform band), seed_for("common", CASE_CLASS_GATE), 10,000 draws, MAG domain, anchor 0, prec 53.
 // The digests are pinned from this generator (drift detectors only). The counts were recomputed independently in Python (scripts/goldlib.py splitmix64 + the band rule `below(100)` against the cumulative
 // 30/50/80/90/100 thresholds, with the fixed consumption per band: Edge 1, Near0 1, Uniform 1, PowerOfTwo 3, Gap 3 extra outputs).
 const EXP_BAND_COUNTS: [usize; 5] = [2976, 2040, 3008, 994, 982];
@@ -182,7 +182,7 @@ fn exponent_band_counts_are_pinned_for_the_fixed_seed() -> Result<(), String> {
     expect_eq(
         "GENERATOR_VERSION (re-pin the counts below when it changes)",
         &GENERATOR_VERSION,
-        &3,
+        &4,
     )?;
     let (counts, digest) = exponent_run(&EXP_MIX, &ExpDomain::MAG, N)?;
     expect_eq(
@@ -605,6 +605,8 @@ fn precision_draws_come_from_their_source() -> Result<(), String> {
     let mut seen_op: Vec<u32> = Vec::new();
     let mut min_u = u32::MAX;
     let mut max_u = 0u32;
+    let mut above_max_prec = 0usize;
+    let mut lengths = [false; 32];
     for _ in 0..N {
         let s = draw_precision(&mut rng, &PrecSource::Schedule)?;
         let i = PS
@@ -623,11 +625,20 @@ fn precision_draws_come_from_their_source() -> Result<(), String> {
             *x = true;
         }
         let u = draw_precision(&mut rng, &PrecSource::Uniform)?;
-        if !(1..=MAX_PREC).contains(&u) {
-            return Err(format!("uniform precision {} outside 1..=4096", u));
+        if u == 0 {
+            return Err(String::from("uniform precision 0"));
         }
         min_u = min_u.min(u);
         max_u = max_u.max(u);
+        if u > MAX_PREC {
+            above_max_prec += 1;
+        }
+        if let Some(slot) = usize::try_from(31 - u.leading_zeros())
+            .ok()
+            .and_then(|b| lengths.get_mut(b))
+        {
+            *slot = true;
+        }
         let o = draw_precision(&mut rng, &PrecSource::Operand(53))?;
         if !seen_op.contains(&o) {
             seen_op.push(o);
@@ -635,15 +646,31 @@ fn precision_draws_come_from_their_source() -> Result<(), String> {
     }
     expect_eq("all 41 schedule values drawn", &seen_ps, &[true; 41])?;
     expect_eq("all 18 fast values drawn", &seen_fast, &[true; 18])?;
-    if min_u > 8 || max_u < MAX_PREC - 8 {
+    // headroom (Jeff, 2026-10-23 12:33 PM CT): uniform precisions span all of u32 (CONTRACT 8.1), every bit length, both ends exactly
+    if min_u != 1 || max_u != u32::MAX {
         return Err(format!(
             "uniform precisions only span {}..={}",
             min_u, max_u
         ));
     }
+    if above_max_prec < N / 4 {
+        return Err(format!(
+            "only {} of {} uniform precisions above {}",
+            above_max_prec, N, MAX_PREC
+        ));
+    }
+    expect_eq(
+        "uniform precision bit lengths 1..=32",
+        &lengths,
+        &[true; 32],
+    )?;
     seen_op.sort_unstable();
     expect_eq("operand +-1 around 53", &seen_op, &vec![52, 53, 54])?;
-    for (op, want) in [(1u32, vec![1, 2]), (MAX_PREC, vec![MAX_PREC - 1, MAX_PREC])] {
+    for (op, want) in [
+        (1u32, vec![1, 2]),
+        (MAX_PREC, vec![MAX_PREC - 1, MAX_PREC, MAX_PREC + 1]),
+        (u32::MAX, vec![u32::MAX - 1, u32::MAX]),
+    ] {
         let mut got: Vec<u32> = Vec::new();
         for _ in 0..200 {
             let v = draw_precision(&mut rng, &PrecSource::Operand(op))?;
@@ -654,12 +681,8 @@ fn precision_draws_come_from_their_source() -> Result<(), String> {
         got.sort_unstable();
         expect_eq("operand at the limit", &got, &want)?;
     }
-    if draw_precision(&mut rng, &PrecSource::Operand(0)).is_ok()
-        || draw_precision(&mut rng, &PrecSource::Operand(MAX_PREC + 1)).is_ok()
-    {
-        return Err(String::from(
-            "an operand precision outside 1..=4096 was accepted",
-        ));
+    if draw_precision(&mut rng, &PrecSource::Operand(0)).is_ok() {
+        return Err(String::from("operand precision 0 was accepted"));
     }
     Ok(())
 }
