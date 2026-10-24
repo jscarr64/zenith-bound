@@ -14,8 +14,8 @@ use zenith_float_num::ExactNum;
 use super::{num, ok, row_val, want_contains};
 use crate::common::goldens::golden_dir;
 
-/// Rows the generator writes: 8 ops × 124. A short file fails, so the check cannot pass on a truncated golden.
-const WANT_ROWS: usize = 992;
+/// Rows the generator writes: 11 ops × 124 (add sub mul mul_exact sqr powi sqrt neg div inv hypot). A short file fails, so the check cannot pass on a truncated golden.
+const WANT_ROWS: usize = 1364;
 const LAMBDA: i64 = 1024;
 
 fn field<'a>(v: &[&'a str], i: usize) -> Result<&'a str, String> {
@@ -32,11 +32,11 @@ fn value(v: &[&str], at: usize) -> Result<ExactNum, String> {
     row_val(s, e, m)
 }
 
-/// Placeholder τ (TEST_PLAN 9): add/sub 2, mul/mul_exact/sqr/sqrt 4, powi 2n, neg 1.
+/// Placeholder τ (TEST_PLAN 9): add/sub 2, mul/mul_exact/sqr/sqrt/div/inv/hypot 4, powi 2n, neg 1.
 fn tau(op: &str, n: u64) -> Result<i64, String> {
     match op {
         "add" | "sub" => Ok(2),
-        "mul" | "mul_exact" | "sqr" | "sqrt" => Ok(4),
+        "mul" | "mul_exact" | "sqr" | "sqrt" | "div" | "inv" | "hypot" => Ok(4),
         "neg" => Ok(1),
         "powi" => i64::try_from(n)
             .ok()
@@ -72,6 +72,9 @@ fn run(op: &str, prec: usize, n: u64, a: Ball, b: &Ball, bmid: &ExactNum) -> Res
         "powi" => ok("powi", a.powi(n, prec)),
         "neg" => Ok(-a),
         "sqrt" => ok("sqrt", a.sqrt(prec, &DomainPolicy::Clip)),
+        "div" => ok("div", a.div(b, prec)),
+        "inv" => ok("inv", a.inv(prec)),
+        "hypot" => ok("hypot", a.hypot(b, prec)),
         other => Err(format!("unknown op {}", other)),
     }
 }
@@ -91,6 +94,20 @@ fn check_row(line: &str) -> Result<(), String> {
     let lo = value(&v, 16)?;
     let hi = value(&v, 19)?;
     let rref = value(&v, 22)?;
+    // hypot's contract radius is the 1-Lipschitz r + s (16.S1.8), which can exceed the hull spread by an unbounded factor
+    // (a divisor-free ball whose second argument straddles 0 widely: spread ~ s^2/h, radius s). Its TIGHT check is
+    // against max(RREF, ARAD + BRAD) — the contract's own formula — so tau measures src slack, not formula slack;
+    // LOOSE stays on RREF. Rows 2026-10-24: 2 of 124 hypot rows exceed 4·RREF this way (reported, not a bug).
+    let tight_ref = if op == "hypot" {
+        let lip = value(&v, 7)?.add_full_prec(&value(&v, 13)?);
+        match lip.partial_cmp(&rref) {
+            Some(Ordering::Greater) => lip,
+            Some(Ordering::Less | Ordering::Equal) => rref.add_full_prec(&num(0)),
+            None => return Err("hypot ARAD + BRAD vs RREF unordered".into()),
+        }
+    } else {
+        rref.add_full_prec(&num(0))
+    };
     let a = ok(
         "a",
         Ball::from_mid_rad(amid.add_full_prec(&num(0)), arad, prec),
@@ -128,12 +145,12 @@ fn check_row(line: &str) -> Result<(), String> {
             rref
         ));
     }
-    if !within(res.rad(), t, &rref)? {
+    if !within(res.rad(), t, &tight_ref)? {
         return Err(format!(
-            "TIGHT: rad {:?} > {}·RREF {:?}",
+            "TIGHT: rad {:?} > {}·ref {:?}",
             res.rad(),
             t,
-            rref
+            tight_ref
         ));
     }
     if let Some(a2) = strict_twin {

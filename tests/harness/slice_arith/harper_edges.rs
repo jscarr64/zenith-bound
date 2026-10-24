@@ -501,3 +501,112 @@ pub(super) fn cm(m: &Mag) -> Result<Mag, String> {
         (None, _) | (_, None) => Ok(Mag::zero()),
     }
 }
+
+/// div/inv/hypot edges (16.S1.8, Spence's src in 7f5d6d9): exact quotients and roots, the formula's own hand values,
+/// divisors reaching 0, the exact zero divisor, all reals in, and bad precisions.
+#[test]
+fn div_inv_hypot_edges() -> Result<(), String> {
+    let p = 53;
+    // 1/4 and 0/3 are exact: radius 0 (P6); 0/3 is +0.
+    want_exact(
+        "1/4",
+        &ok("div", pt(1, p)?.div(&pt(4, p)?, p))?,
+        &pow2(-2)?,
+        &Mag::zero(),
+    )?;
+    let z = ok("div", pt(0, p)?.div(&pt(3, p)?, p))?;
+    want_exact("0/3", &z, &num(0), &Mag::zero())?;
+    plus_zero("0/3", &z)?;
+    want_exact(
+        "1/-2",
+        &ok("inv", pt(-2, p)?.inv(p))?,
+        &num(0).sub_full_prec(&pow2(-1)?),
+        &Mag::zero(),
+    )?;
+    // (2 ± 1)/(4 ± 0) = 1/2 ± (|2|·0 + |4|·1)/(|4|·(|4| - 0)) = 1/2 ± 1/4, exact; inv(4 ± 2) = 1/4 ± 2/(4·2) = 1/4 ± 1/4.
+    want_exact(
+        "(2±1)/4",
+        &ok("div", ball(num(2), mag(TOP, 1)?, p)?.div(&pt(4, p)?, p))?,
+        &pow2(-1)?,
+        &mag(TOP, -1)?,
+    )?;
+    want_exact(
+        "1/(4±2)",
+        &ok("inv", ball(num(4), mag(TOP, 2)?, p)?.inv(p))?,
+        &pow2(-2)?,
+        &mag(TOP, -1)?,
+    )?;
+    // 1/3 is inexact: a nonzero radius (P6); its containment is carried by the oracle rows.
+    let third = ok("inv", pt(3, p)?.inv(p))?;
+    if third.is_exact() {
+        return Err(format!("1/3 claims exact: {:?}", third));
+    }
+    // hypot(-3, 4) = 5 and hypot(0, 0) = +0, exact; hypot of two balls around 0 contains 0.
+    want_exact(
+        "hypot(-3,4)",
+        &ok("hypot", pt(-3, p)?.hypot(&pt(4, p)?, p))?,
+        &num(5),
+        &Mag::zero(),
+    )?;
+    let h0 = ok("hypot", pt(0, p)?.hypot(&pt(0, p)?, p))?;
+    want_exact("hypot(0,0)", &h0, &num(0), &Mag::zero())?;
+    plus_zero("hypot(0,0)", &h0)?;
+    let hz = ok(
+        "hypot",
+        ball(num(0), mag(TOP, 1)?, p)?.hypot(&ball(num(0), mag(TOP, 1)?, p)?, p),
+    )?;
+    want_contains("hypot(0±1,0±1) 0", &hz, &num(0))?;
+    want_contains("hypot(0±1,0±1) 1", &hz, &num(1))?;
+    // the exact zero divisor is Domain; a divisor ball reaching 0 (1 ± 1) is all reals.
+    match pt(1, p)?.div(&pt(0, p)?, p) {
+        Err(BoundError::Domain { .. }) => {}
+        other => return Err(format!("1/(0±0) div: {:?}", other)),
+    }
+    match pt(0, p)?.inv(p) {
+        Err(BoundError::Domain { .. }) => {}
+        other => return Err(format!("inv(0±0): {:?}", other)),
+    }
+    let reach = [
+        (
+            "div by 1±1",
+            ok("div", pt(1, p)?.div(&ball(num(1), mag(TOP, 1)?, p)?, p))?,
+        ),
+        ("inv 1±1", ok("inv", ball(num(1), mag(TOP, 1)?, p)?.inv(p))?),
+        (
+            "div by all",
+            ok("div", pt(1, p)?.div(&ok("all", Ball::all_reals(p))?, p))?,
+        ),
+        (
+            "all / 2",
+            ok("div", ok("all", Ball::all_reals(p))?.div(&pt(2, p)?, p))?,
+        ),
+        ("inv all", ok("inv", ok("all", Ball::all_reals(p))?.inv(p))?),
+        (
+            "hypot all",
+            ok("hypot", ok("all", Ball::all_reals(p))?.hypot(&pt(1, p)?, p))?,
+        ),
+    ];
+    for (name, r) in reach {
+        if r.is_informative() {
+            return Err(format!("{} is informative: {:?}", name, r));
+        }
+    }
+    for bad in [
+        0usize,
+        zenith_bound::precision::MAX_PRECISION
+            .checked_add(1)
+            .ok_or("max")?,
+    ] {
+        let rs = [
+            ("div", pt(1, p)?.div(&pt(2, p)?, bad)),
+            ("inv", pt(2, p)?.inv(bad)),
+            ("hypot", pt(1, p)?.hypot(&pt(2, p)?, bad)),
+        ];
+        for (name, r) in rs {
+            if !matches!(r, Err(BoundError::InvalidArgument { .. })) {
+                return Err(format!("{} at prec {}: {:?}", name, bad, r));
+            }
+        }
+    }
+    Ok(())
+}
