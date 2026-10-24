@@ -1,10 +1,10 @@
 diff --git a/src/mag/convert.rs b/src/mag/convert.rs
-index 559f521..2e4bfb9 100644
+index 019043e..c5757c5 100644
 --- a/src/mag/convert.rs
 +++ b/src/mag/convert.rs
-@@ -19,7 +19,7 @@ impl Mag {
-         let Some((mant, sticky, exp)) = x.top_u64_mantissa_and_sticky() else {
-             return Mag::zero();
+@@ -87,7 +87,7 @@ impl Mag {
+             // `|x| < 2^i64::MIN`, so `0.1 * 2^i64::MIN` bounds it above.
+             Top::Underflow => (TOP, false, i64::MIN),
          };
 -        if !sticky {
 +        if !sticky || mant > 0 {

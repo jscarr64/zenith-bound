@@ -1,13 +1,12 @@
 diff --git a/src/mag/convert.rs b/src/mag/convert.rs
-index 559f521..f783293 100644
+index 019043e..343c809 100644
 --- a/src/mag/convert.rs
 +++ b/src/mag/convert.rs
-@@ -16,7 +16,7 @@ impl Mag {
-         if x.is_nan() || x.is_inf() {
-             return Mag::infinity();
-         }
--        let Some((mant, sticky, exp)) = x.top_u64_mantissa_and_sticky() else {
-+        let Some((mant, sticky, exp)) = x.top_u64_mantissa_and_sticky().filter(|_| !x.is_negative()) else {
-             return Mag::zero();
-         };
-         if !sticky {
+@@ -83,6 +83,7 @@ impl Mag {
+         let (mant, sticky, exp) = match top_of(x) {
+             Top::NotFinite => return Mag::infinity(),
+             Top::Zero => return Mag::zero(),
++            Top::Finite { .. } if x.is_negative() => return Mag::zero(),
+             Top::Finite { mant, sticky, exp } => (mant, sticky, exp),
+             // `|x| < 2^i64::MIN`, so `0.1 * 2^i64::MIN` bounds it above.
+             Top::Underflow => (TOP, false, i64::MIN),

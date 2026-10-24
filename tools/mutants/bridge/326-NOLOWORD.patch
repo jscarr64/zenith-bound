@@ -1,0 +1,13 @@
+diff --git a/src/mag/convert.rs b/src/mag/convert.rs
+index 019043e..b9d5647 100644
+--- a/src/mag/convert.rs
++++ b/src/mag/convert.rs
+@@ -52,7 +52,7 @@ fn top_of_words(words: &[u64], exponent: i64) -> Top {
+     let lo = idx
+         .checked_sub(1)
+         .and_then(|i| words.get(i))
+-        .map_or(0, |w| *w);
++        .map_or(0, |_w| 0);
+     let rest_sticky = idx
+         .checked_sub(1)
+         .and_then(|i| words.get(..i))

@@ -1,5 +1,5 @@
 # range: 300-399
-# Slice S2 (src/bridge.rs) mutants, owned by S2 alone. Rows as in ../manifest.txt (fn_path<TAB>mutant_id<TAB>patch<TAB>suite);
+# Slice S2 (src/bridge.rs, and src/mag/convert.rs for the R14 RawParts bridge) mutants, owned by S2 alone. Rows as in ../manifest.txt (fn_path<TAB>mutant_id<TAB>patch<TAB>suite);
 # ids NNN-<name> with NNN in 300..=399; patches go in tools/mutants/bridge/ and the patch column reads bridge/NNN-<name>.patch.
 src/bridge.rs:Mag::cmp_exact_num	300-NUMSTICKY	bridge/300-NUMSTICKY.patch	harness
 src/bridge.rs:Mag::cmp_exact_num	301-NUMINF	bridge/301-NUMINF.patch	harness
@@ -22,3 +22,14 @@ src/bridge.rs:Mag::cmp_far_diff	317-REVERSE	bridge/317-REVERSE.patch	harness
 src/bridge.rs:Mag::cmp_far_diff	318-UKEEP	bridge/318-UKEEP.patch	harness
 src/bridge.rs:Mag::cmp_far_diff	319-BIGNEG	bridge/319-BIGNEG.patch	harness
 src/bridge.rs:Mag::cmp_far_diff	320-ZSIGN	bridge/320-ZSIGN.patch	harness
+src/mag/convert.rs:Mag::from_exact_num	322-RESTSTICKY	bridge/322-RESTSTICKY.patch	harness
+src/mag/convert.rs:Mag::from_exact_num	323-WINSTICKY	bridge/323-WINSTICKY.patch	harness
+src/mag/convert.rs:Mag::from_exact_num	324-LZEXP	bridge/324-LZEXP.patch	harness
+src/mag/convert.rs:Mag::from_exact_num	325-WORDEXP	bridge/325-WORDEXP.patch	harness
+src/mag/convert.rs:Mag::from_exact_num	326-NOLOWORD	bridge/326-NOLOWORD.patch	harness
+src/mag/convert.rs:Mag::from_exact_num	327-NOSHIFT	bridge/327-NOSHIFT.patch	harness
+src/mag/convert.rs:Mag::to_exact_num	328-SUBEXP	bridge/328-SUBEXP.patch	harness
+src/mag/convert.rs:Mag::to_exact_num	329-SUBLOST	bridge/329-SUBLOST.patch	harness
+src/mag/convert.rs:Mag::to_exact_num	330-EMAXEQ	bridge/330-EMAXEQ.patch	harness
+src/mag/convert.rs:Mag::to_exact_num	331-SUBSHR	bridge/331-SUBSHR.patch	harness
+src/mag/convert.rs:Mag::from_exact_num	332-NANZERO	bridge/332-NANZERO.patch	harness

@@ -1,0 +1,13 @@
+diff --git a/src/mag/convert.rs b/src/mag/convert.rs
+index 019043e..d2535cf 100644
+--- a/src/mag/convert.rs
++++ b/src/mag/convert.rs
+@@ -28,7 +28,7 @@ enum Top {
+ fn top_of(x: &ExactNum) -> Top {
+     let p = x.as_raw_parts();
+     match p.kind {
+-        RawKind::NaN | RawKind::Inf => Top::NotFinite,
++        RawKind::NaN | RawKind::Inf => Top::Zero,
+         RawKind::Zero => Top::Zero,
+         RawKind::Finite => top_of_words(p.words, p.exponent),
+     }
