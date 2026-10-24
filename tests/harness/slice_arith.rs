@@ -1210,3 +1210,49 @@ fn div_inv_denominator_rounds_down() -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Harper's oracle rows 1313 and 1343 (arith_oracle_rows.txt @ e634e11, test hypot_wide_rows_1313_1343_tight @ b1c412b):
+/// `OP PREC W N AMID ARAD BMID BRAD LO HI RREF`, each value `SIGN EXP MANT`. The first ball touches or straddles 0,
+/// so the 1-Lipschitz `r + s` radius is over 4x the reference radius; 16.S1.8 requires rad <= 4 * RREF.
+const HYPOT_WIDE_ROWS: [(usize, &str); 2] = [
+    (1313, "hypot 64 192 0 0 -28 1 0 -28 1 1 -26 7ffffffffffffff 0 -87 3 0 -26 7fffffffffffffed 0 -25 83f07b357f6837a0c7d62f13ee20be2705fe7f07ebb27d19 0 -31 5e2f274e3236ab25"),
+    (1343, "hypot 256 576 0 1 -1058 489706e98a646a056377d 0 -1058 3 1 -1056 ed2d7dd0cc75befbdf7a601e714cae309d5ff5498fc1ca098cc8e4a26cfe994f 0 -1313 1 0 -1056 3b4b5f74331d6fbef7de98079c532b8c2757fd5263f07282633239289b3fa653b 0 -1056 7ddb211a35ecafa48bddea922ae94aa45a81ecab0f05f8151dfd6226c4ef912f6acdb6567175ca04c408b2ff737809a7e9979fa2387738aeacb7da04b1d58e76f25d3b763e9e9823 0 -1060 178be5214e370fb7"),
+];
+
+#[test]
+fn hypot_wide_rows_1313_1343_tight() -> Result<(), String> {
+    for (id, line) in HYPOT_WIDE_ROWS {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        let v = |i: usize| -> Result<ExactNum, String> {
+            match (f.get(i), f.get(i + 1), f.get(i + 2)) {
+                (Some(s), Some(e), Some(m)) => row_val(s, e, m),
+                _ => Err(format!("row {}: short at field {}", id, i)),
+            }
+        };
+        let prec: usize = f
+            .get(1)
+            .ok_or("prec")?
+            .parse()
+            .map_err(|_| format!("row {}: prec", id))?;
+        let a = ball(v(4)?, Mag::from_exact_num(&v(7)?), prec)?;
+        let b = ball(v(10)?, Mag::from_exact_num(&v(13)?), prec)?;
+        let r = ok("hypot", a.hypot(&b, prec))?;
+        let what = format!("row {}", id);
+        want_contains(&what, &r, &v(16)?)?;
+        want_contains(&what, &r, &v(19)?)?;
+        let rad = r
+            .rad()
+            .to_exact_num()
+            .map_err(|e| format!("{}: rad {:?}: {:?}", what, r.rad(), e))?;
+        let bound = v(22)?.mul_full_prec(&num(4));
+        if rad > bound {
+            return Err(format!(
+                "{}: TIGHT: rad {:?} > 4*RREF {:?}",
+                what,
+                r.rad(),
+                bound
+            ));
+        }
+    }
+    Ok(())
+}
