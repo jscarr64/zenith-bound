@@ -45,10 +45,12 @@ for d in tests/goldens/slices/*/; do
     pg_require
     runlog_step "$s-$(basename "$g" .py)" -- "$PY" "$g" --check "$tmp/slice-$s-$(basename "$g" .py)" || { echo "goldens-regen: $g FAILED"; rc=1; }
   done
-  entries=$(grep -v -E '^[[:space:]]*(#|$)' "$d/SHA256SUMS")
-  marked=0; grep -q -E '^# EMPTY([: ]|$)' "$d/SHA256SUMS" && marked=1
-  if [ -z "$entries" ]; then
-    [ "$marked" = 1 ] || { echo "goldens-regen: slice $s: SHA256SUMS has neither entries nor a '# EMPTY' marker line"; rc=1; }
+  entries=$(grep -v -E '^[[:space:]]*(#|$)' "$d/SHA256SUMS" || true)   # no entries is a valid state (rc 1): no ERR trap line
+  marked=0; if grep -q -E '^# EMPTY([: ]|$)' "$d/SHA256SUMS"; then marked=1; fi
+  if [ -z "$entries" ] && [ "$marked" = 1 ]; then
+    echo "goldens-regen: slice $s: SHA256SUMS marked '# EMPTY', skipped"
+  elif [ -z "$entries" ]; then
+    echo "goldens-regen: slice $s: SHA256SUMS has neither entries nor a '# EMPTY' marker line"; rc=1
   else
     [ "$marked" = 0 ] || { echo "goldens-regen: slice $s: SHA256SUMS is marked '# EMPTY' but lists entries"; rc=1; }
     bad=$(printf '%s\n' "$entries" | grep -v -E '^[0-9a-f]{64}  [^/[:space:]]+$' | head -3)
@@ -58,6 +60,7 @@ for d in tests/goldens/slices/*/; do
   for f in "$d"*.txt; do
     [ -f "$f" ] || continue
     case "$f" in *_heavy.txt) continue ;; esac   # heavy goldens: .gitignored, pinned outside SHA256SUMS
+    if [ "$marked" = 1 ]; then echo "goldens-regen: slice $s: SHA256SUMS marked '# EMPTY' but has $(basename "$f")"; rc=1; continue; fi
     grep -q -E "^[0-9a-f]{64}  $(basename "$f")\$" "$d/SHA256SUMS" || { echo "goldens-regen: slice $s: $(basename "$f") is not in its SHA256SUMS"; rc=1; }
   done
 done

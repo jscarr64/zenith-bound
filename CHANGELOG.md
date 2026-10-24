@@ -7,6 +7,7 @@
   ~/pop-logs/bin/popguard.sh and exit 3 outside a popslot/poprun memory scope (6G per job, swap 0); hosts without popguard.sh
   run unguarded. New tools/popguard_selftest.sh (8 cases, in the goldens-regen step).
 
+- goldens_regen (2026-10-24): a slice SHA256SUMS holding only '# EMPTY' is skipped cleanly (no ERR trap lines); '# EMPTY' with a *.txt next to it, with entries, or with a malformed line FAILS. goldens_regen_selftest 19 cases. Red: 1200-goldens_regen_selftest, 1200-goldens_regen_selftest-2200915; green: 1201-goldens_regen_selftest
 - full_gate (2026-10-24): gate-selftest now runs tools/mutate_selftest.sh (and requires cargo, git, timeout). Red: 0915-zb-red-gate-skips-mutate-selftest
   (step PASS with a planted break); 0915-zb-red2 FAIL with it; 0917-zb-green-gate-mutate-selftest PASS, 28 cases.
 
