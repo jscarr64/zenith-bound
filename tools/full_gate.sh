@@ -19,7 +19,11 @@
 # no-float rules.
 # mutants runs the mutant-runner self-test, then the WHOLE manifest (tools/mutants/manifest.txt) with a persistent MUTATE_TARGET (default
 # "$CARGO_TARGET_DIR/mutate", inside the one target dir, outside the repo; default or caller-set, it gets the same ownership claim as
-# CARGO_TARGET_DIR via tools/fresh_test_run.sh --claim); any SURVIVED (not in EQUIVALENT.txt) or INVALID mutant fails the step.
+# CARGO_TARGET_DIR via tools/fresh_test_run.sh --claim), one slice at a time through tools/mutate_slice.sh --all (Spence-approved, 2026-10-24),
+# which checks the result lines itself and fails on an INVALID mutant, a survivor with no equivalent entry, a manifest id with no result
+# (INCOMPLETE, ids listed), a slice under its floor, or a slice past its timeout (ids x measured per-mutant budget + setup; the unrun ids are
+# listed). The step's own timeout is `tools/mutate_slice.sh --step-timeout` (sum of the slice timeouts + 600s), not STEP_TIMEOUT; if that
+# cannot be computed the step FAILS (no fallback).
 # toolchain (first step) prints which rustc/cargo run and fails unless both match rust-toolchain.toml's channel (Pop has rustc 1.95 in
 # /usr/bin; a PATH without ~/.cargo/bin first must not build silently with it). Callers: export PATH="$HOME/.cargo/bin:$PATH".
 # shellcheck source=tools/runlog.sh
@@ -53,8 +57,14 @@ export -f require no_hits
 gate_rc=0
 run() { name=$1; shift
   case " ${GATE_STEPS:-$name} " in *" $name "*) ;; *) return 0 ;; esac
-  local tf=() rc; case $name in build-debug|build-release) tf=(--tests) ;; esac   # a test step that runs zero tests fails (runlog_step)
-  echo "start $name $(date +%T)" >> "$T/$tag.rc"; runlog_step "${tf[@]}" "$name" -- timeout "${STEP_TIMEOUT:-20m}" bash -c "$*" > "$T/$tag-$name.log" 2>&1; rc=$?
+  local tf=() rc to=${STEP_TIMEOUT:-20m}; case $name in build-debug|build-release) tf=(--tests) ;; esac   # a test step that runs zero tests fails (runlog_step)
+  echo "start $name $(date +%T)" >> "$T/$tag.rc"
+  if [ "$name" = mutants ]; then   # the mutants step's timeout comes from the slice budgets; no silent fallback to STEP_TIMEOUT
+    to=$(tools/mutate_slice.sh --step-timeout 2>&1 | tail -1)
+    if [[ ! $to =~ ^[0-9]+$ ]]; then echo "mutants: FAIL cannot compute the step timeout (tools/mutate_slice.sh --step-timeout: $to)" > "$T/$tag-$name.log"
+      echo "$name=2" >> "$T/$tag.rc"; gate_rc=1; return 0; fi
+  fi
+  runlog_step "${tf[@]}" "$name" -- timeout "$to" bash -c "$*" > "$T/$tag-$name.log" 2>&1; rc=$?
   echo "$name=$rc" >> "$T/$tag.rc"; [ "$rc" = 0 ] || gate_rc=1; }
 run toolchain "require rustc cargo sed && tools/toolchain_check_selftest.sh && tools/toolchain_check.sh"
 run target-dir "require git && tools/fresh_test_run.sh --claim"
@@ -77,6 +87,6 @@ run goldens-regen "require sha256sum grep cmp && tools/goldens_regen_selftest.sh
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"
-run mutants "require cargo git timeout grep && mt=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:?}/mutate} && CARGO_TARGET_DIR=\$mt tools/fresh_test_run.sh --claim && tools/mutate_selftest.sh && MUTATE_TARGET=\$mt env -u MUTATE_FLOOR_ZERO_OK tools/mutate.sh"
+run mutants "require cargo git timeout grep awk && mt=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:?}/mutate} && CARGO_TARGET_DIR=\$mt tools/fresh_test_run.sh --claim && tools/mutate_selftest.sh && MUTATE_TARGET=\$mt env -u MUTATE_FLOOR_ZERO_OK tools/mutate_slice.sh --all"
 if [ "$gate_rc" = 0 ]; then echo "done" >> "$T/$tag.rc"; else echo "failed" >> "$T/$tag.rc"; fi
 exit "$gate_rc"

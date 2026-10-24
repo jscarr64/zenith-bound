@@ -71,7 +71,7 @@ ck; [ "$(rcof tc-1.99.1 toolchain)" = 0 ] || fail "toolchain step fails on the p
 ck; grep -nE '^run [a-z-]+ .*cargo test[^"]*--no-run' "${BASH_SOURCE[0]%/*}/full_gate.sh" && fail "a gate step builds with cargo test --no-run; poplog counts it as zero tests (use cargo build --tests)"
 # 4. mutants step: MUTATE_TARGET (caller-set or default) gets the same ownership claim as CARGO_TARGET_DIR (Spence, 2026-10-23); the fixture's
 # mutate.sh/mutate_selftest.sh are stubs that pass, so only the claim can fail the step
-mk mu; mkdir -p "$t/mu/tools" "$t/mu-bin"; cp "$root/tools/fresh_test_run.sh" "$root/tools/runlog.sh" "$t/mu/tools/"
+mk mu; mkdir -p "$t/mu/tools" "$t/mu-bin"; cp "$root/tools/fresh_test_run.sh" "$root/tools/runlog.sh" "$root/tools/scratch.sh" "$t/mu/tools/"
 printf '#!/bin/sh\necho stub mutate_selftest.sh\n' > "$t/mu/tools/mutate_selftest.sh"; chmod +x "$t/mu/tools/mutate_selftest.sh"
 # fake tools/mutate.sh: a runner that ALWAYS exits 0 (the fail-open case the gate must not trust). Slices: central (001-a 002-b), s1 (201-x),
 # s2 (empty). FAKE_MUT picks what the run prints: ok | timeout | missing | invalid | survived | floor (floor: central needs 3 kills).
@@ -121,5 +121,5 @@ mcase floor 'FAIL BELOW floor'
 [ -z "$miss" ] || fail "mutants step did not catch: $miss"
 st_done full_gate 82   # WANT: cases this script runs (tools/selftest_cases.sh)
 # the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 from the caller's env (only the selftest fixture may use a 0 floor)
-grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -q 'env -u MUTATE_FLOOR_ZERO_OK tools/mutate\.sh' || fail "mutants step runs tools/mutate.sh without env -u MUTATE_FLOOR_ZERO_OK"
+grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -q 'env -u MUTATE_FLOOR_ZERO_OK tools/mutate_slice\.sh --all' || fail "mutants step runs tools/mutate_slice.sh --all without env -u MUTATE_FLOOR_ZERO_OK"
 echo "full_gate selftest: ok"
