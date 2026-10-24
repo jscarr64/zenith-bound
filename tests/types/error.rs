@@ -199,10 +199,7 @@ fn each_variant_matches_its_own_pattern() -> Result<(), String> {
         ),
         matches!(all()[5], BoundError::Singular { op: "op-sing", .. }),
         matches!(all()[6], BoundError::NotConverged { op: "op-conv", .. }),
-        matches!(
-            all()[7],
-            BoundError::DimensionMismatch { op: "op-dim", .. }
-        ),
+        matches!(all()[7], BoundError::DimensionMismatch { op: "op-dim", .. }),
     ];
     match checks.iter().position(|ok| !ok) {
         None => Ok(()),
