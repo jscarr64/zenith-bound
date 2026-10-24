@@ -171,6 +171,10 @@ fn cmp_exact_diff_rows() -> Result<(), String> {
     // |1 - (-1)| = 2, |-1 - 1| = 2.
     want("2 vs |1+1|", two.cmp_exact_diff(&num(1), &num(-1)), Ordering::Equal)?;
     want("2 vs |-1-1|", two.cmp_exact_diff(&num(-1), &num(1)), Ordering::Equal)?;
+    // Gap of one binade with cancellation: |2 - (2 - 2^-50)| = 2^-50, far below 1/4.
+    let near2 = num(2).sub_full_prec(&pow2(-50)?);
+    want("1/4 vs |2-(2-2^-50)|", mag(TOP, -1)?.cmp_exact_diff(&num(2), &near2), Ordering::Greater)?;
+    want("2^-50 vs |2-(2-2^-50)|", mag(TOP, -49)?.cmp_exact_diff(&near2, &num(2)), Ordering::Equal)?;
     // a == b.
     want("0 vs |5-5|", Mag::zero().cmp_exact_diff(&num(5), &num(5)), Ordering::Equal)?;
     want("2 vs |5-5|", two.cmp_exact_diff(&num(5), &num(5)), Ordering::Greater)?;
@@ -209,6 +213,12 @@ fn cmp_exact_diff_huge_exponent_gap() -> Result<(), String> {
     want("2^1000 vs |deep-2^-400|", m.cmp_exact_diff(&deep, &pow2(-400)?), Ordering::Greater)?;
     // a = 2^1000 + 2^-500, b = 2^-600: |a - b| > 2^1000.
     want("2^1000 vs |deep-2^-600|", m.cmp_exact_diff(&deep, &pow2(-600)?), Ordering::Less)?;
+    // Zero radius against a wide-gap difference (never zero).
+    want("0 vs |a-b|", Mag::zero().cmp_exact_diff(&a, &b), Ordering::Less)?;
+    // |big| just under 2^1000 plus a same-sign small term crosses 2^1000: a = 2^1000 - 2^700, b = -2^800.
+    let under_big = a.sub_full_prec(&pow2(700)?);
+    want("2^1000 vs |(2^1000-2^700)+2^800|", m.cmp_exact_diff(&under_big, &neg(&pow2(800)?)), Ordering::Less)?;
+    want("2^1000 vs |(2^1000-2^700)-2^800|", m.cmp_exact_diff(&under_big, &pow2(800)?), Ordering::Greater)?;
     // The whole zf range apart: decided without an exact subtraction across ~2^32 bits.
     let hi = i64::from(EXPONENT_MAX);
     let lo = i64::from(EXPONENT_MIN);
