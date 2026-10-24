@@ -1,5 +1,5 @@
 //! Error type of zenith-bound (variant set: CONTRACT O11-W; struct form and the two
-//! linear-algebra variants: 2026-10-23 rulings a and b).
+//! linear-algebra variants: 2026-10-23 rulings a and b; DimensionMismatch: S0, 2026-10-24).
 
 use core::fmt;
 
@@ -17,7 +17,8 @@ pub enum BoundError {
         /// A short reason.
         detail: &'static str,
     },
-    /// An argument is invalid (`prec == 0`; a shape mismatch).
+    /// An argument is invalid (`prec == 0`; a container shape that does not fit its data). Two
+    /// operands whose shapes disagree are [`BoundError::DimensionMismatch`].
     InvalidArgument {
         /// The operation that refused.
         op: &'static str,
@@ -60,6 +61,14 @@ pub enum BoundError {
         /// A short reason.
         detail: &'static str,
     },
+    /// Operand shapes disagree (matmul inner dimensions, a non-square matrix where a square one is
+    /// required, a right-hand side of the wrong length; S0, 2026-10-24).
+    DimensionMismatch {
+        /// The operation that refused.
+        op: &'static str,
+        /// A short reason.
+        detail: &'static str,
+    },
 }
 
 impl BoundError {
@@ -73,6 +82,7 @@ impl BoundError {
             BoundError::NotPositiveDefinite { op, .. } => op,
             BoundError::Singular { op, .. } => op,
             BoundError::NotConverged { op, .. } => op,
+            BoundError::DimensionMismatch { op, .. } => op,
         }
     }
 
@@ -86,6 +96,7 @@ impl BoundError {
             BoundError::NotPositiveDefinite { detail, .. } => detail,
             BoundError::Singular { detail, .. } => detail,
             BoundError::NotConverged { detail, .. } => detail,
+            BoundError::DimensionMismatch { detail, .. } => detail,
         }
     }
 
@@ -98,6 +109,7 @@ impl BoundError {
             BoundError::NotPositiveDefinite { .. } => "matrix not positive definite",
             BoundError::Singular { .. } => "matrix singular",
             BoundError::NotConverged { .. } => "iteration did not converge",
+            BoundError::DimensionMismatch { .. } => "dimensions do not match",
         }
     }
 }
