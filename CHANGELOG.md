@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- No /tmp in tools (2026-10-24, Jeff: a reboot wiped /tmp and with it a dependency pin and work dirs): new `tools/scratch.sh`
+  (`zb_scratch`, sourced by runlog.sh) gives the temp parent, `$ZB_SCRATCH` or `$HOME/.cache/zenith-bound/scratch`. full_gate.sh
+  and deep_mag.sh logs (`T`), mutate.sh `MUTATE_TMP`, the fuzz_deep/deep_mag target dirs, runlog.sh, fresh_test_run.sh,
+  goldens_regen.sh, digests.sh and every selftest's mktemp now use it. Only the cross-agent locks /tmp/pop-deep.lock and
+  /tmp/pop-gate.lock stay. New `tools/no_tmp_selftest.sh` (5 cases, in the gate-selftest step) fails on a hardcoded /tmp in a
+  code line of tools/*.sh.
+
 - mutate.sh (2026-10-24): the fixed persistent worktree (`zb-mutate.persist`) now goes under `MUTATE_PERSIST`, by default the parent of
   `MUTATE_TARGET`, instead of `MUTATE_TMP` (default /tmp, wiped by the 10/23 reboot). mutate_selftest gains 2 cases (28): an unwritable
   `MUTATE_TMP` does not matter in persistent mode, with and without `MUTATE_PERSIST`.

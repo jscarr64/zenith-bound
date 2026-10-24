@@ -11,12 +11,12 @@ here="$(cd "$(dirname "$0")" && pwd)"; . "$here/scratch.sh"
 fail() { echo "no-tmp selftest FAIL: $*"; exit 1; }
 t=$(mktemp -d "$(zb_scratch)/no-tmp-selftest.XXXXXX") || fail "mktemp failed"; runlog_on_exit "rm -rf \"$t\""; . "$here/selftest_cases.sh"; st_init "$t"
 scan() { # scan DIR: prints file:line for each code line naming /tmp
-  grep -nE '(^|[ "'"'"'=:(-])/tmp([/ "'"'"'$]|$)' "$1"/*.sh | grep -vE '^[^:]+:[0-9]+: *#' | grep -vE 'pop-(deep|gate)\.lock|/no_tmp_selftest\.sh:'
+  grep -HnE '(^|[ "'"'"'=:(-])/tmp([/ "'"'"'$]|$)' "$1"/*.sh | grep -vE '^[^:]+:[0-9]+: *#' | grep -vE 'pop-(deep|gate)\.lock|/no_tmp_selftest\.sh:'
 }
 ck; hits=$(scan "$here") && fail "tools hardcode /tmp (use \"\$(zb_scratch)\" from tools/scratch.sh):
 $hits"
 mkdir -p "$t/fx"; printf '#!/usr/bin/env bash\n# a comment naming /tmp is fine\nd=$CARGO_TARGET_DIR/tmp/x\n' > "$t/fx/ok.sh"
-ck; scan "$t/fx" > /dev/null && fail "the scan flagged a comment line or a $dir/tmp path"
+ck; scan "$t/fx" > /dev/null && fail "the scan flagged a comment line or a \$dir/tmp path"
 printf 'x=$(mktemp -d /tmp/foo.XXXXXX)\n' > "$t/fx/bad.sh"
 ck; scan "$t/fx" | grep -q '^'"$t"'/fx/bad.sh:1:' || fail "the scan missed a hardcoded /tmp"
 ck; [ "$(ZB_SCRATCH="$t/s" zb_scratch)" = "$t/s" ] && [ -d "$t/s" ] || fail "zb_scratch ignores ZB_SCRATCH or does not create it"
