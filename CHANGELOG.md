@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- full_gate (2026-10-24): gate-selftest now runs tools/mutate_selftest.sh (and requires cargo, git, timeout). Red: 0915-zb-red-gate-skips-mutate-selftest
+  (step PASS with a planted break); 0915-zb-red2 FAIL with it; 0917-zb-green-gate-mutate-selftest PASS, 28 cases.
+
+- full_gate selftest (2026-10-24): its nested gate runs unset `GATE_STEPS`, so `GATE_STEPS=gate-selftest tools/full_gate.sh` no longer
+  fails with "stripped run reported too few steps" (the outer step list leaked into the fixture gates).
+
+- runlog selftest joins the gate (2026-10-24): poplog 729c861 (Rusty) prunes a row only when the pid is gone (ESRCH), so the EPERM
+  pid-1 row now survives and `runlog_selftest.sh` passes all 50 cases; full_gate.sh's gate-selftest step now runs it.
+
+- No /tmp in tools (2026-10-24, Jeff: a reboot wiped /tmp and with it a dependency pin and work dirs): new `tools/scratch.sh`
+  (`zb_scratch`, sourced by runlog.sh) gives the temp parent, `$ZB_SCRATCH` or `$HOME/.cache/zenith-bound/scratch`. full_gate.sh
+  and deep_mag.sh logs (`T`), mutate.sh `MUTATE_TMP`, the fuzz_deep/deep_mag target dirs, runlog.sh, fresh_test_run.sh,
+  goldens_regen.sh, digests.sh and every selftest's mktemp now use it. Only the cross-agent locks /tmp/pop-deep.lock and
+  /tmp/pop-gate.lock stay. New `tools/no_tmp_selftest.sh` (5 cases, in the gate-selftest step) fails on a hardcoded /tmp in a
+  code line of tools/*.sh.
+
+- mutate.sh (2026-10-24): the fixed persistent worktree (`zb-mutate.persist`) now goes under `MUTATE_PERSIST`, by default the parent of
+  `MUTATE_TARGET`, instead of `MUTATE_TMP` (default /tmp, wiped by the 10/23 reboot). mutate_selftest gains 2 cases (28): an unwritable
+  `MUTATE_TMP` does not matter in persistent mode, with and without `MUTATE_PERSIST`.
+
+- runlog selftest (2026-10-24): the other agent's RUNNING row now uses a live `sleep` pid started by the selftest (it used pid 1, and
+  poplog b6e2dcf prunes a row when `kill -0` fails, which for pid 1 is EPERM, so the row was wrongly pruned). A second row with pid 1
+  asserts that a live pid this user cannot signal is kept; it FAILS until poplog prunes only on ESRCH (`poplog.sh:65`, reported to
+  Rusty), so `runlog_selftest.sh` stays out of the gate. The exec scan no longer flags a printf line writing a fixture script. The
+  selftest counts its cases (50).
+
 - Spence nits (2026-10-23): `add_up` gets a gap-65 row (rounds up to TOP+1); the test is renamed `add_up_at_gaps_0_63_64_65_200`
   (still 6 tests in `mag_rows.rs`, test floors stay 379). A mutant floor value of 0 now FAILS BADCOUNT ("must be 1 or more"); only the
   mutate selftest fixture may use 0, via MUTATE_FLOOR_ZERO_OK=1. `tools/mutate_selftest.sh` gains that case (26 cases).

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "${BASH_SOURCE[0]%/*}/scratch.sh"   # zb_scratch: temp files and dirs under $HOME, never the system temp dir
 # zb's thin layer over the shared Pop logger ~/pop-logs/bin/poplog.sh (Rusty's; see ~/pop-logs/README.md; Jeff's rules of 9:42 and 9:59 AM CT
 # 2026-10-23, and 10:33 AM CT: rely on poplog, no workarounds). poplog writes the log (header, steps, counts, heartbeat, footer), owns the
 # canonical RUNNING.tsv row and its lock, tees step output to stdout, joins nested runs to the parent's log (SUB-RUN sections) and fails the
@@ -14,8 +15,8 @@
 # Use, first thing in a script:   . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap JOB "$@"
 #   runlog_step [--tests] NAME -- CMD...     runlog_warn MESSAGE
 # One-shot (verify and test runs): tools/runlog.sh JOB [--tests] -- CMD...
-# Env: RUNLOG_AGENT (default harper), RUNLOG_POPLOG (default ~/pop-logs/bin/poplog.sh); poplog's POPLOG_ROOT, POPLOG_HEARTBEAT, POPLOG_ECHO apply.
-RUNLOG_AGENT=${RUNLOG_AGENT:-harper}
+# Env: RUNLOG_AGENT (else poprun's POPLOG_AGENT, else popslot's POPSLOT_AGENT; none: refuse), RUNLOG_POPLOG (default ~/pop-logs/bin/poplog.sh); poplog's POPLOG_ROOT, POPLOG_HEARTBEAT, POPLOG_ECHO apply.
+RUNLOG_AGENT=${RUNLOG_AGENT:-${POPLOG_AGENT:-${POPSLOT_AGENT:-}}}   # from the caller, never a hardcoded agent (Spence 2026-10-24)
 RUNLOG_POPLOG=${RUNLOG_POPLOG:-$HOME/pop-logs/bin/poplog.sh}
 RUNLOG_ON=""
 RUNLOG_EXIT_CMDS=()
@@ -39,6 +40,7 @@ runlog_wrap() { # runlog_wrap JOB "$@"
     fi
     return 0
   fi
+  [ -n "$RUNLOG_AGENT" ] || { echo "runlog: FAIL no agent for $job: set RUNLOG_AGENT or run under poprun/popslot --agent" >&2; exit 2; }
   if [ ! -f "$RUNLOG_POPLOG" ]; then echo "runlog: FAIL $RUNLOG_POPLOG missing; refusing to run $job without a run log" >&2; exit 2; fi
   # shellcheck source=/dev/null
   . "$RUNLOG_POPLOG" || { echo "runlog: FAIL cannot source $RUNLOG_POPLOG; refusing to run $job without a run log" >&2; exit 2; }
@@ -73,7 +75,7 @@ runlog_step() { # runlog_step [--tests] NAME -- CMD...
     poplog_run_step "$name" -- "$@"; return $?
   fi
   # zb layer: a test step must run at least one test, independently of poplog's own check
-  f=$(mktemp /tmp/zb-runlog-tests.XXXXXX) || return 2
+  f=$(mktemp "$(zb_scratch)"/zb-runlog-tests.XXXXXX) || return 2
   if [ -z "$RUNLOG_ON" ]; then _rl_tee "$f" "$@"; else poplog_run_step "$name" --tests -- _rl_tee "$f" "$@"; fi; rc=$?
   n=$(_rl_ran "$f"); rm -f "$f"
   if [ "$rc" = 0 ] && [ "$n" = 0 ]; then echo "runlog: step $name ran 0 tests: FAIL" >&2; return 1; fi
