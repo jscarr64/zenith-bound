@@ -218,7 +218,9 @@ fn powi_exact_input_within_one_ulp() -> Result<(), String> {
     let mut rng = SplitMix64::new(0x2180_0000_0000_0003);
     let mut checked = 0u32;
     for case in 0..60u32 {
-        let prec = *[24usize, 53, 64, 113].get(usize::try_from(rng.below(4)).map_err(|_| "i")?).ok_or("prec")?;
+        let prec = *[24usize, 53, 64, 113]
+            .get(usize::try_from(rng.below(4)).map_err(|_| "i")?)
+            .ok_or("prec")?;
         let n = 100u64.checked_add(rng.below(900)).ok_or("n")?;
         let e = below(&mut rng, 20)?.checked_sub(10).ok_or("e")?;
         let x = rmid(&mut rng, u64::try_from(prec).map_err(|_| "p")?, e)?;
@@ -226,7 +228,10 @@ fn powi_exact_input_within_one_ulp() -> Result<(), String> {
         for _ in 0..n {
             want = want.mul_full_prec(&x);
         }
-        let res = ok("powi", ok("exact", Ball::exact(x.add_full_prec(&num(0)), prec))?.powi(n, prec))?;
+        let res = ok(
+            "powi",
+            ok("exact", Ball::exact(x.add_full_prec(&num(0)), prec))?.powi(n, prec),
+        )?;
         if !res.is_informative() {
             continue;
         }
@@ -234,7 +239,14 @@ fn powi_exact_input_within_one_ulp() -> Result<(), String> {
         let me = i64::from(res.mid().exponent().ok_or("exp")?);
         let ulp = Mag::half_ulp(me, prec.checked_sub(1).ok_or("p-1")?);
         if res.rad() > &ulp {
-            return Err(format!("case {} prec {} n {}: rad {:?} > one ulp {:?}", case, prec, n, res.rad(), ulp));
+            return Err(format!(
+                "case {} prec {} n {}: rad {:?} > one ulp {:?}",
+                case,
+                prec,
+                n,
+                res.rad(),
+                ulp
+            ));
         }
         checked = checked.checked_add(1).ok_or("c")?;
     }
