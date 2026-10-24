@@ -34,7 +34,11 @@ ck; rm -f "$t/ran"; u="popslot-zbnocap-$$-$RANDOM.scope"; out=$(gr env POPSLOT_S
   [ "$rc" = 3 ] && [ ! -e "$t/ran" ] || fail "uncapped popslot-*.scope accepted (rc $rc): $out"
 # POPGUARD pointing nowhere must not switch the guard off (Spence, 2026-10-24): sandbox HOMEs simulate the two hosts.
 hpg="$t/hpg"; mkdir -p "$hpg/pop-logs/bin"; cp "$PG" "$hpg/pop-logs/bin/popguard.sh"; chmod +x "$hpg/pop-logs/bin/popguard.sh"   # Pop
-hno="$t/hno"; mkdir -p "$hno"                                                                                                         # CI/other host
+hno="$t/hno"; mkdir -p "$hno/.local"                                                                                                  # CI/other host
+# goldlib resolves its oracle venv from HOME, so a bare sandbox HOME has none and exits 1 at the oracle check (not the guard).
+# Stand-in: the sandbox's ~/.local/oracle-venv is a link to the real pinned venv, so the no-guard case's exit code is deterministic (0).
+[ -x "$HOME/.local/oracle-venv/bin/python" ] || fail "oracle venv $HOME/.local/oracle-venv missing: cannot build the no-guard host stand-in"
+ln -s "$HOME/.local/oracle-venv" "$hno/.local/oracle-venv"
 sbx() { HOME="$1" ZB_SCRATCH="$t/scr" "${@:2}"; }; mkdir -p "$t/scr"
 ck; rm -f "$t/ran"; out=$(gr sbx "$hpg" env -u POPSLOT_SCOPE POPGUARD="$t/none"); rc=$?
   [ "$rc" = 2 ] && [ ! -e "$t/ran" ] && printf '%s\n' "$out" | grep -q "REFUSING.*POPGUARD" || fail "Pop host, POPGUARD=/nonexistent: goldens_regen must refuse exit 2 (rc $rc): $out"
@@ -42,8 +46,9 @@ ck; rm -f "$t/ran"; out=$(gr sbx "$hno" env -u POPSLOT_SCOPE -u POPGUARD); rc=$?
   [ "$rc" = 0 ] && [ -e "$t/ran" ] && printf '%s\n' "$out" | grep -q "WARNING.*popguard" || fail "no popguard.sh host: goldens_regen must WARN and run (rc $rc): $out"
 ck; out=$(cd "$repo" && sbx "$hpg" env -u POPSLOT_SCOPE POPGUARD="$t/none" PYTHONNOUSERSITE=1 /usr/bin/python3 scripts/goldlib.py --selftest 2>&1); rc=$?
   [ "$rc" = 2 ] && printf '%s\n' "$out" | grep -q "REFUSING.*POPGUARD" || fail "Pop host, POPGUARD=/nonexistent: goldlib must refuse exit 2 (rc $rc): $out"
-ck; out=$(cd "$repo" && sbx "$hno" env -u POPSLOT_SCOPE -u POPGUARD PYTHONNOUSERSITE=1 /usr/bin/python3 scripts/goldlib.py --selftest 2>&1); rc=$?
-  [ "$rc" != 2 ] && [ "$rc" != 3 ] && printf '%s\n' "$out" | grep -q "WARNING.*popguard" || fail "no popguard.sh host: goldlib must WARN and go on (rc $rc): $out"
+ck; out=$(cd "$repo" && sbx "$hno" env -u POPSLOT_SCOPE -u POPGUARD PYTHONNOUSERSITE=1 "$hno/.local/oracle-venv/bin/python" scripts/goldlib.py --selftest 2>&1); rc=$?
+  [ "$rc" = 0 ] && printf '%s\n' "$out" | grep -q "^goldlib: WARNING: no popguard.sh on this host ($hno/pop-logs/bin/popguard.sh): running WITHOUT the Pop memory guard$" \
+    && printf '%s\n' "$out" | grep -q "^goldlib selftest: ok" || fail "no popguard.sh host: goldlib must WARN and pass its selftest, exit 0 (rc $rc): $out"
 # the selftest itself: on Pop it never skips (a skip inside full_gate would hide a disabled guard); off Pop it skips
 st() { ( unset POPLOG_FILE POPLOG_PID POPLOG_STATE_DIR POPLOG_PROGRESS_FILE POPLOG_RUNNING RUNLOG_INNER RUNLOG_ACTIVE
          RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 "$@" "$here/popguard_selftest.sh" 2>&1 ); }
