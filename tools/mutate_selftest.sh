@@ -59,6 +59,12 @@ run() { MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@"; 
 leftovers() { git -C "$r" worktree list | grep -c 'zb-mutate\.' ; find "$t" -maxdepth 1 \( -name "zb-mutate.*" -o -name "zb-mutate-target.*" \) | wc -l; }
 setm() { cp "$r/$1" "$r/tools/mutants/manifest.txt"; }
 
+# manifest integrity (checked before any mutant runs): an id listed twice, or a patch file that does not exist, FAILS the whole run
+printf 'src/lib.rs:add\t001-add-mul\t001-add-mul.patch\ttoy\nsrc/lib.rs:add\t001-add-mul\t002-add-commute.patch\ttoy\n' > "$r/tools/mutants/manifest.txt"
+out="$(run)" && fail "duplicate manifest id passed: $out"; echo "$out" | grep -c "^mutate: FAIL duplicate manifest id 001-add-mul" > /dev/null || fail "duplicate id: wrong message: $out"
+printf 'src/lib.rs:add\t001-add-mul\t001-add-mul.patch\ttoy\nsrc/lib.rs:add\t006-gone\t006-gone.patch\ttoy\n' > "$r/tools/mutants/manifest.txt"
+out="$(run)" && fail "missing patch file passed: $out"; echo "$out" | grep -c "^mutate: FAIL manifest id 006-gone names missing patch 006-gone.patch" > /dev/null || fail "missing patch: wrong message: $out"
+
 # 0 mutants: a header-only manifest FAILS (Spence review: the gate's mutants step must run at least one mutant)
 printf '# empty\n' > "$r/tools/mutants/manifest.txt"
 out="$(run)" && fail "empty manifest passed (0 mutants proves nothing): $out"; echo "$out" | grep -c "0 mutants ran" > /dev/null || fail "empty manifest: wrong message: $out"

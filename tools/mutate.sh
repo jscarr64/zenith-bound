@@ -36,6 +36,14 @@ while [ $# -gt 0 ]; do
 done
 [ -f "$manifest" ] || { echo "mutate: no manifest at $manifest"; exit 2; }
 rows=$(grep -v -E '^[[:space:]]*(#|$)' "$manifest" || true)
+# manifest integrity, before any mutant runs: every id exactly once, every referenced patch file present
+dups=$(printf '%s\n' "$rows" | cut -f2 | grep -v '^$' | sort | uniq -d)
+if [ -n "$dups" ]; then printf 'mutate: FAIL duplicate manifest id %s\n' $dups; exit 1; fi
+missing=0
+while IFS=$'\t' read -r _ mid mpatch _; do
+  if [ -n "$mpatch" ] && [ ! -f "$(dirname "$manifest")/$mpatch" ]; then echo "mutate: FAIL manifest id $mid names missing patch $mpatch"; missing=1; fi
+done <<< "$rows"
+[ "$missing" = 0 ] || exit 1
 if [ "$list" = 1 ]; then printf '%s\n' "$rows" | cut -f2; exit 0; fi
 
 base=${MUTATE_TMP:-/tmp}; case "$base" in /home/jsc64/MathWorks*|"$repo"*) echo "mutate: MUTATE_TMP must be outside the repo"; exit 2 ;; esac

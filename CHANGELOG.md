@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `tools/mutate.sh` checks the manifest before running any mutant: every mutant id appears exactly once and every patch file a row names exists; otherwise it fails at once (`mutate: FAIL duplicate manifest id ..` / `.. names missing patch ..`). Prompted by the 092-094 id clash between harper/zb-s7-fuzz and spence/zb-l0b, which git only caught as a text conflict. Red-first in `tools/mutate_selftest.sh`.
 - `BallArray` shapes with a zero extent are empty arrays even beside extents whose product would overflow (`[usize::MAX, 2, 0]` was `InvalidArgument`). WR-ND tests: ranks 0..6, empty dims on every axis, overflow at every rank and axis.
 - Container/LA op signature rule frozen (API freeze F8; CONTRACT 15.6): explicit `prec: Precision`, no rounding mode, `BoundResult` return.
 - Allocation failure is `Resource`, never an abort, for storage zenith-bound sizes from caller input (API freeze F7; CONTRACT 15.5). `BallArray::zeros` with a shape too large to allocate returns `Resource`.
