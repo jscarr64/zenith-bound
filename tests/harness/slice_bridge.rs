@@ -9,7 +9,7 @@
 use core::cmp::Ordering;
 
 use zenith_bound::mag::Mag;
-use zenith_float_num::{ExactNum, EXPONENT_MAX, EXPONENT_MIN};
+use zenith_float_num::{ExactNum, RawKind, RawParts, EXPONENT_MAX, EXPONENT_MIN};
 
 use crate::common::rng::SplitMix64;
 
@@ -516,15 +516,190 @@ fn cmp_exact_diff_matches_the_exact_oracle() -> Result<(), String> {
 // ---- pending zenith-float R14 -------------------------------------------------------------------------------------
 
 #[test]
-#[ignore = "pending zenith-float R14 (get_exact_prec and export hooks): 16.S2.6"]
+#[ignore = "pending zenith-float R14 Consts::get_exact_prec: 16.S2.6"]
 fn bridge_constant_bound_pending_r14() -> Result<(), String> {
     Err("pending zenith-float R14: the constant bridge is stubbed (16.S2.6)".into())
 }
 
+/// An `ExactNum` from raw parts: `(-1)^negative * M * 2^(exponent - 64 * words.len())`, `M` little-endian words.
+fn raw(words: &[u64], exponent: i64, negative: bool) -> Result<ExactNum, String> {
+    let all_zero = words.iter().all(|w| *w == 0);
+    let parts = RawParts {
+        kind: if all_zero {
+            RawKind::Zero
+        } else {
+            RawKind::Finite
+        },
+        words,
+        precision: words.len().checked_mul(64).ok_or("prec")?,
+        negative,
+        exponent,
+        inexact: false,
+    };
+    ExactNum::from_raw_parts(&parts)
+        .map_err(|e| format!("from_raw_parts({:x?}, {}): {:?}", words, exponent, e))
+}
+
+/// `Mag` from_exact_num / from_exact_num_lower of `x` are exactly `up` / `lo`, for `x` and `-x`.
+fn want_up_lo(what: &str, x: &ExactNum, up: &Mag, lo: &Mag) -> Result<(), String> {
+    for (sign, v) in [("+", num(0).add_full_prec(x)), ("-", neg(x))] {
+        let (gu, gl) = (Mag::from_exact_num(&v), Mag::from_exact_num_lower(&v));
+        if gu != *up || gl != *lo {
+            return Err(format!(
+                "{}{}: got up {:?} lo {:?}, want {:?} {:?}",
+                sign, what, gu, gl, up, lo
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// 16.S2.6 (R14 RawParts half): `from_exact_num(_lower)` read `as_raw_parts`, `to_exact_num` builds through
+/// `from_raw_parts`. Exponents across ±(2^62−1), multiword mantissas, sticky words, carries and subnormals. The stored
+/// precision is not assumed to round-trip (only `precision == 64 * words.len()`, zf's contract).
 #[test]
-#[ignore = "pending zenith-float R14 (get_exact_prec and export hooks): 16.S2.6"]
-fn bridge_export_round_trip_pending_r14() -> Result<(), String> {
-    Err("pending zenith-float R14: the export bridge is stubbed (16.S2.6)".into())
+fn bridge_export_round_trip() -> Result<(), String> {
+    let (hi, lo) = (EXPONENT_MAX, EXPONENT_MIN);
+    for e in [hi, hi - 1, 1000, 0, -1000, lo + 1, lo] {
+        let w = TOP | 5;
+        // Normal, sticky only in the lowest word: up is one ulp above.
+        want_up_lo(
+            "sticky",
+            &raw(&[1, 0, w], e, false)?,
+            &mag(TOP | 6, e)?,
+            &mag(w, e)?,
+        )?;
+        // Normal, exact in the top word.
+        want_up_lo(
+            "exact",
+            &raw(&[0, 0, w], e, false)?,
+            &mag(w, e)?,
+            &mag(w, e)?,
+        )?;
+        // All ones with a tail: up carries into the next binade (Mag is wider than zf, so even at EXPONENT_MAX).
+        want_up_lo(
+            "carry",
+            &raw(&[1, u64::MAX], e, false)?,
+            &mag(TOP, e + 1)?,
+            &mag(u64::MAX, e)?,
+        )?;
+    }
+    // Subnormals (exponent == EXPONENT_MIN, top bit clear). M = 2^74 in three words: 2^(EMIN - 118) = 0.1b * 2^(EMIN - 117).
+    want_up_lo(
+        "sub 2^74",
+        &raw(&[0, 1 << 10, 0], lo, false)?,
+        &mag(TOP, lo - 117)?,
+        &mag(TOP, lo - 117)?,
+    )?;
+    // M = 2^64 + 3: the window spans two words; the last bit of 3 is sticky. Top bit at 2^(EMIN - 128).
+    want_up_lo(
+        "sub span",
+        &raw(&[3, 1, 0], lo, false)?,
+        &mag(TOP | 2, lo - 127)?,
+        &mag(TOP | 1, lo - 127)?,
+    )?;
+    // M = 1 in one word: 2^(EMIN - 64) = 0.1b * 2^(EMIN - 63).
+    want_up_lo(
+        "sub one",
+        &raw(&[1], lo, false)?,
+        &mag(TOP, lo - 63)?,
+        &mag(TOP, lo - 63)?,
+    )?;
+    // Zero, both signs.
+    want_up_lo("zero", &raw(&[0], 0, true)?, &Mag::zero(), &Mag::zero())?;
+
+    // to_exact_num through from_raw_parts: exact, Finite, positive, exponent kept; normal across the range.
+    for e in [hi, hi - 1, 0, lo + 1, lo] {
+        let m = mag(TOP | 0x1234_5678_9abc_def1, e)?;
+        let x = m
+            .to_exact_num()
+            .map_err(|err| format!("to_exact_num exp {}: {:?}", e, err))?;
+        let p = x.as_raw_parts();
+        if p.kind != RawKind::Finite
+            || p.negative
+            || p.exponent != e
+            || p.precision != p.words.len() * 64
+        {
+            return Err(format!("exp {}: raw parts {:?}", e, p));
+        }
+        want_up_lo("to/from", &x, &m, &m)?;
+    }
+    // Subnormal images: below EXPONENT_MIN the value is exact only while no mantissa bit falls off the 64-bit word.
+    for (mant, e, ok) in [
+        (TOP, lo - 63, true),
+        (0xC000_0000_0000_0000, lo - 62, true),
+        (0xC000_0000_0000_0000, lo - 63, false),
+        (TOP | 1, lo - 1, false),
+        (TOP, lo - 64, false),
+        (TOP, hi + 1, false),
+    ] {
+        let m = mag(mant, e)?;
+        match (m.to_exact_num(), ok) {
+            (Ok(x), true) => {
+                if x.as_raw_parts().exponent != lo {
+                    return Err(format!(
+                        "{:#x}@{}: subnormal exponent {:?}",
+                        mant,
+                        e,
+                        x.as_raw_parts()
+                    ));
+                }
+                want_up_lo("subnormal to/from", &x, &m, &m)?;
+            }
+            (Err(zenith_bound::error::BoundError::Representation { .. }), false) => {}
+            (r, _) => {
+                return Err(format!(
+                    "{:#x}@{}: want ok={}, got {:?}",
+                    mant,
+                    e,
+                    ok,
+                    r.map(|_| ())
+                ))
+            }
+        }
+    }
+    // Random three-word mantissas across the full range (and the subnormal floor): lo <= |x| <= up, up - lo <= 1 ulp.
+    let mut rng = SplitMix64::new(0x5200_0016);
+    for case in 0..3000 {
+        let sub = case % 5 == 0;
+        let mut w = [rng.next_u64(), rng.next_u64(), rng.next_u64()];
+        let e = if sub {
+            if let Some(top) = w.last_mut() {
+                *top >>= 1 + rng.below(63);
+            }
+            lo
+        } else {
+            if let Some(top) = w.last_mut() {
+                *top |= TOP;
+            }
+            let span = u64::try_from(hi).map_err(|_| "hi")?;
+            i64::try_from(rng.below(span)).map_err(|_| "e")? * if case % 2 == 0 { 1 } else { -1 }
+        };
+        let x = raw(&w, e, case % 3 == 0)?;
+        let (up, low) = (Mag::from_exact_num(&x), Mag::from_exact_num_lower(&x));
+        let c_up = up.cmp_exact_num(&x);
+        let c_lo = low.cmp_exact_num(&x);
+        if !matches!(c_up, Some(Ordering::Greater | Ordering::Equal))
+            || !matches!(c_lo, Some(Ordering::Less | Ordering::Equal))
+        {
+            return Err(format!(
+                "case {}: {:x?}@{}: up {:?} {:?}, lo {:?} {:?}",
+                case, w, e, up, c_up, low, c_lo
+            ));
+        }
+        let next = match (low.mant(), low.exp()) {
+            (Some(u64::MAX), Some(le)) => mag(TOP, le + 1)?,
+            (Some(lm), Some(le)) => mag(lm + 1, le)?,
+            _ => return Err(format!("case {}: lo {:?}", case, low)),
+        };
+        if up != low && up != next {
+            return Err(format!(
+                "case {}: up {:?} more than one ulp above lo {:?}",
+                case, up, low
+            ));
+        }
+    }
+    Ok(())
 }
 
 // ---- from_exact_num / from_exact_num_lower / to_exact_num sets and P9 (16.S2.4) ----------------------------------
