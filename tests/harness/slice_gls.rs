@@ -13,12 +13,21 @@ fn gls_gate_text() -> Result<String, String> {
 
 /// The `# rows: N` header value.
 fn header_rows(text: &str) -> Result<usize, String> {
-    let line = text.lines().find_map(|l| l.strip_prefix("# rows: ")).ok_or("no '# rows:' header")?;
-    line.trim().parse::<usize>().map_err(|e| format!("bad '# rows:' header {line:?}: {e}"))
+    let line = text
+        .lines()
+        .find_map(|l| l.strip_prefix("# rows: "))
+        .ok_or("no '# rows:' header")?;
+    line.trim()
+        .parse::<usize>()
+        .map_err(|e| format!("bad '# rows:' header {line:?}: {e}"))
 }
 
 /// Checks every data row against `width(dims, refusal)` and the `# rows:` header; returns the number of rows whose id starts with `cosmo`.
-fn check_rows(text: &str, cosmo_prefix: &str, width: fn(&str, bool) -> Result<usize, String>) -> Result<usize, String> {
+fn check_rows(
+    text: &str,
+    cosmo_prefix: &str,
+    width: fn(&str, bool) -> Result<usize, String>,
+) -> Result<usize, String> {
     let want = header_rows(text)?;
     let mut seen = 0_usize;
     let mut cosmo = 0_usize;
@@ -30,7 +39,10 @@ fn check_rows(text: &str, cosmo_prefix: &str, width: fn(&str, bool) -> Result<us
         let refusal = toks.contains(&"ERR");
         let w = width(dims, refusal)?;
         if toks.len() != w {
-            return Err(format!("{id}: {} fields, want {w} for dims {dims} (refusal {refusal})", toks.len()));
+            return Err(format!(
+                "{id}: {} fields, want {w} for dims {dims} (refusal {refusal})",
+                toks.len()
+            ));
         }
         if id.starts_with(cosmo_prefix) {
             cosmo = cosmo.checked_add(1).ok_or("count overflow")?;
@@ -45,15 +57,28 @@ fn check_rows(text: &str, cosmo_prefix: &str, width: fn(&str, bool) -> Result<us
 
 /// Token count of a GLS row with design m x p: case_id dims X[m*p] S[m*m] y[m], then beta[p] cov[p*p] rss or ERR variant detail.
 fn gls_row_width(dims: &str, refusal: bool) -> Result<usize, String> {
-    let (m_s, p_s) = dims.split_once('x').ok_or_else(|| format!("dims {dims:?} is not mxp"))?;
-    let m = m_s.parse::<usize>().map_err(|e| format!("dims {dims:?}: {e}"))?;
-    let p = p_s.parse::<usize>().map_err(|e| format!("dims {dims:?}: {e}"))?;
+    let (m_s, p_s) = dims
+        .split_once('x')
+        .ok_or_else(|| format!("dims {dims:?} is not mxp"))?;
+    let m = m_s
+        .parse::<usize>()
+        .map_err(|e| format!("dims {dims:?}: {e}"))?;
+    let p = p_s
+        .parse::<usize>()
+        .map_err(|e| format!("dims {dims:?}: {e}"))?;
     let mp = m.checked_mul(p).ok_or("m*p overflows")?;
     let mm = m.checked_mul(m).ok_or("m*m overflows")?;
     let pp = p.checked_mul(p).ok_or("p*p overflows")?;
-    let tail = if refusal { Some(3_usize) } else { p.checked_add(pp).and_then(|v| v.checked_add(1)) };
+    let tail = if refusal {
+        Some(3_usize)
+    } else {
+        p.checked_add(pp).and_then(|v| v.checked_add(1))
+    };
     let parts = [mp, mm, m, tail.ok_or("tail overflows")?];
-    parts.iter().try_fold(2_usize, |acc, v| acc.checked_add(*v)).ok_or_else(|| "row width overflows".to_string())
+    parts
+        .iter()
+        .try_fold(2_usize, |acc, v| acc.checked_add(*v))
+        .ok_or_else(|| "row width overflows".to_string())
 }
 
 #[test]
@@ -80,5 +105,7 @@ fn la4_gls_row_width_rejects_a_short_row() -> Result<(), String> {
 #[ignore = "red: zb::gls not implemented yet (slice LA4); un-ignore when src/gls.rs exports it"]
 fn la4_gls_gate_rows_replay_through_zb() -> Result<(), String> {
     let rows = header_rows(&gls_gate_text()?)?;
-    Err(format!("not implemented: zb::gls API missing (src/gls.rs is an S0 stub); {rows} gate rows waiting"))
+    Err(format!(
+        "not implemented: zb::gls API missing (src/gls.rs is an S0 stub); {rows} gate rows waiting"
+    ))
 }

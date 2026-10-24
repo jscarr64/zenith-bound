@@ -7,18 +7,30 @@ use crate::common::goldens::golden_dir;
 
 /// The LA1 logdet gate file, read at run time from the checkout under test.
 fn logdet_gate_text() -> Result<String, String> {
-    let path = golden_dir().join("slices").join("cholesky").join("la_logdet.txt");
+    let path = golden_dir()
+        .join("slices")
+        .join("cholesky")
+        .join("la_logdet.txt");
     std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))
 }
 
 /// The `# rows: N` header value.
 fn header_rows(text: &str) -> Result<usize, String> {
-    let line = text.lines().find_map(|l| l.strip_prefix("# rows: ")).ok_or("no '# rows:' header")?;
-    line.trim().parse::<usize>().map_err(|e| format!("bad '# rows:' header {line:?}: {e}"))
+    let line = text
+        .lines()
+        .find_map(|l| l.strip_prefix("# rows: "))
+        .ok_or("no '# rows:' header")?;
+    line.trim()
+        .parse::<usize>()
+        .map_err(|e| format!("bad '# rows:' header {line:?}: {e}"))
 }
 
 /// Checks every data row against `width(dims, refusal)` and the `# rows:` header; returns the number of rows whose id starts with `cosmo`.
-fn check_rows(text: &str, cosmo_prefix: &str, width: fn(&str, bool) -> Result<usize, String>) -> Result<usize, String> {
+fn check_rows(
+    text: &str,
+    cosmo_prefix: &str,
+    width: fn(&str, bool) -> Result<usize, String>,
+) -> Result<usize, String> {
     let want = header_rows(text)?;
     let mut seen = 0_usize;
     let mut cosmo = 0_usize;
@@ -30,7 +42,10 @@ fn check_rows(text: &str, cosmo_prefix: &str, width: fn(&str, bool) -> Result<us
         let refusal = toks.contains(&"ERR");
         let w = width(dims, refusal)?;
         if toks.len() != w {
-            return Err(format!("{id}: {} fields, want {w} for dims {dims} (refusal {refusal})", toks.len()));
+            return Err(format!(
+                "{id}: {} fields, want {w} for dims {dims} (refusal {refusal})",
+                toks.len()
+            ));
         }
         if id.starts_with(cosmo_prefix) {
             cosmo = cosmo.checked_add(1).ok_or("count overflow")?;
@@ -45,9 +60,14 @@ fn check_rows(text: &str, cosmo_prefix: &str, width: fn(&str, bool) -> Result<us
 
 /// Token count of a logdet row of order n: case_id n A[n*n], then sign det lo256 hi256 or ERR Singular singular.
 fn logdet_row_width(dims: &str, refusal: bool) -> Result<usize, String> {
-    let n = dims.parse::<usize>().map_err(|e| format!("dims {dims:?}: {e}"))?;
+    let n = dims
+        .parse::<usize>()
+        .map_err(|e| format!("dims {dims:?}: {e}"))?;
     let tail = if refusal { 3_usize } else { 4_usize };
-    n.checked_mul(n).and_then(|nn| nn.checked_add(2)).and_then(|v| v.checked_add(tail)).ok_or_else(|| "row width overflows".to_string())
+    n.checked_mul(n)
+        .and_then(|nn| nn.checked_add(2))
+        .and_then(|v| v.checked_add(tail))
+        .ok_or_else(|| "row width overflows".to_string())
 }
 
 #[test]
