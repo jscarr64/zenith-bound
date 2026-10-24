@@ -85,7 +85,7 @@ ck; tag=mu-foreign; mu env MUTATE_TARGET="$t/mu-foreign" && fail "mutants ran wi
 ck; grep -q SHARED "$t/logs/mu-foreign-mutants.log" || fail "mutants step does not name the SHARED MUTATE_TARGET: $(cat "$t/logs/mu-foreign-mutants.log")"
 ck; tag=mu-default; mu env || fail "mutants step failed on a fresh default MUTATE_TARGET: $(cat "$t/logs/mu-default-mutants.log")"
 ck; [ "$(cat "$t/mu-target/mutate/.worktree-owner" 2> /dev/null)" = "$(cd "$t/mu" && pwd -P)" ] || fail "default MUTATE_TARGET got no owner marker"
-st_done full_gate 77   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done full_gate 78   # WANT: cases this script runs (tools/selftest_cases.sh)
 # the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 from the caller's env (only the selftest fixture may use a 0 floor)
 grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -q 'env -u MUTATE_FLOOR_ZERO_OK tools/mutate\.sh' || fail "mutants step runs tools/mutate.sh without env -u MUTATE_FLOOR_ZERO_OK"
 echo "full_gate selftest: ok"
