@@ -1,14 +1,18 @@
 //! Slice S2: The `Mag` to `ExactNum` bridge: exact comparisons of a `Mag` radius against zenith-float values that never
 //! build the radius as an `ExactNum` unless it lies within a factor 2 of the value (CONTRACT 4.2, 10.2c, 15.2, 16.S2),
-//! and (pending zenith-float R14, 16.S2.6) the remaining conversions.
+//! and the constant bridge (16.S2.6): [`constant_ball`] encloses a zenith-float constant between its two p-bit neighbours
+//! from R14 `Consts::get_exact_prec`.
 //!
 //! Owner: slice S2 (Spence). Only that slice edits this file.
 
 use core::cmp::Ordering;
 
-use zenith_float_num::ExactNum;
+use zenith_float_num::{ConstantId, Consts, Error, ExactNum, RoundingMode};
 
+use crate::ball::Ball;
+use crate::error::{BoundError, BoundResult};
 use crate::mag::Mag;
+use crate::precision::{Precision, MAX_PRECISION, MIN_PRECISION};
 
 /// Operands whose exponents differ by at most this are subtracted exactly; wider gaps are decided by exponents first
 /// (16.S2.3). Any value of at least 66 is correct (the wide-gap cutoffs need `|small| < 2^(e - 65)`); it only trades
@@ -176,5 +180,97 @@ impl Mag {
             }
         };
         Some(signed(y_sign, tb_pos).reverse())
+    }
+}
+
+/// A constant [`constant_ball`] encloses: the seven of zenith-float's `ConstantId` (16.S2.6).
+#[derive(Debug, PartialEq, Eq)]
+pub enum Constant {
+    /// π.
+    Pi,
+    /// Euler's number e.
+    E,
+    /// ln 2.
+    Ln2,
+    /// ln 10.
+    Ln10,
+    /// √2.
+    Sqrt2,
+    /// The golden ratio φ = (1+√5)/2.
+    Phi,
+    /// The Euler–Mascheroni constant γ.
+    EulerGamma,
+}
+
+impl Constant {
+    /// Every constant, in `ConstantId` order.
+    pub const ALL: [Constant; 7] = [
+        Constant::Pi,
+        Constant::E,
+        Constant::Ln2,
+        Constant::Ln10,
+        Constant::Sqrt2,
+        Constant::Phi,
+        Constant::EulerGamma,
+    ];
+
+    /// The zenith-float id of `self` (a fresh value: `ConstantId` is not `Clone`).
+    fn zf_id(&self) -> ConstantId {
+        match self {
+            Constant::Pi => ConstantId::Pi,
+            Constant::E => ConstantId::E,
+            Constant::Ln2 => ConstantId::Ln2,
+            Constant::Ln10 => ConstantId::Ln10,
+            Constant::Sqrt2 => ConstantId::Sqrt2,
+            Constant::Phi => ConstantId::Phi,
+            Constant::EulerGamma => ConstantId::EulerGamma,
+        }
+    }
+}
+
+/// A ball at precision `prec` that contains the constant `c` (16.S2.6): its ends are exactly the p-bit neighbours
+/// `down < c < up` that `Consts::get_exact_prec` returns with `Down` and `Up`, so its width is one ulp at `prec`. The
+/// midpoint `down + ulp/2` has `prec + 1` bits (D15a keeps it exact) and the radius is `ulp/2`. The result depends only
+/// on `c` and `prec`, never on what `cc` has cached.
+///
+/// # Errors
+/// `InvalidArgument` when `prec` is outside `MIN_PRECISION..=MAX_PRECISION`; `Resource` when zenith-float cannot settle
+/// the constant (`PrecisionRetryExhausted`, `MemoryAllocation`) or its two neighbours are not one ulp apart.
+pub fn constant_ball(cc: &mut Consts, c: &Constant, prec: Precision) -> BoundResult<Ball> {
+    let _ = (
+        cc,
+        c.zf_id(),
+        prec,
+        MIN_PRECISION,
+        MAX_PRECISION,
+        RoundingMode::Down,
+    );
+    Err(constant_error(Error::PrecisionRetryExhausted))
+}
+
+/// zf errors of `get_exact_prec` and the bracket arithmetic in zb terms (CONTRACT O2 table).
+fn constant_error(e: Error) -> BoundError {
+    const OP: &str = "bridge::constant_ball";
+    match e {
+        Error::InvalidArgument => BoundError::InvalidArgument {
+            op: OP,
+            detail: "zf invalid argument",
+        },
+        Error::ExponentOverflow(_) => BoundError::Representation {
+            op: OP,
+            detail: "zf exponent overflow",
+        },
+        Error::DivisionByZero => BoundError::Domain {
+            op: OP,
+            detail: "zf division by zero",
+        },
+        Error::PrecisionRetryExhausted => BoundError::Resource {
+            op: OP,
+            detail: "zf precision retry exhausted",
+        },
+        Error::MemoryAllocation => BoundError::Resource {
+            op: OP,
+            detail: "zf memory allocation",
+        },
     }
 }

@@ -4,13 +4,19 @@
 //! CONTRACT 4.2, 10.2c, 15.2 and 16.S2.1 to 16.S2.6 (TEST_PLAN L0a-4, moved here 2026-10-24). Oracles: hand-worked rows
 //! (value in the comment beside each), and for random in-range cases zenith-float's exact `sub_full_prec` plus `abs_cmp`
 //! against the radius converted by `to_exact_num` (in range only; the out-of-range rows are worked by hand).
-//! COVERS: Mag::cmp_exact_num, Mag::cmp_exact_diff, Mag::from_exact_num, Mag::from_exact_num_lower, Mag::to_exact_num
+//! Constant bridge (16.S2.6): tests/goldens/slices/bridge/bridge_consts.txt (scripts/gen_bridge_const_goldens.py, mpmath).
+//! COVERS: Mag::cmp_exact_num, Mag::cmp_exact_diff, Mag::from_exact_num, Mag::from_exact_num_lower, Mag::to_exact_num, constant_ball
 
 use core::cmp::Ordering;
 
+use zenith_bound::ball::Ball;
+use zenith_bound::bridge::{constant_ball, Constant};
+use zenith_bound::error::BoundError;
 use zenith_bound::mag::Mag;
-use zenith_float_num::{ExactNum, RawKind, RawParts, EXPONENT_MAX, EXPONENT_MIN};
+use zenith_bound::MAX_PRECISION;
+use zenith_float_num::{Consts, ExactNum, RawKind, RawParts, EXPONENT_MAX, EXPONENT_MIN};
 
+use crate::common::goldens::golden_dir;
 use crate::common::rng::SplitMix64;
 
 const TOP: u64 = 0x8000_0000_0000_0000;
@@ -513,12 +519,221 @@ fn cmp_exact_diff_matches_the_exact_oracle() -> Result<(), String> {
     Ok(())
 }
 
-// ---- pending zenith-float R14 -------------------------------------------------------------------------------------
+// ---- constant bridge (16.S2.6) -----------------------------------------------------------------------------------
 
+/// One row of tests/goldens/slices/bridge/bridge_consts.txt: `DOWN < c < UP` at `p` bits and `[TLO, THI]` around `c`.
+struct ConstRow {
+    name: String,
+    p: usize,
+    down: ExactNum,
+    up: ExactNum,
+    tlo: ExactNum,
+    thi: ExactNum,
+}
+
+fn constant_of(name: &str) -> Result<Constant, String> {
+    match name {
+        "Pi" => Ok(Constant::Pi),
+        "E" => Ok(Constant::E),
+        "Ln2" => Ok(Constant::Ln2),
+        "Ln10" => Ok(Constant::Ln10),
+        "Sqrt2" => Ok(Constant::Sqrt2),
+        "Phi" => Ok(Constant::Phi),
+        "EulerGamma" => Ok(Constant::EulerGamma),
+        other => Err(format!("unknown constant {}", other)),
+    }
+}
+
+/// `MANT * 2^EXP` (MANT hex) as an exact `ExactNum`.
+fn golden_value(exp: &str, mant: &str) -> Result<ExactNum, String> {
+    let e: i64 = exp.parse().map_err(|_| format!("exp {}", exp))?;
+    let mut words = Vec::new();
+    let mut end = mant.len();
+    while end > 0 {
+        let start = end.checked_sub(16).unwrap_or(0);
+        let chunk = mant.get(start..end).ok_or("mant")?;
+        words.push(u64::from_str_radix(chunk, 16).map_err(|_| format!("mant {}", mant))?);
+        end = start;
+    }
+    // value = M * 2^e; normalise M so the top word's top bit is set (from_raw_parts wants 0.1m...)
+    let lz = words.last().ok_or("empty mant")?.leading_zeros();
+    let back = 64u32.checked_sub(lz).ok_or("lz")?;
+    let mut carry = 0u64;
+    for w in words.iter_mut() {
+        let next = w.checked_shr(back).unwrap_or(0);
+        *w = w.checked_shl(lz).unwrap_or(0) | carry;
+        carry = next;
+    }
+    let bits = i64::try_from(words.len())
+        .ok()
+        .and_then(|n| n.checked_mul(64))
+        .and_then(|n| n.checked_sub(i64::from(lz)))
+        .ok_or("len")?;
+    raw(&words, e.checked_add(bits).ok_or("exp")?, false)
+}
+
+fn const_rows() -> Result<Vec<ConstRow>, String> {
+    let path = golden_dir()
+        .join("slices")
+        .join("bridge")
+        .join("bridge_consts.txt");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {}", path.display(), e))?;
+    let mut rows = Vec::new();
+    for line in text.lines().filter(|l| !l.starts_with('#')) {
+        let f: Vec<&str> = line.split(' ').collect();
+        let [name, p, de, dm, ue, um, le, lm, he, hm] = f.as_slice() else {
+            return Err(format!("bad row {}", line));
+        };
+        rows.push(ConstRow {
+            name: (*name).into(),
+            p: p.parse().map_err(|_| format!("p {}", p))?,
+            down: golden_value(de, dm)?,
+            up: golden_value(ue, um)?,
+            tlo: golden_value(le, lm)?,
+            thi: golden_value(he, hm)?,
+        });
+    }
+    // 7 constants x 20 precisions (scripts/gen_bridge_const_goldens.py PS)
+    if rows.len() != 140 {
+        return Err(format!("{} rows, want 140", rows.len()));
+    }
+    Ok(rows)
+}
+
+fn same(a: &ExactNum, b: &ExactNum) -> bool {
+    a.partial_cmp(b) == Some(Ordering::Equal)
+}
+
+fn at_most(a: &ExactNum, b: &ExactNum) -> bool {
+    matches!(a.partial_cmp(b), Some(Ordering::Less | Ordering::Equal))
+}
+
+fn consts() -> Result<Consts, String> {
+    Consts::new().map_err(|e| format!("Consts::new: {:?}", e))
+}
+
+/// `(mid - rad, mid + rad)` of a ball, exactly.
+fn ends(b: &Ball) -> Result<(ExactNum, ExactNum), String> {
+    let r = b
+        .rad()
+        .to_exact_num()
+        .map_err(|e| format!("rad: {:?}", e))?;
+    let lo = b.mid().sub_full_prec(&r);
+    let hi = b.mid().add_full_prec(&r);
+    if lo.inexact() || hi.inexact() {
+        return Err("ends inexact".into());
+    }
+    Ok((lo, hi))
+}
+
+/// Every golden constant at every golden precision: the ball's ends are exactly DOWN and UP (so it contains
+/// `[TLO, THI]` and the constant), its width is one ulp at p, and its precision is p.
 #[test]
-#[ignore = "pending zenith-float R14 Consts::get_exact_prec: 16.S2.6"]
-fn bridge_constant_bound_pending_r14() -> Result<(), String> {
-    Err("pending zenith-float R14: the constant bridge is stubbed (16.S2.6)".into())
+fn bridge_constant_bound_r14() -> Result<(), String> {
+    let mut cc = consts()?;
+    for row in const_rows()? {
+        let what = format!("{} p={}", row.name, row.p);
+        let c = constant_of(&row.name)?;
+        let b = constant_ball(&mut cc, &c, row.p).map_err(|e| format!("{}: {:?}", what, e))?;
+        if b.prec() != row.p {
+            return Err(format!("{}: prec {}", what, b.prec()));
+        }
+        let (lo, hi) = ends(&b)?;
+        if !same(&lo, &row.down) || !same(&hi, &row.up) {
+            return Err(format!(
+                "{}: ends {:?} {:?}, want {:?} {:?}",
+                what, lo, hi, row.down, row.up
+            ));
+        }
+        if !at_most(&lo, &row.tlo) || !at_most(&row.thi, &hi) {
+            return Err(format!("{}: does not contain [TLO, THI]", what));
+        }
+        // width = one ulp of DOWN's binade at p
+        let e = row.down.exponent().ok_or("exponent")?;
+        let k = e
+            .checked_sub(i64::try_from(row.p).map_err(|_| "p")?)
+            .ok_or("k")?;
+        let w = hi.sub_full_prec(&lo);
+        if !same(&w, &pow2(k)?) {
+            return Err(format!("{}: width {:?}, want 2^{}", what, w, k));
+        }
+    }
+    Ok(())
+}
+
+/// The ball's bits (midpoint raw parts and radius) for each constant at each of `ps`, in the order given.
+fn ball_bits(cc: &mut Consts, order: &[usize], ps: &[usize]) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for &i in order {
+        let c = Constant::ALL.get(i).ok_or("index")?;
+        for &p in ps {
+            let b = constant_ball(cc, c, p).map_err(|e| format!("{:?} p={}: {:?}", c, p, e))?;
+            let m = b.mid().as_raw_parts();
+            out.push(format!(
+                "{:?} {} {:?} {:x?} {} {} {} {:?} {}",
+                c,
+                p,
+                m.kind,
+                m.words,
+                m.precision,
+                m.negative,
+                m.exponent,
+                b.rad(),
+                b.prec()
+            ));
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// Bit-identical results whatever the call order and whatever `Consts` has cached (a fresh cache, a reversed order,
+/// a cache warmed at a higher precision, a second call on the same cache).
+#[test]
+fn bridge_constant_bound_deterministic() -> Result<(), String> {
+    let ps = [1, 2, 53, 64, 65, 200, 1000];
+    let fwd = [0, 1, 2, 3, 4, 5, 6];
+    let rev = [6, 5, 4, 3, 2, 1, 0];
+    let a = ball_bits(&mut consts()?, &fwd, &ps)?;
+    let mut warm = consts()?;
+    let _ = ball_bits(&mut warm, &rev, &[4096])?;
+    let b = ball_bits(&mut warm, &rev, &ps)?;
+    let c = ball_bits(&mut warm, &fwd, &ps)?;
+    let mut ps_rev = ps;
+    ps_rev.reverse();
+    let d = ball_bits(&mut consts()?, &rev, &ps_rev)?;
+    for (name, other) in [
+        ("warm reversed", &b),
+        ("warm again", &c),
+        ("fresh reversed", &d),
+    ] {
+        if *other != a {
+            return Err(format!(
+                "{}: results differ from the fresh forward run",
+                name
+            ));
+        }
+    }
+    if a.len() != 49 {
+        return Err(format!("{} balls, want 49", a.len()));
+    }
+    Ok(())
+}
+
+/// `prec` outside `MIN_PRECISION..=MAX_PRECISION` is a zb `InvalidArgument`, for every constant.
+#[test]
+fn bridge_constant_bound_invalid_prec() -> Result<(), String> {
+    let mut cc = consts()?;
+    let over = MAX_PRECISION.checked_add(1).ok_or("max")?;
+    for c in &Constant::ALL {
+        for p in [0, over, usize::MAX] {
+            match constant_ball(&mut cc, c, p) {
+                Err(BoundError::InvalidArgument { .. }) => {}
+                other => return Err(format!("{:?} p={}: {:?}", c, p, other.map(|b| b.prec()))),
+            }
+        }
+    }
+    Ok(())
 }
 
 /// An `ExactNum` from raw parts: `(-1)^negative * M * 2^(exponent - 64 * words.len())`, `M` little-endian words.
