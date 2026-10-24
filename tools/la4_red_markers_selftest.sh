@@ -12,7 +12,7 @@ t=$(mktemp -d "$(zb_scratch)/la4-red-selftest.XXXXXX") || fail "mktemp failed"; 
 # fx NAME LA4_STATUS_LINE OTHER_STATUS_LINE [MARKER_TEXT...]: a fixture tree with docs/CONTRACT.md and one test file per marker
 fx() {
   local d="$t/$1" i=0; mkdir -p "$d/docs" "$d/tests/harness"
-  printf '## Slices\n### Slice LA3 (`src/qr.rs`)\n%s\n### Slice LA4 (`src/gls.rs`)\n%s\n### Slice LA5\n_Empty._\n' "$3" "$2" > "$d/docs/CONTRACT.md"
+  printf '## Slices\n### Slice LA2\n- **LA2.3** lu rows.\n### Slice LA3 (`src/qr.rs`)\n%s\n### Slice LA4 (`src/gls.rs`)\n%s\n- **LA4.1** gls rows.\n- **LA4.2** logdet rows; see also LA4.7 (prose mention only).\n### Slice LA5\n_Empty._\n' "$3" "$2" > "$d/docs/CONTRACT.md"
   shift 3
   for m in "$@"; do i=$((i + 1)); printf '#[test]\n#[ignore = "%s"]\nfn t%s() {}\n' "$m" "$i" > "$d/tests/harness/t$i.rs"; done
 }
@@ -29,6 +29,10 @@ fx donebold '**Status: DONE**' '_Empty._' "$G2"; ck; [ "$(run donebold)" = 1 ] |
 fx donegreen 'Status: done' '_Empty._'; ck; [ "$(run donegreen)" = 0 ] || fail "LA4 done with no markers failed: $(cat "$t/out")"
 fx otherdone '_Empty._' 'Status: done' "$G1"; ck; [ "$(run otherdone)" = 0 ] || fail "LA3 done tripped the LA4 check: $(cat "$t/out")"
 fx otherslice 'Status: done' '_Empty._' 'red: not implemented: zb lu (CONTRACT LA2.3: lu rows)'; ck; [ "$(run otherslice)" = 0 ] || fail "an LA2 marker blocked LA4 done: $(cat "$t/out")"
+# Spence (2026-10-24): every CONTRACT id a marker names must exist as a **<id>** entry in docs/CONTRACT.md (a prose mention is not an entry)
+fx noentry '_Empty._' '_Empty._' 'red: not implemented: zb::gls (CONTRACT LA4.9: gls rows)'; ck; [ "$(run noentry)" = 1 ] || fail "a marker naming a CONTRACT id with no entry passed"
+ck; grep -q 'LA4.9 has no entry in docs/CONTRACT.md' "$t/out" || fail "missing entry not named: $(cat "$t/out")"
+fx prose '_Empty._' '_Empty._' 'red: not implemented: zb::gls (CONTRACT LA4.7: gls rows)'; ck; [ "$(run prose)" = 1 ] || fail "a prose-only mention counted as a CONTRACT entry"
 mkdir -p "$t/nocontract/tests"; ck; [ "$(run nocontract)" = 2 ] || fail "missing CONTRACT.md not a setup error"
-st_done la4_red_markers 12   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done la4_red_markers 15   # WANT: cases this script runs (tools/selftest_cases.sh)
 echo "la4_red_markers selftest: ok"
