@@ -21,8 +21,8 @@ ck; "${fe[@]}" T="$t/logs" PATH="$t/bin" "$t/bin/bash" "$root/tools/full_gate.sh
 ck; grep -q '^failed$' "$t/logs/stripped.rc" || fail "stripped run did not finish with 'failed': $(cat "$t/stripped.out")"
 ck; grep -q '^done$' "$t/logs/stripped.rc" && fail "stripped run wrote 'done' although steps failed"
 steps=$(sed -n 's/^\([a-z0-9-]*\)=[0-9]*$/\1/p' "$t/logs/stripped.rc")
-ck; [ "$(echo "$steps" | wc -w)" -eq 24 ] || fail "stripped run reported $(echo "$steps" | wc -w) steps, want exactly 24 (bump this with every tools/full_gate.sh step): $steps"
-for need in gen-la-guard la4-red-markers; do ck; echo "$steps" | grep -qx "$need" || fail "gate step $need missing from tools/full_gate.sh"; done
+ck; [ "$(echo "$steps" | wc -w)" -eq 25 ] || fail "stripped run reported $(echo "$steps" | wc -w) steps, want exactly 25 (bump this with every tools/full_gate.sh step): $steps"
+for need in gen-la-guard gen-la-heavy la4-red-markers; do ck; echo "$steps" | grep -qx "$need" || fail "gate step $need missing from tools/full_gate.sh"; done
 for s in $steps; do
   ck; [ "$(rcof stripped "$s")" != 0 ] || fail "step $s PASSED with its tools missing (vacuous pass)"
 done
@@ -85,7 +85,7 @@ ck; tag=mu-foreign; mu env MUTATE_TARGET="$t/mu-foreign" && fail "mutants ran wi
 ck; grep -q SHARED "$t/logs/mu-foreign-mutants.log" || fail "mutants step does not name the SHARED MUTATE_TARGET: $(cat "$t/logs/mu-foreign-mutants.log")"
 ck; tag=mu-default; mu env || fail "mutants step failed on a fresh default MUTATE_TARGET: $(cat "$t/logs/mu-default-mutants.log")"
 ck; [ "$(cat "$t/mu-target/mutate/.worktree-owner" 2> /dev/null)" = "$(cd "$t/mu" && pwd -P)" ] || fail "default MUTATE_TARGET got no owner marker"
-st_done full_gate 76   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done full_gate 77   # WANT: cases this script runs (tools/selftest_cases.sh)
 # the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 from the caller's env (only the selftest fixture may use a 0 floor)
 grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -q 'env -u MUTATE_FLOOR_ZERO_OK tools/mutate\.sh' || fail "mutants step runs tools/mutate.sh without env -u MUTATE_FLOOR_ZERO_OK"
 echo "full_gate selftest: ok"
