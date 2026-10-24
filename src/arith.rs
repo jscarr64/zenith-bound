@@ -16,6 +16,7 @@ use crate::error::{BoundError, BoundResult};
 use crate::mag::Mag;
 use crate::policy::DomainPolicy;
 use crate::precision::{Precision, MAX_PRECISION, MIN_PRECISION};
+use crate::tri::Tri;
 
 /// Every Ball midpoint rounds to nearest, ties to even (CONTRACT 15.1, O19).
 const MID_RM: RoundingMode = RoundingMode::ToEven;
@@ -303,6 +304,141 @@ impl Ball {
             .max(Mag::from_exact_num(&mid.sub_full_prec(&lo)));
         Ball::from_mid_rad(mid, rad, prec)
     }
+}
+
+impl Ball {
+    /// `|m ± r|` (CONTRACT 15.1, O14-W, 16.S1.10): `round(|m|) ± (r + ε)` when the ball does not straddle 0 (`|m| ≥ r`,
+    /// decided exactly); otherwise the endpoint ball `[0, |m| + r]` with the `Mag` sum rounded up (`add_up`).
+    ///
+    /// # Errors
+    /// `InvalidArgument` when `prec` is outside `MIN_PRECISION..=MAX_PRECISION`.
+    pub fn abs(self, prec: Precision) -> BoundResult<Ball> {
+        const OP: &str = "Ball::abs";
+        check_prec(OP, prec)?;
+        let (m, r, _) = self.into_parts();
+        match cmp_abs_rad(&m, &r) {
+            Some(Ordering::Greater | Ordering::Equal) => {
+                finish(OP, round_to(&m.abs(), prec), r, prec, false)
+            }
+            Some(Ordering::Less) | None => {
+                let u = Mag::from_exact_num(&m).add_up(&r);
+                endpoint_ball(OP, u, prec)
+            }
+        }
+    }
+
+    /// `(m ± r) · 2^k = round(m · 2^k) ± (r · 2^k + ε)` (CONTRACT 15.1, O14-W, 16.S1.10). The midpoint is exact unless
+    /// it over- or underflows or has more than `prec` bits; the radius exponent is checked (overflow is `Infinity`,
+    /// underflow the smallest positive `Mag`).
+    ///
+    /// # Errors
+    /// `InvalidArgument` when `prec` is outside `MIN_PRECISION..=MAX_PRECISION`. A midpoint overflow is `Ok(all reals)`.
+    pub fn mul_2exp(self, k: i64, prec: Precision) -> BoundResult<Ball> {
+        const OP: &str = "Ball::mul_2exp";
+        check_prec(OP, prec)?;
+        let (m, r, _) = self.into_parts();
+        finish(
+            OP,
+            m.ldexp(k, prec, MID_RM),
+            mag_mul_2exp_up(&r, k),
+            prec,
+            false,
+        )
+    }
+
+    /// `self < other` decided by exact endpoint comparison (CONTRACT 15.2, D14, 16.S1.11).
+    pub fn lt(&self, other: &Ball) -> Tri {
+        match gaps(self, other) {
+            Some((Ordering::Less, _)) => Tri::True,
+            Some((_, Ordering::Greater)) => Tri::False,
+            Some((Ordering::Equal, Ordering::Equal)) => Tri::False,
+            Some((Ordering::Equal | Ordering::Greater, Ordering::Equal | Ordering::Less))
+            | None => Tri::Unknown,
+        }
+    }
+
+    /// `self ≤ other` decided by exact endpoint comparison (CONTRACT 15.2, D14, 16.S1.11).
+    pub fn le(&self, other: &Ball) -> Tri {
+        match gaps(self, other) {
+            Some((Ordering::Less | Ordering::Equal, _)) => Tri::True,
+            Some((Ordering::Greater, Ordering::Greater)) => Tri::False,
+            Some((Ordering::Greater, Ordering::Equal | Ordering::Less)) | None => Tri::Unknown,
+        }
+    }
+
+    /// `self > other`, i.e. `other < self` (CONTRACT 15.2, 16.S1.11).
+    pub fn gt(&self, other: &Ball) -> Tri {
+        other.lt(self)
+    }
+
+    /// `self ≥ other`, i.e. `other ≤ self` (CONTRACT 15.2, 16.S1.11).
+    pub fn ge(&self, other: &Ball) -> Tri {
+        other.le(self)
+    }
+
+    /// Value equality: `True` only for two exact equal points, `False` for disjoint balls (CONTRACT 15.2, 16.S1.11).
+    pub fn eq(&self, other: &Ball) -> Tri {
+        match gaps(self, other) {
+            Some((Ordering::Equal, Ordering::Equal)) => Tri::True,
+            Some((Ordering::Less, _) | (_, Ordering::Greater)) => Tri::False,
+            Some((Ordering::Equal | Ordering::Greater, Ordering::Equal | Ordering::Less))
+            | None => Tri::Unknown,
+        }
+    }
+
+    /// The negation of [`Self::eq`] (CONTRACT 15.2, 16.S1.11).
+    pub fn ne(&self, other: &Ball) -> Tri {
+        match self.eq(other) {
+            Tri::True => Tri::False,
+            Tri::False => Tri::True,
+            Tri::Unknown => Tri::Unknown,
+        }
+    }
+
+    /// Whether the two closed balls share a point (CONTRACT 15.2, O20, 16.S1.11); an `Infinity` radius overlaps
+    /// everything.
+    pub fn overlaps(&self, other: &Ball) -> Tri {
+        if self.rad().is_infinity() || other.rad().is_infinity() {
+            return Tri::True;
+        }
+        match gaps(self, other) {
+            Some((Ordering::Less, _) | (_, Ordering::Greater)) => Tri::False,
+            Some((Ordering::Equal | Ordering::Greater, Ordering::Equal | Ordering::Less)) => {
+                Tri::True
+            }
+            None => Tri::Unknown,
+        }
+    }
+}
+
+/// The one comparison primitive (CONTRACT 15.2): with `D = m1 − m2` and `R = r1 + r2` computed exactly, the signs of
+/// `D + R` (`hi(a) − lo(b)`) and `D − R` (`lo(a) − hi(b)`). `None` (any doubt) for an `Infinity` radius, a radius
+/// outside zenith-float's range, or a difference zenith-float cannot hold.
+fn gaps(a: &Ball, b: &Ball) -> Option<(Ordering, Ordering)> {
+    let (ra, rb) = (a.rad().to_exact_num().ok()?, b.rad().to_exact_num().ok()?);
+    let d = a.mid().sub_full_prec(b.mid());
+    let rr = ra.add_full_prec(&rb);
+    let zero = ExactNum::from(0i64);
+    let hi = d.add_full_prec(&rr).partial_cmp(&zero)?;
+    let lo = d.sub_full_prec(&rr).partial_cmp(&zero)?;
+    Some((hi, lo))
+}
+
+/// `r · 2^k` rounded up with a checked exponent: exact while the exponent fits, `Infinity` on overflow and the smallest
+/// positive `Mag` on underflow (CONTRACT 15.1, 3.2, 3.3).
+fn mag_mul_2exp_up(r: &Mag, k: i64) -> Mag {
+    if r.is_zero() {
+        return Mag::zero();
+    }
+    let (Some(mant), Some(e)) = (r.mant(), r.exp()) else {
+        return Mag::infinity();
+    };
+    let shifted = match e.checked_add(k) {
+        Some(ne) => Mag::finite(mant, ne),
+        None if k < 0 => Mag::finite(HALF_MANT, i64::MIN),
+        None => return Mag::infinity(),
+    };
+    shifted.unwrap_or_else(|_| Mag::infinity())
 }
 
 /// A lower bound on `min |m ± r|` at `wp` bits: 0 when the ball reaches 0, else `|m| - r` rounded toward 0.

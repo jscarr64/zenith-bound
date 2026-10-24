@@ -1350,3 +1350,252 @@ fn powi_exact_input_within_one_ulp() -> Result<(), String> {
     }
     Ok(())
 }
+
+// ---- abs, mul_2exp, Tri comparisons (CONTRACT 15.1, 15.2, O14-W, 16.S1.10, 16.S1.11) -------------------------------
+
+fn want_tri(what: &str, got: Tri, want: Tri) -> Result<(), String> {
+    if got != want {
+        return Err(format!("{}: got {:?}, want {:?}", what, got, want));
+    }
+    Ok(())
+}
+
+#[test]
+fn abs_rows() -> Result<(), String> {
+    let b = ok("abs -3", pt(-3, 64)?.abs(64))?;
+    want_exact("abs -3", &b, &num(3), &Mag::zero())?;
+    let b = ok("abs 3", pt(3, 64)?.abs(64))?;
+    want_exact("abs 3", &b, &num(3), &Mag::zero())?;
+    let b = ok("abs -3±1", ball(num(-3), mag(TOP, 1)?, 64)?.abs(64))?;
+    want_exact("abs -3±1", &b, &num(3), &mag(TOP, 1)?)?;
+    // Touching 0: [-2, 0] maps to [0, 2] = 1 ± 1, exactly.
+    let b = ok("abs -1±1", ball(num(-1), mag(TOP, 1)?, 64)?.abs(64))?;
+    want_exact("abs -1±1", &b, &num(1), &mag(TOP, 1)?)?;
+    // Straddling: [-3, 1] maps to [0, 3] = 1.5 ± 1.5.
+    let b = ok("abs -1±2", ball(num(-1), mag(TOP, 2)?, 64)?.abs(64))?;
+    want_exact("abs -1±2", &b, &dy(3, -1)?, &mag(0xC000_0000_0000_0000, 1)?)?;
+    let b = ok("abs 1±2", ball(num(1), mag(TOP, 2)?, 64)?.abs(64))?;
+    want_exact("abs 1±2", &b, &dy(3, -1)?, &mag(0xC000_0000_0000_0000, 1)?)?;
+    let b = ok("abs 0±1", ball(num(0), mag(TOP, 1)?, 64)?.abs(64))?;
+    want_exact("abs 0±1", &b, &dy(1, -1)?, &mag(TOP, 0)?)?;
+    let b = ok("abs -0", ok("-0", Ball::exact(-num(0), 64))?.abs(64))?;
+    if b.mid().is_negative() || !b.is_exact() {
+        return Err(format!("abs -0: got {:?}", b));
+    }
+    want_all_reals("abs all reals", ok("ar", Ball::all_reals(64))?.abs(64))?;
+    want_invalid("abs prec 0", pt(-3, 64)?.abs(0))?;
+    // The midpoint is rounded to the requested prec and the radius absorbs it.
+    let x = || num(-1).sub_full_prec(&pow2(64).unwrap_or_else(|_| num(0)));
+    let b = ok("abs round", ok("x", Ball::exact(x(), 128))?.abs(2))?;
+    want_contains("abs round", &b, &x().abs())?;
+    if b.is_exact() {
+        return Err(format!("abs round: want a rounded midpoint, got {:?}", b));
+    }
+    // Endpoints and midpoint of random balls map inside.
+    let mut rng = SplitMix64::new(0x5b1_ab5);
+    for &e in EXPS.iter().cycle().take(200) {
+        let seed = rng.next_u64();
+        let mk = || near_ball(&mut SplitMix64::new(seed), e, 64);
+        let got = ok("abs rand", mk()?.abs(64))?;
+        let b0 = mk()?;
+        want_contains("abs rand mid", &got, &absn(b0.mid()))?;
+        if let Ok(rn) = b0.rad().to_exact_num() {
+            want_contains("abs rand hi", &got, &b0.mid().add_full_prec(&rn).abs())?;
+            want_contains("abs rand lo", &got, &b0.mid().sub_full_prec(&rn).abs())?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn mul_2exp_rows() -> Result<(), String> {
+    let three = || ball(num(3), mag(TOP, 1).unwrap_or_else(|_| Mag::zero()), 64);
+    let b = ok("3±1 << 5", three()?.mul_2exp(5, 64))?;
+    want_exact("3±1 << 5", &b, &num(96), &mag(TOP, 6)?)?;
+    let b = ok("3±1 >> 5", three()?.mul_2exp(-5, 64))?;
+    want_exact("3±1 >> 5", &b, &dy(3, -5)?, &mag(TOP, -4)?)?;
+    let b = ok("3±1 << 0", three()?.mul_2exp(0, 64))?;
+    want_exact("3±1 << 0", &b, &num(3), &mag(TOP, 1)?)?;
+    // i64 shifts beyond zenith-float's range: overflow is all reals, underflow is enclosed (never a silent flush).
+    want_all_reals("1 << MAX", pt(1, 64)?.mul_2exp(EXPONENT_MAX, 64))?;
+    want_all_reals("3±1 << i64::MAX", three()?.mul_2exp(i64::MAX, 64))?;
+    let k = EXPONENT_MIN.checked_sub(1000).ok_or("k")?;
+    let b = ok("1 >> past MIN", pt(1, 64)?.mul_2exp(k, 64))?;
+    if b.is_exact() || b.contains(&num(0)) != Tri::True {
+        return Err(format!(
+            "1 >> past MIN: want an inexact ball around 0, got {:?}",
+            b
+        ));
+    }
+    // The radius alone: exact while the Mag exponent fits, the smallest Mag below that.
+    let b = ok(
+        "0±1 >> 2^40",
+        ball(num(0), mag(TOP, 1)?, 64)?.mul_2exp(-(1 << 40), 64),
+    )?;
+    want_exact("0±1 >> 2^40", &b, &num(0), &mag(TOP, 1 - (1 << 40))?)?;
+    let b = ok(
+        "0±1 >> MIN",
+        ball(num(0), mag(TOP, 1)?, 64)?.mul_2exp(i64::MIN, 64),
+    )?;
+    want_exact("0±1 >> MIN", &b, &num(0), &mag(TOP, i64::MIN + 1)?)?;
+    let b = ok(
+        "0±2^-6 >> MIN",
+        ball(num(0), mag(TOP, -5)?, 64)?.mul_2exp(i64::MIN, 64),
+    )?;
+    want_exact("0±2^-6 >> MIN", &b, &num(0), &mag(TOP, i64::MIN)?)?;
+    let b = ok(
+        "0±1 << MAX",
+        ball(num(0), mag(TOP, 1)?, 64)?.mul_2exp(i64::MAX, 64),
+    )?;
+    if b.is_informative() {
+        return Err(format!("0±1 << MAX: want Infinity radius, got {:?}", b));
+    }
+    let b = ok(
+        "0±max << 1",
+        ball(num(0), mag(TOP, i64::MAX)?, 64)?.mul_2exp(1, 64),
+    )?;
+    if b.is_informative() {
+        return Err(format!("0±max << 1: want Infinity radius, got {:?}", b));
+    }
+    let b = ok("0 >> 1", pt(0, 64)?.mul_2exp(-1, 64))?;
+    want_exact("0 >> 1", &b, &num(0), &Mag::zero())?;
+    want_all_reals(
+        "all reals << 3",
+        ok("ar", Ball::all_reals(64))?.mul_2exp(3, 64),
+    )?;
+    want_invalid("mul_2exp prec 0", pt(3, 64)?.mul_2exp(1, 0))?;
+    // The midpoint is rounded to the requested prec.
+    let x = || num(1).add_full_prec(&pow2(64).unwrap_or_else(|_| num(0)));
+    let b = ok("round", ok("x", Ball::exact(x(), 128))?.mul_2exp(1, 2))?;
+    want_contains("round", &b, &x().mul_full_prec(&num(2)))?;
+    Ok(())
+}
+
+/// `lo ± r` and `hi ± r` style helper: `v ± 2^(k)` with `k` the Mag exponent minus 1.
+fn bl(v: i64, rad_exp: i64) -> Result<Ball, String> {
+    ball(num(v), mag(TOP, rad_exp)?, 64)
+}
+
+#[test]
+fn tri_compare_rows() -> Result<(), String> {
+    use Tri::{False as F, True as T, Unknown as U};
+    // (name, a, b, lt, le, gt, ge, eq, ne, overlaps)
+    let rows: [(&str, Ball, Ball, [Tri; 7]); 11] = [
+        (
+            "touching [0,2] [2,4]",
+            bl(1, 1)?,
+            bl(3, 1)?,
+            [U, T, U, U, U, U, T],
+        ),
+        (
+            "touching [2,4] [0,2]",
+            bl(3, 1)?,
+            bl(1, 1)?,
+            [U, U, U, T, U, U, T],
+        ),
+        (
+            "disjoint [0,2] [4,6]",
+            bl(1, 1)?,
+            bl(5, 1)?,
+            [T, T, F, F, F, T, F],
+        ),
+        (
+            "disjoint [4,6] [0,2]",
+            bl(5, 1)?,
+            bl(1, 1)?,
+            [F, F, T, T, F, T, F],
+        ),
+        (
+            "exact 3 vs 3",
+            pt(3, 64)?,
+            pt(3, 64)?,
+            [F, T, F, T, T, F, T],
+        ),
+        (
+            "exact 3 vs 4",
+            pt(3, 64)?,
+            pt(4, 64)?,
+            [T, T, F, F, F, T, F],
+        ),
+        (
+            "[0,2] vs edge point 2",
+            bl(1, 1)?,
+            pt(2, 64)?,
+            [U, T, U, U, U, U, T],
+        ),
+        (
+            "edge point 0 vs [0,2]",
+            pt(0, 64)?,
+            bl(1, 1)?,
+            [U, T, U, U, U, U, T],
+        ),
+        (
+            "interior point 1",
+            bl(1, 1)?,
+            pt(1, 64)?,
+            [U, U, U, U, U, U, T],
+        ),
+        (
+            "nested [0,2] [0.5,1.5]",
+            bl(1, 1)?,
+            bl(1, 0)?,
+            [U, U, U, U, U, U, T],
+        ),
+        (
+            "prec ignored",
+            pt(3, 2)?,
+            pt(3, 4096)?,
+            [F, T, F, T, T, F, T],
+        ),
+    ];
+    for (name, a, b, w) in rows.iter() {
+        let [lt, le, gt, ge, eq, ne, ov] = w;
+        want_tri(&format!("{} lt", name), a.lt(b), clone_tri(lt))?;
+        want_tri(&format!("{} le", name), a.le(b), clone_tri(le))?;
+        want_tri(&format!("{} gt", name), a.gt(b), clone_tri(gt))?;
+        want_tri(&format!("{} ge", name), a.ge(b), clone_tri(ge))?;
+        want_tri(&format!("{} eq", name), a.eq(b), clone_tri(eq))?;
+        want_tri(&format!("{} ne", name), a.ne(b), clone_tri(ne))?;
+        want_tri(&format!("{} overlaps", name), a.overlaps(b), clone_tri(ov))?;
+    }
+    // Any comparison with an Infinity radius is Unknown, even a ball against itself; it overlaps everything.
+    let ar = ok("ar", Ball::all_reals(64))?;
+    let p = pt(3, 64)?;
+    for (n, a, b) in [("ar ar", &ar, &ar), ("ar p", &ar, &p), ("p ar", &p, &ar)] {
+        for (op, t) in [
+            ("lt", a.lt(b)),
+            ("le", a.le(b)),
+            ("gt", a.gt(b)),
+            ("ge", a.ge(b)),
+            ("eq", a.eq(b)),
+            ("ne", a.ne(b)),
+        ] {
+            want_tri(&format!("{} {}", n, op), t, U)?;
+        }
+        want_tri(&format!("{} overlaps", n), a.overlaps(b), T)?;
+    }
+    // A gap far below every radius and midpoint is still decided exactly.
+    let tiny = ok("tiny", Ball::exact(pow2(-(1 << 20))?, 64))?;
+    want_tri("0 lt tiny", pt(0, 64)?.lt(&tiny), T)?;
+    want_tri("tiny gt 0", tiny.gt(&pt(0, 64)?), T)?;
+    let near = ball(pow2(-(1 << 20))?, mag(TOP, 1 - (1 << 20))?, 64)?;
+    want_tri("0 le [0, 2^-2^20+1]", pt(0, 64)?.le(&near), T)?;
+    want_tri("0 lt [0, 2^-2^20+1]", pt(0, 64)?.lt(&near), U)?;
+    Ok(())
+}
+
+fn clone_tri(t: &Tri) -> Tri {
+    match t {
+        Tri::True => Tri::True,
+        Tri::False => Tri::False,
+        Tri::Unknown => Tri::Unknown,
+    }
+}
+
+fn absn(x: &ExactNum) -> ExactNum {
+    if x.is_negative() {
+        num(0).sub_full_prec(x)
+    } else {
+        num(0).add_full_prec(x)
+    }
+}
