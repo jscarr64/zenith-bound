@@ -1,0 +1,12 @@
+diff --git a/src/cball.rs b/src/cball.rs
+--- a/src/cball.rs
++++ b/src/cball.rs
+@@ -98,7 +98,7 @@
+ 
+     /// `|a|` as a real ball: `Ball::hypot(re, im)` as is (16.CB.6).
+     pub fn abs(self, prec: Precision) -> BoundResult<Ball> {
+-        self.re.hypot(&self.im, prec)
++        self.re.add(&self.im, prec)
+     }
+ 
+     /// 16.CB.5. Not implemented: each part is used twice, which needs S1's borrowing `sqr` (SHA pending).
