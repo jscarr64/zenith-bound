@@ -1,0 +1,13 @@
+diff --git a/src/arith.rs b/src/arith.rs
+index 50bf6cd..238edac 100644
+--- a/src/arith.rs
++++ b/src/arith.rs
+@@ -277,7 +277,7 @@ impl Ball {
+         check_prec(OP, prec)?;
+         let (m, r, _) = self.into_parts();
+         let rad = r.add_up(other.rad());
+-        finish(OP, m.hypot(other.mid(), prec, MID_RM), rad, prec, false)
++        finish(OP, m.hypot(other.mid(), prec, RoundingMode::ToZero), rad, prec, false)
+     }
+ }
+ 
