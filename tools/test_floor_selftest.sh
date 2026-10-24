@@ -7,7 +7,7 @@
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap test_floor_selftest "$@"   # run log (tools/runlog.sh)
 runlog_detach_children
 set -u
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/test-floor-selftest.XXXXXX)" || { echo "mktemp failed"; exit 2; }; runlog_on_exit "rm -rf \"$t\""
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "$(zb_scratch)"/test-floor-selftest.XXXXXX)" || { echo "mktemp failed"; exit 2; }; runlog_on_exit "rm -rf \"$t\""
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }
 printf '# fixture\nbuild-debug\t30\n' > "$t/floor.txt"
 # Every chk() and the CRLF call are one case each; the count is asserted at the end (Paul: a selftest must not read ok with 0 cases).

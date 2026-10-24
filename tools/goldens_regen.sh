@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Golden regeneration gate (TEST_PLAN section 9): the goldlib self-test, then every generator with `--check DIR` into a fresh temp dir
-# under /tmp (byte-compared with tests/goldens), then `sha256sum -c tests/goldens/SHA256SUMS`. Uses the oracle venv ~/.local/oracle-venv/bin/python (scripts/goldlib.py require_oracle). No network.
+# under $(zb_scratch) (byte-compared with tests/goldens), then `sha256sum -c tests/goldens/SHA256SUMS`. Uses the oracle venv ~/.local/oracle-venv/bin/python (scripts/goldlib.py require_oracle). No network.
 # Nothing under the repo is written. To add a generator, add a line to the GENERATORS list.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap goldens_regen "$@"   # run log (tools/runlog.sh)
@@ -15,7 +15,7 @@ GENERATORS="scripts/gen_goldens.py scripts/gen_ball_goldens.py scripts/gen_ball_
 # stdout generators (no --check): name and committed file
 STDOUT_GENERATORS="scripts/gen_review_goldens.py:mag_ops_review.txt"
 cd "$root" || exit 2
-tmp=$(mktemp -d /tmp/zb-goldens-regen.XXXXXX); runlog_on_exit "rm -rf \"$tmp\""
+tmp=$(mktemp -d "$(zb_scratch)"/zb-goldens-regen.XXXXXX); runlog_on_exit "rm -rf \"$tmp\""
 rc=0
 runlog_step goldlib-selftest -- "$PY" scripts/goldlib.py --selftest || rc=1
 for g in $GENERATORS; do

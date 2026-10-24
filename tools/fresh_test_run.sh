@@ -11,7 +11,7 @@ set -u
 # One target dir per worktree (Paul, 2026-10-23): CARGO_TARGET_DIR must be set; the first worktree to use it writes its path to
 # $CARGO_TARGET_DIR/.worktree-owner, and any other worktree on that dir fails (SHARED). Only an empty or missing dir is claimed;
 # a non-empty dir with no marker fails (UNMARKED). The worktree is the git top level of the cwd.
-[ -n "${CARGO_TARGET_DIR:-}" ] || { echo "fresh_test_run: FAIL CARGO_TARGET_DIR is unset (one target dir per worktree: /tmp/target-<agent>-<worktree>)"; exit 1; }
+[ -n "${CARGO_TARGET_DIR:-}" ] || { echo "fresh_test_run: FAIL CARGO_TARGET_DIR is unset (one target dir per worktree: $HOME/<agent>-work/target-<agent>-<worktree>)"; exit 1; }
 wt=$(git rev-parse --show-toplevel 2> /dev/null) && wt=$(cd "$wt" && pwd -P) || { echo "fresh_test_run: FAIL $(pwd) is not inside a git worktree"; exit 1; }
 mkdir -p "$CARGO_TARGET_DIR" && td=$(cd "$CARGO_TARGET_DIR" && pwd -P) || { echo "fresh_test_run: FAIL cannot create target dir $CARGO_TARGET_DIR"; exit 1; }
 mk=$td/.worktree-owner
@@ -25,7 +25,7 @@ else
   printf '%s\n' "$wt" > "$mk" || { echo "fresh_test_run: FAIL cannot write $mk"; exit 1; }
 fi
 [ "$1" = --claim ] && { echo "fresh_test_run: target dir $td belongs to worktree $wt"; exit 0; }
-out=$(mktemp /tmp/zb-fresh.XXXXXX) || exit 2
+out=$(mktemp "$(zb_scratch)"/zb-fresh.XXXXXX) || exit 2
 "$@" 2>&1 | tee "$out"; rc=${PIPESTATUS[0]}
 bad=0 n=0
 while IFS= read -r p; do

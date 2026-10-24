@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Self-test for tools/mutate.sh: a tiny fixture crate (a toy function and a toy suite) is generated under $TMPDIR (default /tmp) at run time as its own git repo.
+# Self-test for tools/mutate.sh: a tiny fixture crate (a toy function and a toy suite) is generated under $(zb_scratch) at run time as its own git repo.
 # Proves the runner KILLS a real mutant, reports a surviving mutant as SURVIVED (exit nonzero), accepts it only when documented as
 # equivalent, flags a non-building mutant and a non-applying patch as INVALID, counts a timeout as a kill, FAILS with 0 mutants,
 # and ALWAYS removes its worktree. The repo under test is never touched.
@@ -7,7 +7,7 @@
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap mutate_selftest "$@"   # run log (tools/runlog.sh)
 runlog_detach_children
 set -u
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "${TMPDIR:-/tmp}/mutate-selftest.XXXXXX")"; runlog_on_exit "rm -rf \"$t\""
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "$(zb_scratch)"/mutate-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }
 r="$t/fix"; mkdir -p "$r/src" "$r/tests" "$r/tools/mutants"; cd "$r" || exit 1
 git init -q . && git config user.email a@b && git config user.name t
@@ -38,6 +38,8 @@ fn small_works() {
     assert!(!is_small(10));
 }
 RS
+printf 'Cargo.lock\n' > .gitignore   # as in zenith-bound: the lock is ignored, so a worktree of HEAD has none
+cargo generate-lockfile --offline -q || exit 1
 git add -A; git commit -qm fixture
 mk() { # mk <name> <sed-expr>: a patch made by editing src/lib.rs, then reverting
   sed -i "$2" src/lib.rs; git diff > "tools/mutants/$1.patch"; git checkout -q src/lib.rs
@@ -111,6 +113,13 @@ echo "$out" | grep -c "^SURVIVED 002-add-commute" > /dev/null || fail "persisten
 [ -e "$t/zb-mutate.persist" ] && fail "persistent target: fixed worktree left behind"
 MUTATE_TARGET="relative/dir" run >/dev/null 2>&1 && fail "relative MUTATE_TARGET accepted"
 MUTATE_TARGET="$r/target" run >/dev/null 2>&1 && fail "MUTATE_TARGET inside the repo accepted"
+# the fixed persistent worktree lives beside the persistent target (or under MUTATE_PERSIST), never under MUTATE_TMP, whose default was
+# /tmp (wiped on reboot): an unwritable MUTATE_TMP must not matter in persistent mode
+ro="$t/ro"; mkdir -p "$ro"; chmod 555 "$ro"; setm m.killed
+out="$(MUTATE_TMP="$ro" MUTATE_PERSIST="$t/pp" MUTATE_TARGET="$pt" run 2>&1)" || fail "MUTATE_PERSIST: worktree not placed under it: $out"
+[ -d "$t/pp" ] && [ ! -e "$t/pp/zb-mutate.persist" ] || fail "MUTATE_PERSIST: dir missing or worktree left behind"
+out="$(MUTATE_TMP="$ro" MUTATE_TARGET="$pt" run 2>&1)" || fail "persistent worktree not placed beside MUTATE_TARGET: $out"
+chmod 755 "$ro"
 rm -rf "$pt"
 
 # mutate.sh tests the COMMITTED HEAD, so a dirty tree would test code other than what is on disk (2102-zb-mut180: SURVIVED because the
@@ -141,8 +150,28 @@ out="$(MZERO= run)" && fail "a 0 mutant floor without MUTATE_FLOOR_ZERO_OK passe
 echo "$out" | grep -q "^mutate: FAIL BADCOUNT.*must be 1 or more" || fail "0 floor: wrong message: $out"
 printf '# empty\n' > "$r/tools/mutants/manifest.txt"; cm
 out="$(MFLOOR="$t/f.at" run)" && fail "0 mutants with a floor passed: $out"; echo "$out" | grep -c "0 mutants ran" > /dev/null || fail "0 mutants: wrong message: $out"
+# 0934-zb-slice-a-full-gate3: Cargo.lock is gitignored, so the mutant worktree had none; every cargo call re-resolved the git dependency
+# over the network (DNS retries per mutant: the 20m budget ran out) and a resolve error in the test run (rc 101) was counted as KILLED.
+# mutate.sh must copy the repo's Cargo.lock into the worktree, run cargo --offline --locked, and call only a real test failure a kill.
+realcargo=$(command -v cargo); sh="$t/shim"; mkdir -p "$sh"
+cat > "$sh/cargo" <<SHIM
+#!/usr/bin/env bash
+l=nolock; [ -f Cargo.lock ] && cmp -s Cargo.lock "$r/Cargo.lock" && l=samelock
+printf '%s|%s\n' "\$l" "\$*" >> "$t/shim.log"
+case " \$* " in *" --no-run "*) ;; *" test "*) if [ "\${SHIM_NETFAIL:-}" = 1 ]; then echo "error: failed to get \\\`x\\\` as a dependency: Could not resolve host: index.crates.io"; exit 101; fi ;; esac
+exec "$realcargo" "\$@"
+SHIM
+chmod +x "$sh/cargo"; setm m.killed; : > "$t/shim.log"
+out="$(PATH="$sh:$PATH" run)" || fail "lock/offline: killable mutant not accepted: $out"
+grep -q . "$t/shim.log" || fail "lock/offline: cargo shim never ran"
+grep -v '^samelock|.*--offline.*--locked\|^samelock|.*--locked.*--offline' "$t/shim.log" | grep -q . && fail "lock/offline: a cargo call without the repo Cargo.lock or without --offline --locked: $(cat "$t/shim.log")"
+out="$(SHIM_NETFAIL=1 PATH="$sh:$PATH" run)" && fail "a test run that failed before any test ran was accepted: $out"
+echo "$out" | grep -q "^INVALID 001-add-mul: suite run failed without a test failure" || fail "netfail: wrong report: $out"
+echo "$out" | grep -q "^KILLED" && fail "netfail: counted as KILLED: $out"
+mv "$r/Cargo.lock" "$t/lock.bak"; out="$(run)" && fail "missing repo Cargo.lock passed: $out"
+echo "$out" | grep -q "^mutate: FAIL NOLOCK" || fail "no lock: wrong message: $out"; mv "$t/lock.bak" "$r/Cargo.lock"
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-want_cases=26; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+want_cases=31; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
 [ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
 echo "mutate selftest: ok ($ncases cases)"
