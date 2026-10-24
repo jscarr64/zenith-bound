@@ -38,8 +38,7 @@ fn small_works() {
     assert!(!is_small(10));
 }
 RS
-printf 'Cargo.lock\n' > .gitignore   # as in zenith-bound: the lock is ignored, so a worktree of HEAD has none
-cargo generate-lockfile --offline -q || exit 1
+printf '/Cargo.lock\n/target\n' > .gitignore   # mutate.sh runs `cargo fetch` in the repo, which writes Cargo.lock
 git add -A; git commit -qm fixture
 mk() { # mk <name> <sed-expr>: a patch made by editing src/lib.rs, then reverting
   sed -i "$2" src/lib.rs; git diff > "tools/mutants/$1.patch"; git checkout -q src/lib.rs
@@ -152,7 +151,8 @@ printf '# empty\n' > "$r/tools/mutants/manifest.txt"; cm
 out="$(MFLOOR="$t/f.at" run)" && fail "0 mutants with a floor passed: $out"; echo "$out" | grep -c "0 mutants ran" > /dev/null || fail "0 mutants: wrong message: $out"
 # 0934-zb-slice-a-full-gate3: Cargo.lock is gitignored, so the mutant worktree had none; every cargo call re-resolved the git dependency
 # over the network (DNS retries per mutant: the 20m budget ran out) and a resolve error in the test run (rc 101) was counted as KILLED.
-# mutate.sh must copy the repo's Cargo.lock into the worktree, run cargo --offline --locked, and call only a real test failure a kill.
+# mutate.sh must copy the repo's Cargo.lock into the worktree, run cargo --offline --frozen, and call only a real test failure a kill.
+lockok() { [ "$(grep -c '|fetch$' "$1")" = 1 ] && ! grep -vE '^samelock\|(fetch$|.*--offline.*--frozen)' "$1" | grep -q .; }
 realcargo=$(command -v cargo); sh="$t/shim"; mkdir -p "$sh"
 cat > "$sh/cargo" <<SHIM
 #!/usr/bin/env bash
@@ -164,14 +164,23 @@ SHIM
 chmod +x "$sh/cargo"; setm m.killed; : > "$t/shim.log"
 out="$(PATH="$sh:$PATH" run)" || fail "lock/offline: killable mutant not accepted: $out"
 grep -q . "$t/shim.log" || fail "lock/offline: cargo shim never ran"
-grep -v '^samelock|.*--offline.*--locked\|^samelock|.*--locked.*--offline' "$t/shim.log" | grep -q . && fail "lock/offline: a cargo call without the repo Cargo.lock or without --offline --locked: $(cat "$t/shim.log")"
+lockok "$t/shim.log" || fail "lock/offline: a cargo call without the repo Cargo.lock or without --offline --frozen: $(cat "$t/shim.log")"
+# Spence (820f061 block): the allow-list let any number of online fetches through. A second fetch line must fail the check.
+printf 'x\n' >> "$t/cases"; { cat "$t/shim.log"; echo 'samelock|fetch'; } > "$t/shim2.log"
+lockok "$t/shim2.log" && fail "lock/offline: a log with two fetch lines was accepted"
 out="$(SHIM_NETFAIL=1 PATH="$sh:$PATH" run)" && fail "a test run that failed before any test ran was accepted: $out"
 echo "$out" | grep -q "^INVALID 001-add-mul: suite run failed without a test failure" || fail "netfail: wrong report: $out"
 echo "$out" | grep -q "^KILLED" && fail "netfail: counted as KILLED: $out"
-mv "$r/Cargo.lock" "$t/lock.bak"; out="$(run)" && fail "missing repo Cargo.lock passed: $out"
-echo "$out" | grep -q "^mutate: FAIL NOLOCK" || fail "no lock: wrong message: $out"; mv "$t/lock.bak" "$r/Cargo.lock"
+# Paul (2026-10-24): a dependency fetch failure must never count as KILLED. mutate.sh fetches once up front (FAIL FETCH, exit 2, no
+# mutant runs) and builds/tests every mutant with --offline --frozen. The fixture's unfetchable git dependency is a missing local repo.
+setm m.killed; cp "$r/Cargo.toml" "$t/Cargo.toml.keep"
+printf 'nofetch = { git = "file://%s/no-such-repo" }\n' "$t" >> "$r/Cargo.toml"; cm
+out="$(run)" && fail "an unfetchable dependency passed: $out"
+echo "$out" | grep -q "^mutate: FAIL FETCH" || fail "fetch failure: no FAIL FETCH line: $out"
+echo "$out" | grep -q "^KILLED" && fail "fetch failure was counted as KILLED: $out"
+cp "$t/Cargo.toml.keep" "$r/Cargo.toml"; cm
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-want_cases=31; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+want_cases=32; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
 [ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
 echo "mutate selftest: ok ($ncases cases)"

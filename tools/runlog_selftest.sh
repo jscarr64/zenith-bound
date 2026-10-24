@@ -151,6 +151,17 @@ ck; grep -q 'RUNLOG_SELFTEST' "$t/pnm.out" || fail "refused plain run does not n
 # zb's own 0-tests=FAIL rule holds without poplog too (plain mode), and a real test count passes
 ck; RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 RUNLOG_POPLOG=/nonexistent bash "$here/runlog.sh" plain0 --tests -- bash -c 'echo "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"' > "$t/p0.out" 2>&1 && fail "plain-mode zero-test step passed"
 ck; RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 RUNLOG_POPLOG=/nonexistent bash "$here/runlog.sh" plain1 --tests -- bash -c 'echo "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"' > "$t/p1.out" 2>&1 || fail "plain-mode passing test step failed: $(cat "$t/p1.out")"
-st_done runlog 50   # WANT: cases this script runs (tools/selftest_cases.sh)
+# Spence (2026-10-24): his test_floor_selftest log landed under pop-logs/harper/. The agent comes from the caller
+# (RUNLOG_AGENT, else poprun's POPLOG_AGENT, else popslot's POPSLOT_AGENT); with none, runlog refuses (no hardcoded default).
+printf '#!/usr/bin/env bash\n. "$RUNLOG_LIB"; runlog_wrap agent-job "$@"\necho agent-ran\n' > "$t/agent.sh"
+( unset RUNLOG_AGENT POPSLOT_AGENT; POPLOG_AGENT=spence bash "$t/agent.sh" ) > "$t/a1" 2>&1
+ck; find "$POPLOG_ROOT/spence" -name '*-agent-job.log' 2>/dev/null | grep -q . || fail "POPLOG_AGENT=spence: no log under spence/: $(cat "$t/a1")"
+rm -rf "$POPLOG_ROOT/spence"; ( unset RUNLOG_AGENT POPLOG_AGENT; POPSLOT_AGENT=spence bash "$t/agent.sh" ) > "$t/a2" 2>&1
+ck; find "$POPLOG_ROOT/spence" -name '*-agent-job.log' 2>/dev/null | grep -q . || fail "POPSLOT_AGENT=spence: no log under spence/: $(cat "$t/a2")"
+( unset RUNLOG_AGENT POPLOG_AGENT POPSLOT_AGENT; bash "$t/agent.sh" ) > "$t/a3" 2>&1; rc=$?
+ck; [ "$rc" != 0 ] || fail "no agent given: runlog ran anyway: $(cat "$t/a3")"
+ck; grep -q "agent-ran" "$t/a3" && fail "no agent given: the script body ran"
+ck; [ ! -e "$POPLOG_ROOT/harper" ] || fail "a log was written under harper/ without the caller naming harper"
+st_done runlog 55   # WANT: cases this script runs (tools/selftest_cases.sh)
 echo "runlog selftest: ok"
 )
