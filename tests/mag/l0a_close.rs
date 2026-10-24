@@ -11,7 +11,7 @@ use zenith_float_num::{ExactNum, RoundingMode};
 const TOP: u64 = 1 << 63;
 const ONES: u64 = u64::MAX;
 // 2^63 * sqrt(2), the correctly rounded-up 64-bit mantissa (mpmath 1.3.0, 200 digits)
-const SQRT2_UP: u64 = 0xB504_F333_F9DE_6486; // RED: off by one ulp
+const SQRT2_UP: u64 = 0xB504_F333_F9DE_6485;
 const SQRT2_LOWER: u64 = 0xB504_F333_F9DE_6484;
 
 fn fin(mant: u64, exp: i64) -> Result<Mag, String> {
@@ -43,7 +43,7 @@ fn l0a2_sqrt_of_even_powers_of_two_is_exact() -> Result<(), String> {
     for k in [-1000_i64, -64, -1, 0, 1, 2, 63, 1000, 1 << 40] {
         let twok = k.checked_mul(2).ok_or("2k overflow")?;
         let x = fin(TOP, twok.checked_add(1).ok_or("exp overflow")?)?;
-        let want = fin(TOP | 1, k.checked_add(1).ok_or("exp overflow")?)?;
+        let want = fin(TOP, k.checked_add(1).ok_or("exp overflow")?)?;
         same(&format!("sqrt_up(2^{})", twok), &x.sqrt_up(), &want)?;
         same(&format!("sqrt_lower(2^{})", twok), &x.sqrt_lower(), &want)?;
     }
@@ -68,7 +68,7 @@ fn l0a2_all_ones_mantissas_match_the_model() -> Result<(), String> {
         let b = MagV::Finite { exp: 3, mant: ONES };
         let ma = from_magv(&a)?;
         let mb = from_magv(&b)?;
-        model(&format!("sqrt_up(ONES@{})", e), &ma.sqrt_up(), direct::sqrt_up(&b))?; // RED: model fed the other operand
+        model(&format!("sqrt_up(ONES@{})", e), &ma.sqrt_up(), direct::sqrt_up(&a))?;
         model(&format!("sqrt_lower(ONES@{})", e), &ma.sqrt_lower(), direct::sqrt_lower(&a))?;
         model(&format!("mul_up(ONES@{}, ONES@3)", e), &ma.mul_up(&mb), direct::mul_up(&a, &b))?;
         model(&format!("mul_lower(ONES@{}, ONES@3)", e), &ma.mul_lower(&mb), direct::mul_lower(&a, &b))?;
@@ -84,7 +84,7 @@ fn l0a2_add_carry_at_i64_max() -> Result<(), String> {
     }
     let a = fin(ONES, i64::MAX - 1)?;
     let b = fin(TOP, i64::MAX - 64)?;
-    same("ONES@MAX-1 + TOP@MAX-64", &a.add_up(&b), &fin(TOP, i64::MAX - 1)?) // RED
+    same("ONES@MAX-1 + TOP@MAX-64", &a.add_up(&b), &fin(TOP, i64::MAX)?)
 }
 
 // ---------------------------------------------------------------- L0a-3: W1 translation and monotonicity
@@ -119,7 +119,7 @@ fn l0a3_w1_translation_bit_for_bit() -> Result<(), String> {
             for b in g.iter() {
                 let bk = shift(b, k)?;
                 let b2 = shift(b, k.checked_neg().ok_or("neg")?)?;
-                same("mul_up W1", &ak.mul_up(&b), &shift(&a.mul_up(b), k.checked_add(1).ok_or("k")?)?)?; // RED
+                same("mul_up W1", &ak.mul_up(&b), &shift(&a.mul_up(b), k)?)?;
                 same("mul_lower W1", &ak.mul_lower(&b), &shift(&a.mul_lower(b), k)?)?;
                 same("div_up W1", &ak.div_up(&b2), &shift(&shift(&a.div_up(b), k)?, k)?)?;
                 same("div_lower W1", &ak.div_lower(&b2), &shift(&shift(&a.div_lower(b), k)?, k)?)?;
@@ -140,7 +140,7 @@ fn l0a3_monotone_in_each_argument() -> Result<(), String> {
     for (i, a1) in g.iter().enumerate() {
         for a2 in g.iter().skip(i) {
             for b in g.iter() {
-                if a1.add_up(b) < a2.add_up(b) /* RED: reversed */ || a1.mul_up(b) > a2.mul_up(b) {
+                if a1.add_up(b) > a2.add_up(b) || a1.mul_up(b) > a2.mul_up(b) {
                     return Err(format!("add_up/mul_up not monotone at {:?} <= {:?}, b {:?}", a1, a2, b));
                 }
                 if b.mant().is_some_and(|m| m != 0) {
@@ -197,7 +197,7 @@ fn l0a4_p9_from_exact_num_encloses_abs() -> Result<(), String> {
                 let up = exact(&Mag::from_exact_num(&sx))?;
                 let lo = exact(&Mag::from_exact_num_lower(&sx))?;
                 nonneg(&format!("from_exact_num >= |x| (e {}, tail {}, neg {})", e, tail, neg), &up.sub(&x, P, RoundingMode::ToEven))?;
-                nonneg(&format!("|x| >= from_exact_num_lower (e {}, tail {}, neg {})", e, tail, neg), &lo.sub(&x, P, RoundingMode::ToEven))?;
+                nonneg(&format!("|x| >= from_exact_num_lower (e {}, tail {}, neg {})", e, tail, neg), &x.sub(&lo, P, RoundingMode::ToEven))?;
             }
         }
     }
@@ -211,7 +211,7 @@ fn l0a6_second_operand_matters() -> Result<(), String> {
     // the golden runner once fed the first operand twice; these rows differ only in the second operand
     let a = fin(TOP, 1)?;
     let b = fin(0xC000_0000_0000_0000, 1)?;
-    if a.mul_up(&a) != a.mul_up(&b) /* RED */ || a.add_up(&a) == a.add_up(&b) || a.div_up(&a) == a.div_up(&b) {
+    if a.mul_up(&a) == a.mul_up(&b) || a.add_up(&a) == a.add_up(&b) || a.div_up(&a) == a.div_up(&b) {
         return Err("an op ignored its second operand".into());
     }
     Ok(())
@@ -227,7 +227,7 @@ fn l0a6_round_down_overflow_rows() -> Result<(), String> {
         if r.is_infinity() {
             return Err(format!("{} rounded down to Infinity", what));
         }
-        same(what, &r, &fin(TOP, i64::MAX)?)?; // RED
+        same(what, &r, &big)?;
     }
     if !big.mul_up(&two).is_infinity() {
         return Err("mul_up(MAX, 2) must overflow to Infinity".into());
