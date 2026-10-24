@@ -12,7 +12,13 @@
   one per suite, fresh MUTATE_TARGET) had a max of 14s per mutant and ~1s setup; 1520-zb-mutq-merge-full-gate ran 184 mutants in 4m19s.
   BUDGET_S = 60 (14s x ~4), SETUP_S = 300. mutate.sh gains --slices, --slice SLICE and a `TIME <id> <s>s` line per mutant.
   full_gate_selftest has 82 cases (+10: timeout, missing results, INVALID, unexplained survivor, below floor, each against a runner that
-  always exits 0). Note: origin/spence/zb-s1 (fba8ec9) has a different tools/mutate_slice.sh (SLICE [ID_REGEX]); reconcile on merge.
+  always exits 0). Spence chose this mutate_slice.sh over fba8ec9's; its ID_REGEX is folded in:
+  `mutate_slice.sh SLICE ID_REGEX` runs only the matching ids, prints `PARTIAL run (ID_REGEX=...): floor/completeness not checked` and
+  never a full-pass line; a regex matching no id fails; `--all` rejects a regex, so full_gate never runs partial.
+- mutate_slice per-mutant timeout 60s (measured max 14s for 178-U-underflow-zero in harper/2026-10-24/1644-zb-mslice-measure, x ~4):
+  each id runs as `mutate.sh --slice S --only ID` under that limit; a mutant past it prints `TIMEOUT <id>` and the slice fails (the slice
+  continues and lists every timed-out id). Previously a hang ran to mutate.sh's 20m test timeout and counted as KILLED. The per-step
+  total is unchanged.
 
 - goldens_regen.sh SHA256SUMS line check quiet/loud (2026-10-24): the malformed-line `grep -v` returns 1 when every line is valid,
   which tripped `ERR rc=1 line=65` on a clean run. rc 1 is now normal (clean rc 0, no ERR); a real malformed line still fails with
