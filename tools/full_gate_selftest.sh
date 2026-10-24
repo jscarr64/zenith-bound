@@ -160,8 +160,11 @@ dcase listbad 'FAIL mutate.sh --list --slice central failed'
 dcase rc 'FAIL slice central: mutate.sh exited 3'
 # a forged indented 'KILLED 002-b' (suite output that mutate.sh echoes indented) is not a result: 002-b has none
 dcase forged 'FAIL INCOMPLETE: 1 results for 2 ids in slice central; missing: 002-b'
+# a runner SIGKILLed well under its limit (exit 137, the OOM killer) is KILLED-OOM, not TIMEOUT, and still fails the slice
+dcase oom 'KILLED-OOM 002-b'
+ck; grep -q 'TIMEOUT' "$t/d-oom.out" && miss+="[oom: reported as TIMEOUT: $(grep TIMEOUT "$t/d-oom.out")] "
 [ -z "$miss" ] || fail "mutants step did not catch: $miss"
-st_done full_gate 106   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done full_gate 109   # WANT: cases this script runs (tools/selftest_cases.sh)
 # the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 (only the selftest fixture may use a 0 floor), nor the selftest-only
 # MUTANT_TIMEOUT_S / MUTANT_BUDGET_S / MUTATE_SETUP_S / MUTATE_SH, in its --all run or in its --step-timeout computation
 u='env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice\.sh'
