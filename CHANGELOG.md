@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- full_gate (2026-10-24): gate-selftest now runs tools/mutate_selftest.sh (and requires cargo, git, timeout). Red: 0915-zb-red-gate-skips-mutate-selftest
+  (step PASS with a planted break); 0915-zb-red2 FAIL with it; 0917-zb-green-gate-mutate-selftest PASS, 28 cases.
+
 - full_gate selftest (2026-10-24): its nested gate runs unset `GATE_STEPS`, so `GATE_STEPS=gate-selftest tools/full_gate.sh` no longer
   fails with "stripped run reported too few steps" (the outer step list leaked into the fixture gates).
 
