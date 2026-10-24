@@ -1,6 +1,6 @@
-//! COVERS: common::BallDesc::encode, common::ExpBand::Edge, common::ExpBand::Gap, common::ExpBand::Near0, common::ExpBand::PowerOfTwo, common::ExpBand::Uniform, common::ExpBand::from_index, common::ExpBand::index, common::ExpDomain::edge_values, common::ExpDomain::in_raw_range, common::GapClass::One, common::GapClass::P, common::GapClass::PGuard, common::GapClass::PGuardMinus1, common::GapClass::PGuardPlus1, common::GapClass::PMinus1, common::GapClass::PPlus1, common::GapClass::Random, common::GapClass::Two, common::GapClass::Zero, common::GapClass::from_index, common::GapClass::index, common::GapClass::magnitude, common::MantPattern::Aaab, common::MantPattern::AllOnes, common::MantPattern::Alt5555, common::MantPattern::C000, common::MantPattern::MaxMinus1, common::MantPattern::SingleBit, common::MantPattern::TieAtP, common::MantPattern::TieMinus1, common::MantPattern::TiePlus1, common::MantPattern::Top, common::MantPattern::TopPlus1, common::MantPattern::Uniform, common::MantPattern::from_index, common::MantPattern::index, common::ModeOrNone::None, common::ModeOrNone::Valid, common::ModeOrNone::all_with_none, common::ModeOrNone::is_valid, common::ModeOrNone::name, common::PrecSource::Fast, common::PrecSource::Operand, common::PrecSource::Schedule, common::PrecSource::Uniform, common::RadiusClass::HalfUlp, common::RadiusClass::Huge, common::RadiusClass::Infinity, common::RadiusClass::OneUlp, common::RadiusClass::RandomMag, common::RadiusClass::Zero, common::RadiusClass::from_index, common::RadiusClass::index, common::RadiusClass::tag, common::RoundingMode::Down, common::RoundingMode::FromZero, common::RoundingMode::ToEven, common::RoundingMode::ToOdd, common::RoundingMode::ToZero, common::RoundingMode::Up, common::RoundingMode::all, common::RoundingMode::index, common::RoundingMode::name, common::RoundingMode::parse, common::Sign::Minus, common::Sign::Plus, common::Sign::symbol, common::generators::check_exp_mix, common::generators::check_mant_mix, common::generators::draw_ball, common::generators::draw_exponent, common::generators::draw_exponent_pair, common::generators::draw_exponent_with, common::generators::draw_gap, common::generators::draw_mantissa, common::generators::draw_mantissa_with, common::generators::draw_mode, common::generators::draw_precision, common::generators::gap_pair, common::generators::tie_mantissa, common::generators::uniform_in
+//! COVERS: common::BallDesc::encode, common::ExpBand::Edge, common::ExpBand::Gap, common::ExpBand::Near0, common::ExpBand::PowerOfTwo, common::ExpBand::Uniform, common::ExpBand::from_index, common::ExpBand::index, common::ExpDomain::edge_values, common::ExpDomain::in_raw_range, common::GapClass::One, common::GapClass::P, common::GapClass::PGuard, common::GapClass::PGuardMinus1, common::GapClass::PGuardPlus1, common::GapClass::PMinus1, common::GapClass::PPlus1, common::GapClass::Random, common::GapClass::Two, common::GapClass::Zero, common::GapClass::from_index, common::GapClass::index, common::GapClass::magnitude, common::MantPattern::Aaab, common::MantPattern::AllOnes, common::MantPattern::Alt5555, common::MantPattern::C000, common::MantPattern::MaxMinus1, common::MantPattern::SingleBit, common::MantPattern::TieAtP, common::MantPattern::TieMinus1, common::MantPattern::TiePlus1, common::MantPattern::Top, common::MantPattern::TopPlus1, common::MantPattern::Uniform, common::MantPattern::from_index, common::MantPattern::index, common::ModeOrNone::None, common::ModeOrNone::Valid, common::ModeOrNone::all_with_none, common::ModeOrNone::is_valid, common::ModeOrNone::name, common::PrecSource::Fast, common::PrecSource::Operand, common::PrecSource::Schedule, common::PrecSource::Uniform, common::RadiusClass::HalfUlp, common::RadiusClass::Huge, common::RadiusClass::Infinity, common::RadiusClass::OneUlp, common::RadiusClass::RandomMag, common::RadiusClass::Zero, common::RadiusClass::from_index, common::RadiusClass::index, common::RadiusClass::tag, common::RoundingMode::Down, common::RoundingMode::FromZero, common::RoundingMode::ToEven, common::RoundingMode::ToOdd, common::RoundingMode::ToZero, common::RoundingMode::Up, common::RoundingMode::all, common::RoundingMode::index, common::RoundingMode::name, common::RoundingMode::parse, common::Sign::Minus, common::Sign::Plus, common::Sign::symbol, common::generators::check_exp_mix, common::generators::check_mant_mix, common::generators::draw_ball, common::generators::draw_exponent, common::generators::draw_exponent_pair, common::generators::draw_exponent_with, common::generators::draw_gap, common::generators::draw_mantissa, common::generators::draw_mantissa_with, common::generators::draw_mode, common::generators::draw_precision, common::generators::gap_pair, common::generators::tie_mantissa, common::generators::uniform_in, common::generators::wide_uniform_in
 //! Self-tests of tests/common/generators.rs. Oracle: the plan (TEST_PLAN section 7, 9), hand-derived expectations, and pinned counts/digests
-//! for the fixed seed `seed_for("common", CASE_CLASS_GATE)` at GENERATOR_VERSION 2 (a drift detector, produced by this generator; the band
+//! for the fixed seed `seed_for("common", CASE_CLASS_GATE)` at GENERATOR_VERSION 3 (a drift detector, produced by this generator; the band
 //! counts were also recomputed independently by scripts/goldlib.py, see the comment at EXP_BAND_COUNTS).
 
 use crate::common::expect_eq;
@@ -59,11 +59,11 @@ fn exponent_run(
     Ok((counts, digest))
 }
 
-// Pinned for GENERATOR_VERSION 2 (unchanged from 1: MAG draws did not move), seed_for("common", CASE_CLASS_GATE), 10,000 draws, MAG domain, anchor 0, prec 53.
+// Pinned for GENERATOR_VERSION 3 (band counts unchanged since 1; the digest moved with the log-scale Uniform band), seed_for("common", CASE_CLASS_GATE), 10,000 draws, MAG domain, anchor 0, prec 53.
 // The digests are pinned from this generator (drift detectors only). The counts were recomputed independently in Python (scripts/goldlib.py splitmix64 + the band rule `below(100)` against the cumulative
 // 30/50/80/90/100 thresholds, with the fixed consumption per band: Edge 1, Near0 1, Uniform 1, PowerOfTwo 3, Gap 3 extra outputs).
 const EXP_BAND_COUNTS: [usize; 5] = [2976, 2040, 3008, 994, 982];
-const EXP_DIGEST_MAG: u64 = 119_756_618_105_837_336;
+const EXP_DIGEST_MAG: u64 = 3_632_968_743_847_705_314;
 
 #[test]
 fn schedules_constants_and_zf_range_are_as_documented() -> Result<(), String> {
@@ -182,7 +182,7 @@ fn exponent_band_counts_are_pinned_for_the_fixed_seed() -> Result<(), String> {
     expect_eq(
         "GENERATOR_VERSION (re-pin the counts below when it changes)",
         &GENERATOR_VERSION,
-        &2,
+        &3,
     )?;
     let (counts, digest) = exponent_run(&EXP_MIX, &ExpDomain::MAG, N)?;
     expect_eq(
@@ -771,7 +771,7 @@ fn ball_descriptors_cover_signs_zeros_radius_classes_and_independent_exponents(
     )
 }
 
-const BALL_DIGEST: u64 = 4_712_628_999_623_607_558;
+const BALL_DIGEST: u64 = 5_168_648_304_406_370_894;
 
 #[test]
 fn rounding_modes_are_six_named_distinct_and_none_is_separate() -> Result<(), String> {
@@ -833,4 +833,45 @@ fn rounding_modes_are_six_named_distinct_and_none_is_separate() -> Result<(), St
         }
     }
     expect_eq("every mode drawn", &seen, &[true; 6])
+}
+
+/// Cosmology-scale exponents (Jeff, 2026-10-23 12:20 PM CT): 1e±122 is about 2^±405, so a fixed-seed run must reach magnitudes
+/// `2^8 <= |e| < 2^20` with exponents that are not near a power of two (the PowerOfTwo band only gives `±2^k ±1`), on both domains,
+/// and every bit length up to the domain's must still be reachable (headroom well past cosmology).
+#[test]
+fn uniform_band_reaches_cosmology_scale_exponents_and_every_bit_length() -> Result<(), String> {
+    for dom in [&ExpDomain::MAG, &ExpDomain::MID] {
+        let mut rng = pinned_rng()?;
+        let mut cosmology = 0u32;
+        let mut lengths = [false; 64];
+        for _ in 0..N {
+            let d = draw_exponent(&mut rng, dom, 0, 53)?;
+            if d.band != ExpBand::Uniform {
+                continue;
+            }
+            let m = d.value.unsigned_abs();
+            let near_pow2 = m.is_power_of_two()
+                || m.checked_sub(1).is_some_and(|v| v.is_power_of_two())
+                || m.checked_add(1).is_some_and(|v| v.is_power_of_two());
+            if (1u64 << 8..1u64 << 20).contains(&m) && !near_pow2 {
+                cosmology += 1;
+            }
+            if let Some(slot) = usize::try_from(64 - m.leading_zeros())
+                .ok()
+                .and_then(|b| b.checked_sub(1))
+                .and_then(|b| lengths.get_mut(b))
+            {
+                *slot = true;
+            }
+        }
+        if cosmology < 100 {
+            return Err(format!(
+                "only {} cosmology-scale Uniform draws in {}",
+                cosmology, N
+            ));
+        }
+        let missing = lengths.iter().take(63).filter(|hit| !**hit).count();
+        expect_eq("bit lengths 1..=63 missing", &missing, &0)?;
+    }
+    Ok(())
 }

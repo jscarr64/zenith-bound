@@ -7,7 +7,7 @@ use super::rng::splitmix64;
 pub const BASE: u64 = 0x5A45_4E49_5442_4F55;
 
 /// Generator version; goldens are unaffected (they come from Python), grid digests are not.
-pub const GENERATOR_VERSION: u32 = 2;
+pub const GENERATOR_VERSION: u32 = 3;
 
 /// PLACEHOLDER: the zenith-float pin SHA is not decided yet (TEST_PLAN section 15). "pending" until Jeff/Rusty set it; then a 40-digit lowercase hex SHA.
 pub const ZF_PIN: &str = "pending";

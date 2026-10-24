@@ -798,14 +798,14 @@ fn the_checker_accepts_exactly_translating_operations_and_pins_its_counts() -> R
     )
 }
 
-// Pinned from this checker at GENERATOR_VERSION 1, unchanged at 2 (a drift detector for the draw order and the predicate).
+// Pinned from this checker at GENERATOR_VERSION 3 (a drift detector for the draw order and the predicate).
 const PINNED_RANDOM_TALLIES: [(u64, u64, u64); 6] = [
-    (15689, 4311, 0),
-    (15698, 4302, 0),
-    (14821, 3923, 1256),
-    (14811, 3911, 1278),
-    (17176, 2824, 0),
-    (17175, 2825, 0),
+    (15712, 4288, 0),
+    (15739, 4261, 0),
+    (14950, 3939, 1111),
+    (14932, 3920, 1148),
+    (17219, 2781, 0),
+    (17154, 2846, 0),
 ];
 
 #[test]

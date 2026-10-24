@@ -195,6 +195,45 @@ pub fn uniform_in(rng: &mut SplitMix64, min: i64, max: i64) -> Result<i64, Strin
     i64::try_from(value).map_err(|_| format!("uniform_in result {} does not fit i64", value))
 }
 
+/// The Uniform band's exponent in `min..=max` from ONE output (Jeff, 2026-10-23 12:20 PM CT, cosmology-scale coverage). The top bit picks
+/// linear (uniform over the range, as `uniform_in`) or log-scale: a bit length `0..=63` uniform, then a magnitude uniform within that
+/// length and a random sign, so every scale from 1 to `2^62` (cosmology's `2^±405` included) is drawn about as often as any other. A
+/// log-scale value outside the range falls back to the linear one.
+pub fn wide_uniform_in(rng: &mut SplitMix64, min: i64, max: i64) -> Result<i64, String> {
+    if min > max {
+        return Err(format!("empty range {}..={}", min, max));
+    }
+    let x = rng.next_u64();
+    let span = u128::from(max.abs_diff(min)) + 1;
+    let offset = (u128::from(x << 1) * span) >> 64;
+    let linear = i128::from(min)
+        .checked_add(i128::try_from(offset).map_err(|_| String::from("offset conversion"))?)
+        .ok_or_else(|| String::from("wide_uniform_in overflow"))?;
+    let linear = i64::try_from(linear)
+        .map_err(|_| format!("wide_uniform_in result {} does not fit i64", linear))?;
+    if x >> 63 == 0 {
+        return Ok(linear);
+    }
+    let len = u32::try_from((x >> 57) & 63).map_err(|_| String::from("bit length"))?;
+    let negative = (x >> 56) & 1 == 1;
+    let low = x & ((1u64 << 56) - 1);
+    let mag = match len.checked_sub(1) {
+        None => 0,
+        Some(k) => {
+            let top = 1u64 << k;
+            let within = (u128::from(low) * u128::from(top)) >> 56;
+            top | u64::try_from(within).map_err(|_| String::from("within"))?
+        }
+    };
+    let magnitude = i64::try_from(mag).map_err(|_| String::from("magnitude"))?;
+    let value = if negative { -magnitude } else { magnitude };
+    if value < min || value > max {
+        Ok(linear)
+    } else {
+        Ok(value)
+    }
+}
+
 /// `base`, `base + gap` as exponents. `Err` (never a wrap) when the second does not fit `i64` or lies more than one tick outside `dom`.
 pub fn gap_pair(base: i64, gap: i128, dom: &ExpDomain) -> Result<(i64, i64), String> {
     let sum = i128::from(base)
@@ -356,7 +395,7 @@ pub fn draw_exponent_with(
             let k = i64::try_from(rng.below(129)).map_err(|_| String::from("near0 offset"))?;
             k - 64
         }
-        ExpBand::Uniform => uniform_in(rng, dom.min, dom.max)?,
+        ExpBand::Uniform => wide_uniform_in(rng, dom.min, dom.max)?,
         ExpBand::PowerOfTwo => {
             let bits = u64::from(64 - dom.max.leading_zeros());
             let k = u32::try_from(rng.below(bits)).map_err(|_| String::from("pow2 bit"))?;

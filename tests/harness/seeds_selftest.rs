@@ -94,7 +94,7 @@ fn suite_table_is_consistent() -> Result<(), String> {
 #[test]
 fn constants_are_recorded_and_zf_pin_is_a_placeholder_or_a_sha() -> Result<(), String> {
     expect_eq("BASE", &BASE, &0x5A45_4E49_5442_4F55_u64)?;
-    expect_eq("GENERATOR_VERSION", &GENERATOR_VERSION, &2u32)?;
+    expect_eq("GENERATOR_VERSION", &GENERATOR_VERSION, &3u32)?;
     let is_sha = ZF_PIN.len() == 40
         && ZF_PIN
             .bytes()
