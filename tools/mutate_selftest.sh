@@ -152,6 +152,7 @@ out="$(MFLOOR="$t/f.at" run)" && fail "0 mutants with a floor passed: $out"; ech
 # 0934-zb-slice-a-full-gate3: Cargo.lock is gitignored, so the mutant worktree had none; every cargo call re-resolved the git dependency
 # over the network (DNS retries per mutant: the 20m budget ran out) and a resolve error in the test run (rc 101) was counted as KILLED.
 # mutate.sh must copy the repo's Cargo.lock into the worktree, run cargo --offline --frozen, and call only a real test failure a kill.
+lockok() { [ "$(grep -c '|fetch$' "$1")" = 1 ] && ! grep -vE '^samelock\|(fetch$|.*--offline.*--frozen)' "$1" | grep -q .; }
 realcargo=$(command -v cargo); sh="$t/shim"; mkdir -p "$sh"
 cat > "$sh/cargo" <<SHIM
 #!/usr/bin/env bash
@@ -163,11 +164,9 @@ SHIM
 chmod +x "$sh/cargo"; setm m.killed; : > "$t/shim.log"
 out="$(PATH="$sh:$PATH" run)" || fail "lock/offline: killable mutant not accepted: $out"
 grep -q . "$t/shim.log" || fail "lock/offline: cargo shim never ran"
-grep -vE '^samelock\|(fetch$|.*--offline.*--frozen)' "$t/shim.log" | grep -q . && fail "lock/offline: a cargo call without the repo Cargo.lock or without --offline --frozen: $(cat "$t/shim.log")"
-[ "$(grep -c '|fetch$' "$t/shim.log")" = 1 ] || fail "lock/offline: expected exactly one up-front fetch: $(cat "$t/shim.log")"
+lockok "$t/shim.log" || fail "lock/offline: a cargo call without the repo Cargo.lock or without --offline --frozen: $(cat "$t/shim.log")"
 # Spence (820f061 block): the allow-list let any number of online fetches through. A second fetch line must fail the check.
 printf 'x\n' >> "$t/cases"; { cat "$t/shim.log"; echo 'samelock|fetch'; } > "$t/shim2.log"
-lockok() { ! grep -vE '^samelock\|(fetch$|.*--offline.*--frozen)' "$1" | grep -q .; }
 lockok "$t/shim2.log" && fail "lock/offline: a log with two fetch lines was accepted"
 out="$(SHIM_NETFAIL=1 PATH="$sh:$PATH" run)" && fail "a test run that failed before any test ran was accepted: $out"
 echo "$out" | grep -q "^INVALID 001-add-mul: suite run failed without a test failure" || fail "netfail: wrong report: $out"

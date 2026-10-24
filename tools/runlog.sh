@@ -15,8 +15,8 @@
 # Use, first thing in a script:   . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap JOB "$@"
 #   runlog_step [--tests] NAME -- CMD...     runlog_warn MESSAGE
 # One-shot (verify and test runs): tools/runlog.sh JOB [--tests] -- CMD...
-# Env: RUNLOG_AGENT (default harper), RUNLOG_POPLOG (default ~/pop-logs/bin/poplog.sh); poplog's POPLOG_ROOT, POPLOG_HEARTBEAT, POPLOG_ECHO apply.
-RUNLOG_AGENT=${RUNLOG_AGENT:-harper}
+# Env: RUNLOG_AGENT (else poprun's POPLOG_AGENT, else popslot's POPSLOT_AGENT; none: refuse), RUNLOG_POPLOG (default ~/pop-logs/bin/poplog.sh); poplog's POPLOG_ROOT, POPLOG_HEARTBEAT, POPLOG_ECHO apply.
+RUNLOG_AGENT=${RUNLOG_AGENT:-${POPLOG_AGENT:-${POPSLOT_AGENT:-}}}   # from the caller, never a hardcoded agent (Spence 2026-10-24)
 RUNLOG_POPLOG=${RUNLOG_POPLOG:-$HOME/pop-logs/bin/poplog.sh}
 RUNLOG_ON=""
 RUNLOG_EXIT_CMDS=()
@@ -40,6 +40,7 @@ runlog_wrap() { # runlog_wrap JOB "$@"
     fi
     return 0
   fi
+  [ -n "$RUNLOG_AGENT" ] || { echo "runlog: FAIL no agent for $job: set RUNLOG_AGENT or run under poprun/popslot --agent" >&2; exit 2; }
   if [ ! -f "$RUNLOG_POPLOG" ]; then echo "runlog: FAIL $RUNLOG_POPLOG missing; refusing to run $job without a run log" >&2; exit 2; fi
   # shellcheck source=/dev/null
   . "$RUNLOG_POPLOG" || { echo "runlog: FAIL cannot source $RUNLOG_POPLOG; refusing to run $job without a run log" >&2; exit 2; }
