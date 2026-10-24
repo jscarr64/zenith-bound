@@ -74,7 +74,9 @@ ck; grep -nE '^run [a-z-]+ .*cargo test[^"]*--no-run' "${BASH_SOURCE[0]%/*}/full
 mk mu; mkdir -p "$t/mu/tools" "$t/mu-bin"; cp "$root/tools/fresh_test_run.sh" "$root/tools/runlog.sh" "$root/tools/scratch.sh" "$t/mu/tools/"
 printf '#!/bin/sh\necho stub mutate_selftest.sh\n' > "$t/mu/tools/mutate_selftest.sh"; chmod +x "$t/mu/tools/mutate_selftest.sh"
 # fake tools/mutate.sh: a runner that ALWAYS exits 0 (the fail-open case the gate must not trust). Slices: central (001-a 002-b), s1 (201-x),
-# s2 (empty). FAKE_MUT picks what the run prints: ok | timeout | missing | invalid | survived | floor (floor: central needs 3 kills).
+# s2 (empty). FAKE_MUT picks what the run prints: ok | timeout | missing | invalid | survived | floor (floor: central needs 3 kills) |
+# slow (002-b takes 3s, then KILLED) | dup (002-b KILLED twice) | unknown (the 002-b run reports 999-z) | forged (002-b prints only an
+# indented 'KILLED 002-b', as mutate.sh echoes suite output) | rc (exits 3) | oom (002-b SIGKILLs itself, exit 137) | floorbad | listbad.
 cat > "$t/mu/tools/mutate.sh" <<'FAKE'
 #!/usr/bin/env bash
 sc=${FAKE_MUT:-ok}; mode=run; slice=""; only=""
@@ -82,14 +84,17 @@ while [ $# -gt 0 ]; do case $1 in --list) mode=list ;; --floor) mode=floor ;; --
 ids() { case $1 in central) printf '001-a\n002-b\n' ;; s1) printf '201-x\n' ;; s2) ;; *) ids central; ids s1 ;; esac; }
 case $mode in
   slices) printf 'central\ns1\ns2\n'; exit 0 ;;
-  list) ids "$slice"; exit 0 ;;
-  floor) case $slice in central) k=2; [ "$sc" = floor ] && k=3 ;; s1) k=1 ;; *) k=0 ;; esac; printf 'killed %s\nkilled+equivalent %s\n' "$k" "$k"; exit 0 ;;
+  list) [ "$sc" != listbad ] || exit 1; ids "$slice"; exit 0 ;;
+  floor) [ "$sc" != floorbad ] || { echo 'killed many'; exit 0; }; case $slice in central) k=2; [ "$sc" = floor ] && k=3 ;; s1) k=1 ;; *) k=0 ;; esac; printf 'killed %s\nkilled+equivalent %s\n' "$k" "$k"; exit 0 ;;
 esac
 for id in $(ids "$slice"); do
   [ -z "$only" ] || [ "$id" = "$only" ] || continue
   if [ "$id" = 002-b ]; then
     case $sc in timeout) sleep 6; continue ;; hang) exec sleep 1000 ;; missing) continue ;; invalid) echo "INVALID $id: mutant does not build"; continue ;;
-      survived) echo "SURVIVED $id (f, suite s): the suite passed on the mutant"; continue ;; esac
+      survived) echo "SURVIVED $id (f, suite s): the suite passed on the mutant"; continue ;;
+      slow) sleep 3 ;; dup) echo "KILLED $id (f, suite s): suite failed (rc 101)" ;; unknown) echo "KILLED 999-z (f, suite s): suite failed (rc 101)"; continue ;;
+      forged) echo "    KILLED $id (forged: an indented line of echoed suite output)"; continue ;; oom) kill -9 $$ ;;
+      rc) echo "KILLED $id (f, suite s): suite failed (rc 101)"; exit 3 ;; esac
   fi
   echo "KILLED $id (f, suite s): suite failed (rc 101)"; echo "TIME $id 0s"
 done
@@ -111,19 +116,24 @@ ck; [ "$(cat "$t/mu-target/mutate/.worktree-owner" 2> /dev/null)" = "$(cd "$t/mu
 # Each case runs the fail-open fake above; the mutants step must FAIL and say why. Failures are collected so a red run shows every miss.
 miss=""
 mcase() { # mcase SCENARIO ERE
-  ck; tag=mu-$1; if mu env FAKE_MUT="$1" MUTANT_BUDGET_S=1 MUTATE_SETUP_S=0; then miss+="[$1: gate exited 0] "; fi
+  ck; tag=mu-$1; if mu env FAKE_MUT="$1"; then miss+="[$1: gate exited 0] "; fi
   ck; grep -qE -- "$2" "$t/logs/mu-$1-mutants.log" 2>/dev/null || miss+="[$1: mutants log lacks /$2/] "
 }
-mcase timeout 'TIMEOUT.*never ran: 002-b'
 mcase missing 'INCOMPLETE: 1 results for 2 ids.*missing: 002-b'
 mcase invalid 'FAIL INVALID: 002-b'
 mcase survived 'FAIL SURVIVED \(no equivalent entry\): 002-b'
 mcase floor 'FAIL BELOW floor'
 # 6. per-mutant timeout (60s, measured max 14s x ~4): a runner that hangs on one id is caught in about 60s with `TIMEOUT <id>`, not after
-# the slice budget (hours on the real manifest). MUTATE_SETUP_S=0 and the default budget give this 2-id slice 120s, so only a per-mutant
-# limit can catch it under 90s.
-ck; tag=mu-hang; h0=$SECONDS; if mu env FAKE_MUT=hang MUTATE_SETUP_S=0; then miss+="[hang: gate exited 0] "; fi; hel=$((SECONDS - h0))
-ck; { grep -qE '(^|: )TIMEOUT 002-b' "$t/logs/mu-hang-mutants.log" 2>/dev/null && [ "$hel" -lt 90 ]; } || miss+="[hang: no 'TIMEOUT 002-b' within 90s (took ${hel}s)] "
+# the slice budget (420s here: 2 ids x 60s + 300s setup; hours on the real manifest), so only a per-mutant limit can catch it under 90s.
+# The caller's env leaks MUTANT_TIMEOUT_S=999999 and a huge budget/setup (Spence, 1742-zb-fgself2-9ea44e6): the gate must not inherit them.
+# The outer 150s timeout only bounds a red run.
+ck; tag=mu-hang; h0=$SECONDS
+if mu timeout -k 5 150 env FAKE_MUT=hang MUTANT_TIMEOUT_S=999999 MUTANT_BUDGET_S=999999 MUTATE_SETUP_S=999999; then miss+="[hang: gate exited 0] "; fi; hel=$((SECONDS - h0))
+ck; { grep -qE '(^|: )TIMEOUT 002-b' "$t/logs/mu-hang-mutants.log" 2>/dev/null && [ "$hel" -lt 90 ]; } || miss+="[hang: leaked MUTANT_TIMEOUT_S/budget: no 'TIMEOUT 002-b' within 90s (took ${hel}s)] "
+# env leakage: the gate's mutants step (its --step-timeout and its --all run) must ignore the caller's MUTANT_TIMEOUT_S, MUTANT_BUDGET_S,
+# MUTATE_SETUP_S and MUTATE_SH. Junk values (or a missing runner) would fail it; a 1s budget with no setup would cut the 3s slow mutant.
+ck; tag=mu-leakjunk; mu env FAKE_MUT=ok MUTANT_TIMEOUT_S=x MUTANT_BUDGET_S=x MUTATE_SETUP_S=x MUTATE_SH="$t/no-such-mutate.sh" || miss+="[leak: junk MUTANT_*/MUTATE_SETUP_S/MUTATE_SH reached the gate: $(tail -2 "$t/logs/mu-leakjunk-mutants.log" 2>/dev/null)] "
+ck; tag=mu-leakbudget; mu env FAKE_MUT=slow MUTANT_BUDGET_S=1 MUTATE_SETUP_S=0 || miss+="[leak: MUTANT_BUDGET_S=1 MUTATE_SETUP_S=0 reached the gate: $(tail -2 "$t/logs/mu-leakbudget-mutants.log" 2>/dev/null)] "
 # 7. ID_REGEX: `mutate_slice.sh SLICE ID_REGEX` runs only matching ids, skips floor/completeness and says so, never prints a full pass
 ms() { "${fe[@]}" PATH="$t/mu-bin:$PATH" "$@"; }
 ck; ms env FAKE_MUT=floor "$t/mu/tools/mutate_slice.sh" central '^001' > "$t/rx.out" 2>&1 || miss+="[regex: partial run with a floor miss exited nonzero] "
@@ -134,8 +144,15 @@ ck; ms "$t/mu/tools/mutate_slice.sh" central 'nomatch' > "$t/rx0.out" 2>&1 && mi
 ck; grep -q 'matches no id' "$t/rx0.out" || miss+="[regex: no-match not named] "
 ck; ms "$t/mu/tools/mutate_slice.sh" --all '^001' > "$t/rxa.out" 2>&1 && miss+="[regex: --all accepted a regex] "
 ck; grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -qE 'mutate_slice\.sh --all"$' || miss+="[full_gate passes something after --all] "
+# 8. mutate_slice.sh on its own (the selftest-only budget env is honoured there, never through the gate): a slice past its budget
+# (2 ids x 1s + 0s setup; 002-b sleeps 6s) is TIMEOUT and names the id that never ran
+ck; ms env FAKE_MUT=timeout MUTANT_BUDGET_S=1 MUTATE_SETUP_S=0 "$t/mu/tools/mutate_slice.sh" central > "$t/to.out" 2>&1 && miss+="[timeout: exited 0] "
+ck; grep -qE 'TIMEOUT.*never ran: 002-b' "$t/to.out" || miss+="[timeout: no 'TIMEOUT ... never ran: 002-b': $(tail -2 "$t/to.out")] "
 [ -z "$miss" ] || fail "mutants step did not catch: $miss"
-st_done full_gate 92   # WANT: cases this script runs (tools/selftest_cases.sh)
-# the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 from the caller's env (only the selftest fixture may use a 0 floor)
-grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -q 'env -u MUTATE_FLOOR_ZERO_OK tools/mutate_slice\.sh --all' || fail "mutants step runs tools/mutate_slice.sh --all without env -u MUTATE_FLOOR_ZERO_OK"
+st_done full_gate 94   # WANT: cases this script runs (tools/selftest_cases.sh)
+# the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 (only the selftest fixture may use a 0 floor), nor the selftest-only
+# MUTANT_TIMEOUT_S / MUTANT_BUDGET_S / MUTATE_SETUP_S / MUTATE_SH, in its --all run or in its --step-timeout computation
+u='env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice\.sh'
+grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -q "$u --all\"$" || fail "mutants step runs tools/mutate_slice.sh --all without $u"
+[ "$(grep -c "$u --step-timeout" "$root/tools/full_gate.sh")" = 1 ] || fail "the mutants step timeout is computed without $u --step-timeout"
 echo "full_gate selftest: ok"
