@@ -15,7 +15,8 @@
 #        tools/mutate_slice.sh --step-timeout   prints the seconds the gate's mutants step may take (sum of slice timeouts + 600)
 # Per-slice timeout = ids x MUTANT_BUDGET_S + MUTATE_SETUP_S (fetch, plus the first build of a slice's suite into the persistent target).
 # BUDGET (measured, see CHANGELOG 2026-10-24): BUDGET_S and SETUP_S below come from a real tiny-slice run; the values and their source are
-# in the CHANGELOG entry for this file. env: MUTANT_BUDGET_S, MUTATE_SETUP_S (positive integers; override for selftests only), MUTATE_SH.
+# in the CHANGELOG entry for this file. env: MUTANT_BUDGET_S, MUTATE_SETUP_S (positive integers; override for selftests only), MUTATE_SH;
+# tools/full_gate.sh unsets all of them (and MUTANT_TIMEOUT_S, MUTATE_FLOOR_ZERO_OK) for the gate.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap mutate_slice "$@"   # run log (tools/runlog.sh)
 set -u

@@ -60,7 +60,9 @@ run() { name=$1; shift
   local tf=() rc to=${STEP_TIMEOUT:-20m}; case $name in build-debug|build-release) tf=(--tests) ;; esac   # a test step that runs zero tests fails (runlog_step)
   echo "start $name $(date +%T)" >> "$T/$tag.rc"
   if [ "$name" = mutants ]; then   # the mutants step's timeout comes from the slice budgets; no silent fallback to STEP_TIMEOUT
-    to=$(tools/mutate_slice.sh --step-timeout 2>&1 | tail -1)
+    # the selftest-only MUTANT_TIMEOUT_S / MUTANT_BUDGET_S / MUTATE_SETUP_S / MUTATE_SH (and MUTATE_FLOOR_ZERO_OK) never reach the gate's
+    # mutate_slice.sh: not here, not in the mutants step below (Spence, 1742-zb-fgself2-9ea44e6)
+    to=$(env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice.sh --step-timeout 2>&1 | tail -1)
     if [[ ! $to =~ ^[0-9]+$ ]]; then echo "mutants: FAIL cannot compute the step timeout (tools/mutate_slice.sh --step-timeout: $to)" > "$T/$tag-$name.log"
       echo "$name=2" >> "$T/$tag.rc"; gate_rc=1; return 0; fi
   fi
@@ -87,6 +89,6 @@ run goldens-regen "require sha256sum grep cmp && tools/goldens_regen_selftest.sh
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"
-run mutants "require cargo git timeout grep awk && mt=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:?}/mutate} && CARGO_TARGET_DIR=\$mt tools/fresh_test_run.sh --claim && tools/mutate_selftest.sh && MUTATE_TARGET=\$mt env -u MUTATE_FLOOR_ZERO_OK tools/mutate_slice.sh --all"
+run mutants "require cargo git timeout grep awk && mt=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:?}/mutate} && CARGO_TARGET_DIR=\$mt tools/fresh_test_run.sh --claim && tools/mutate_selftest.sh && MUTATE_TARGET=\$mt env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice.sh --all"
 if [ "$gate_rc" = 0 ]; then echo "done" >> "$T/$tag.rc"; else echo "failed" >> "$T/$tag.rc"; fi
 exit "$gate_rc"
