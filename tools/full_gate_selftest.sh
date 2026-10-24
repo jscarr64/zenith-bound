@@ -76,14 +76,16 @@ printf '#!/bin/sh\necho stub mutate_selftest.sh\n' > "$t/mu/tools/mutate_selftes
 # fake tools/mutate.sh: a runner that ALWAYS exits 0 (the fail-open case the gate must not trust). Slices: central (001-a 002-b), s1 (201-x),
 # s2 (empty). FAKE_MUT picks what the run prints: ok | timeout | missing | invalid | survived | floor (floor: central needs 3 kills) |
 # slow (002-b takes 3s, then KILLED) | dup (002-b KILLED twice) | unknown (the 002-b run reports 999-z) | forged (002-b prints only an
-# indented 'KILLED 002-b', as mutate.sh echoes suite output) | rc (exits 3) | oom (002-b SIGKILLs itself, exit 137) | floorbad | listbad.
+# indented 'KILLED 002-b', as mutate.sh echoes suite output) | rc (exits 3) | oom (002-b SIGKILLs itself, exit 137) | floorbad | listbad |
+# slicesbad (--slices exits 1 after two stderr lines).
 cat > "$t/mu/tools/mutate.sh" <<'FAKE'
 #!/usr/bin/env bash
 sc=${FAKE_MUT:-ok}; mode=run; slice=""; only=""
 while [ $# -gt 0 ]; do case $1 in --list) mode=list ;; --floor) mode=floor ;; --slices) mode=slices ;; --slice) slice=$2; shift ;; --only) only=$2; shift ;; esac; shift; done
 ids() { case $1 in central) printf '001-a\n002-b\n' ;; s1) printf '201-x\n' ;; s2) ;; *) ids central; ids s1 ;; esac; }
 case $mode in
-  slices) printf 'central\ns1\ns2\n'; exit 0 ;;
+  slices) [ "$sc" != slicesbad ] || { echo 'fake mutate.sh: the --slices cause' >&2; echo 'fake mutate.sh: last stderr line' >&2; exit 1; }
+    printf 'central\ns1\ns2\n'; exit 0 ;;
   list) [ "$sc" != listbad ] || exit 1; ids "$slice"; exit 0 ;;
   floor) [ "$sc" != floorbad ] || { echo 'killed many'; exit 0; }; case $slice in central) k=2; [ "$sc" = floor ] && k=3 ;; s1) k=1 ;; *) k=0 ;; esac; printf 'killed %s\nkilled+equivalent %s\n' "$k" "$k"; exit 0 ;;
 esac
@@ -163,8 +165,12 @@ dcase forged 'FAIL INCOMPLETE: 1 results for 2 ids in slice central; missing: 00
 # a runner SIGKILLed well under its limit (exit 137, the OOM killer) is KILLED-OOM, not TIMEOUT, and still fails the slice
 dcase oom 'KILLED-OOM 002-b'
 ck; grep -q 'TIMEOUT' "$t/d-oom.out" && miss+="[oom: reported as TIMEOUT: $(grep TIMEOUT "$t/d-oom.out")] "
+# 10. a --step-timeout failure keeps ALL its output in the step log, not only the last line: 1706-zb-mslice-9ea44e6-selftests failed with
+# 'mutate.sh --slices failed' once and its cause was lost to `| tail -1` (Spence nit b)
+ck; tag=mu-slicesbad; mu env FAKE_MUT=slicesbad && miss+="[slicesbad: gate exited 0] "
+ck; grep -q 'the --slices cause' "$t/logs/mu-slicesbad-mutants.log" 2>/dev/null || miss+="[slicesbad: step log lost the cause: $(cat "$t/logs/mu-slicesbad-mutants.log" 2>/dev/null)] "
 [ -z "$miss" ] || fail "mutants step did not catch: $miss"
-st_done full_gate 109   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done full_gate 111   # WANT: cases this script runs (tools/selftest_cases.sh)
 # the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 (only the selftest fixture may use a 0 floor), nor the selftest-only
 # MUTANT_TIMEOUT_S / MUTANT_BUDGET_S / MUTATE_SETUP_S / MUTATE_SH, in its --all run or in its --step-timeout computation
 u='env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice\.sh'
