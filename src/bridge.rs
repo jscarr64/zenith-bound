@@ -237,15 +237,42 @@ impl Constant {
 /// `InvalidArgument` when `prec` is outside `MIN_PRECISION..=MAX_PRECISION`; `Resource` when zenith-float cannot settle
 /// the constant (`PrecisionRetryExhausted`, `MemoryAllocation`) or its two neighbours are not one ulp apart.
 pub fn constant_ball(cc: &mut Consts, c: &Constant, prec: Precision) -> BoundResult<Ball> {
-    let _ = (
-        cc,
-        c.zf_id(),
-        prec,
-        MIN_PRECISION,
-        MAX_PRECISION,
-        RoundingMode::Down,
-    );
-    Err(constant_error(Error::PrecisionRetryExhausted))
+    const OP: &str = "bridge::constant_ball";
+    if !(MIN_PRECISION..=MAX_PRECISION).contains(&prec) {
+        return Err(BoundError::InvalidArgument {
+            op: OP,
+            detail: "precision outside MIN_PRECISION..=MAX_PRECISION",
+        });
+    }
+    let down = cc
+        .get_exact_prec(c.zf_id(), prec, RoundingMode::Down)
+        .map_err(constant_error)?;
+    let up = cc
+        .get_exact_prec(c.zf_id(), prec, RoundingMode::Up)
+        .map_err(constant_error)?;
+    let not_one_ulp = BoundError::Resource {
+        op: OP,
+        detail: "constant neighbours are not one ulp apart",
+    };
+    // up - down is one ulp of down: a power of two, exact at prec bits.
+    let ulp = up.sub(&down, prec, RoundingMode::Up);
+    if ulp.inexact() || !ulp.is_positive() || ulp.is_zero() {
+        return Err(not_one_ulp);
+    }
+    let half = ulp.ldexp(-1, prec, RoundingMode::Up);
+    if half.inexact() || !half.is_positive() {
+        return Err(not_one_ulp);
+    }
+    let wide = prec.checked_add(1).ok_or(BoundError::InvalidArgument {
+        op: OP,
+        detail: "precision + 1 overflows",
+    })?;
+    let mid = down.add(&half, wide, RoundingMode::Down);
+    if mid.inexact() || !mid.is_positive() {
+        return Err(not_one_ulp);
+    }
+    let rad = Mag::from_exact_num(&half);
+    Ball::from_mid_rad(mid, rad, prec)
 }
 
 /// zf errors of `get_exact_prec` and the bracket arithmetic in zb terms (CONTRACT O2 table).

@@ -14,7 +14,9 @@ use zenith_bound::bridge::{constant_ball, Constant};
 use zenith_bound::error::BoundError;
 use zenith_bound::mag::Mag;
 use zenith_bound::MAX_PRECISION;
-use zenith_float_num::{Consts, ExactNum, RawKind, RawParts, EXPONENT_MAX, EXPONENT_MIN};
+use zenith_float_num::{
+    Consts, ExactNum, RawKind, RawParts, RoundingMode, EXPONENT_MAX, EXPONENT_MIN,
+};
 
 use crate::common::goldens::golden_dir;
 use crate::common::rng::SplitMix64;
@@ -550,7 +552,11 @@ fn golden_value(exp: &str, mant: &str) -> Result<ExactNum, String> {
     let mut words = Vec::new();
     let mut end = mant.len();
     while end > 0 {
-        let start = end.checked_sub(16).unwrap_or(0);
+        let start = if end > 16 {
+            end.checked_sub(16).ok_or("mant")?
+        } else {
+            0
+        };
         let chunk = mant.get(start..end).ok_or("mant")?;
         words.push(u64::from_str_radix(chunk, 16).map_err(|_| format!("mant {}", mant))?);
         end = start;
@@ -618,9 +624,17 @@ fn ends(b: &Ball) -> Result<(ExactNum, ExactNum), String> {
         .rad()
         .to_exact_num()
         .map_err(|e| format!("rad: {:?}", e))?;
-    let lo = b.mid().sub_full_prec(&r);
-    let hi = b.mid().add_full_prec(&r);
-    if lo.inexact() || hi.inexact() {
+    // mid has prec + 1 bits and rad is a power of two at or above its last bit: prec + 128 holds both ends exactly,
+    // and `inexact()` is the per-operation flag for add/sub.
+    let wide = b.prec().checked_add(128).ok_or("prec")?;
+    let m = num(0).add(b.mid(), wide, RoundingMode::Down);
+    let m_exact = !m.inexact();
+    let lo = num(0)
+        .add(b.mid(), wide, RoundingMode::Down)
+        .sub(&r, wide, RoundingMode::Down);
+    let lo_exact = !lo.inexact();
+    let hi = m.add(&r, wide, RoundingMode::Up);
+    if !m_exact || !lo_exact || hi.inexact() {
         return Err("ends inexact".into());
     }
     Ok((lo, hi))
