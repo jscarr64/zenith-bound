@@ -53,5 +53,26 @@ ck; printf '%s\n' "$out" | grep -q "marked '# EMPTY' but has a.txt" || fail "mar
 # '# EMPTY' plus a malformed line FAILS
 fx; printf '# EMPTY\nnot a sum\n' > "$d/SHA256SUMS"
 ck; out=$(gr) && fail "a marked-empty SHA256SUMS with a malformed line passed: $out"
+# Harper (2026-10-24, gate 1520-zb-mutq-merge-full-gate: 5x `ERR rc=1 line=65 bad=$(... grep -v ...)`): when every SHA256SUMS line is
+# valid, `grep -v` finds nothing (rc 1); that is the normal case and must log no ERR. A malformed line, or a real grep error (rc 2), stays loud.
+lgr() { local n=$1; shift   # goldens_regen.sh with its own real run log (ERR trap on); sets out, grc, lg
+  out=$( unset POPLOG_FILE POPLOG_PID POPLOG_STATE_DIR POPLOG_PROGRESS_FILE POPLOG_RUNNING RUNLOG_INNER RUNLOG_ACTIVE RUNLOG_PLAIN
+         env "$@" POPLOG_ROOT="$t/pl-$n" RUNLOG_AGENT=selftest GOLDENS_ROOT="$root" "$here/goldens_regen.sh" --slices-only 2>&1 ); grc=$?
+  lg=$(find "$t/pl-$n/selftest" -name '*-goldens_regen.log' 2>/dev/null | head -1); }
+fx; printf 'a\n' > "$d/a.txt"; printf 'b\n' > "$d/b.txt"; { printf '# header\n'; sum a.txt; sum b.txt; } > "$d/SHA256SUMS"
+lgr valid
+ck; [ "$grc" = 0 ] && [ -n "$lg" ] || fail "logged all-valid run failed or wrote no run log (rc $grc): $out"
+ck; grep -q ' ERR ' "$lg" && fail "an all-valid SHA256SUMS logged ERR trap lines: $(grep ' ERR ' "$lg")"
+{ cat "$d/SHA256SUMS"; printf 'zz  a.txt\n'; } > "$d/S2"; mv "$d/S2" "$d/SHA256SUMS"
+lgr badline
+ck; [ "$grc" != 0 ] || fail "logged run with a malformed line passed: $out"
+ck; grep -q "malformed SHA256SUMS line(s): zz  a.txt" <<< "$out" || fail "logged malformed line: not named: $out"
+# a real grep error (rc 2) in the malformed-line check must fail the slice, not read as "no bad lines"
+fx; printf 'a\n' > "$d/a.txt"; sum a.txt > "$d/SHA256SUMS"
+mkdir -p "$t/shim"; rg_=$(command -v grep)
+printf '#!/bin/sh\ncase "$*" in *"{64}  [^/"*) echo "grep: shim: simulated I/O error" >&2; exit 2;; esac\nexec %s "$@"\n' "$rg_" > "$t/shim/grep"; chmod +x "$t/shim/grep"
+lgr grep2 PATH="$t/shim:$PATH"
+ck; [ "$grc" != 0 ] || fail "a grep error (rc 2) in the malformed-line check passed: $out"
+ck; grep -q "grep failed (rc 2)" <<< "$out" || fail "grep rc 2: no clear message: $out"
 echo "goldens_regen selftest: ok"
-st_done goldens_regen 19   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done goldens_regen 25   # WANT: cases this script runs (tools/selftest_cases.sh)
