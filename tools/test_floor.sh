@@ -4,6 +4,7 @@
 #   NOSUMMARY  LOG has no `test result:` line, or fewer summaries than test binaries started (`Running ...` / `Doc-tests ...` lines):
 #              a binary whose output stopped before its summary (a truncated log)
 #   BELOW      the total is below STEP's floor in tools/test_floor.txt (env TEST_FLOOR_FILE overrides)
+#   DUPROW     STEP has more than one row in the floor file or in a test_floor.d share (only the first used to count)
 #   NOFLOOR    STEP has no row in the floor file;  NOLOG  LOG is missing or unreadable
 #   BADCOUNT   any parsed count (floor, starts, summaries, passed) is not a plain integer: the check fails closed (set -euo pipefail)
 # Floors: tools/test_floor.txt. Raising one is allowed with the tests; lowering one needs a CHANGELOG.md note. Self-test: tools/test_floor_selftest.sh.
@@ -15,6 +16,9 @@ ff=${TEST_FLOOR_FILE:-"$(cd "$(dirname "$0")" && pwd)/test_floor.txt"}
 int() { [[ $2 =~ ^[0-9]{1,18}$ ]] || { echo "FAIL BADCOUNT: $step: $1 is '$2', not a plain integer of at most 18 digits ($log)"; exit 1; }; }   # fail closed on any parse surprise (18 digits: inside bash's i64 test)
 [ -f "$log" ] && [ -r "$log" ] || { echo "FAIL NOLOG: $step: $log is missing or unreadable"; exit 1; }
 [ -f "$ff" ] && [ -r "$ff" ] || { echo "FAIL NOFLOOR: floor file $ff is missing or unreadable"; exit 1; }
+duprow() { local n; n=$(awk -F'\t' -v s="$step" '$1 == s { n++ } END { print n + 0 }' "$1") || { echo "FAIL NOFLOOR: cannot read $1"; exit 1; }
+  [ "$n" -le 1 ] || { echo "FAIL DUPROW: $step has $n rows in $1 (one row per step)"; exit 1; }; }
+duprow "$ff"
 floor=$(awk -F'\t' -v s="$step" '$1 == s { print $2; exit }' "$ff") || { echo "FAIL NOFLOOR: cannot read $ff"; exit 1; }
 [ -n "$floor" ] || { echo "FAIL NOFLOOR: $step has no row in $ff"; exit 1; }
 # A CRLF row: strip the CR only to name it, then still FAIL (fail closed: a floor file edited on Windows must be fixed, not guessed at).
@@ -23,6 +27,7 @@ int floor "$floor"
 # per-slice shares (S0, 2026-10-24): tools/test_floor.d/<slice>.txt rows STEP<TAB>N (0 allowed) add to the central floor
 for sf in "$(dirname "$ff")"/test_floor.d/*.txt; do
   [ -f "$sf" ] || continue
+  duprow "$sf"
   share=$(awk -F'\t' -v s="$step" '$1 == s { print $2; exit }' "$sf") || { echo "FAIL NOFLOOR: cannot read $sf"; exit 1; }
   [ -n "$share" ] || { echo "FAIL NOFLOOR: $step has no row in $sf"; exit 1; }
   int "share in $sf" "$share"; floor=$((floor + 10#$share))
