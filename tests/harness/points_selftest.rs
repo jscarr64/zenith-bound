@@ -32,11 +32,11 @@ fn desc(
     }
 }
 
-fn t(neg: bool, mant: u128, exp: i64) -> Result<Term, String> {
+fn t(neg: bool, mant: u128, exp: i128) -> Result<Term, String> {
     Term::new(neg, mant, exp)
 }
 
-fn pt(neg: bool, mant: u128, exp: i64) -> Result<Point, String> {
+fn pt(neg: bool, mant: u128, exp: i128) -> Result<Point, String> {
     Ok(Point {
         base: t(neg, mant, exp)?,
         off: t(false, 0, 0)?,
@@ -77,7 +77,7 @@ fn term_normalises() -> Result<(), String> {
         },
     )?;
     expect_eq("zero", &t(true, 0, 5)?.is_zero(), &true)?;
-    expect_eq("overflow", &t(false, 2, i64::MAX).is_err(), &true)
+    expect_eq("overflow", &t(false, 2, i128::MAX).is_err(), &true)
 }
 
 #[test]
@@ -326,11 +326,51 @@ fn cmp_cancellation_and_spread() -> Result<(), String> {
     expect_eq(
         "extreme exponents refused",
         &cmp_points(
-            &pt(false, 1, i64::MAX)?,
-            &pt(false, 1, i64::MIN)?,
+            &pt(false, 1, i128::MAX)?,
+            &pt(false, 1, i128::MIN)?,
             DEFAULT_MAX_SHIFT,
         )
         .is_err(),
         &true,
+    )
+}
+
+/// Headroom (Jeff, 2026-10-23 12:33 PM CT): a grid exists for every `i64` mid exponent at every `u32` precision, including the
+/// cosmology-scale and extreme ones; the ulp exponent `mid_exp - prec` and the term exponents leave `i64` there, so they must not fail.
+#[test]
+fn grids_exist_at_the_i64_exponent_extremes_for_every_u32_precision() -> Result<(), String> {
+    for mid_exp in [i64::MIN, -405, 405, i64::MAX] {
+        for half in [false, true] {
+            for prec in [1u32, 53, 4096, u32::MAX] {
+                let radius = if half {
+                    RadiusClass::HalfUlp
+                } else {
+                    RadiusClass::OneUlp
+                };
+                let b = desc(Sign::Minus, false, mid_exp, TOP, radius, 0, 0);
+                sample_points(&b, prec, &mut SplitMix64::new(3), MAX_T)?;
+            }
+        }
+    }
+    let low = desc(
+        Sign::Plus,
+        false,
+        i64::MIN,
+        TOP,
+        RadiusClass::RandomMag,
+        i64::MIN,
+        TOP,
+    );
+    sample_points(&low, 53, &mut SplitMix64::new(3), MAX_T)?;
+    let want = i128::from(i64::MIN)
+        .checked_sub(i128::from(u32::MAX))
+        .ok_or_else(|| String::from("want"))?;
+    expect_eq(
+        "one ulp at i64::MIN, prec u32::MAX",
+        &radius_value(
+            &desc(Sign::Plus, false, i64::MIN, TOP, RadiusClass::OneUlp, 0, 0),
+            u32::MAX,
+        )?,
+        &Some((1, want)),
     )
 }

@@ -24,7 +24,7 @@ fn mid_of(r: &Edge) -> Result<Point, String> {
         .ok_or_else(|| String::from("empty grid"))
 }
 
-fn dy(neg: bool, mant: u128, exp: i64, off: Term) -> Result<Point, String> {
+fn dy(neg: bool, mant: u128, exp: i128, off: Term) -> Result<Point, String> {
     Ok(Point {
         base: Term::new(neg, mant, exp)?,
         off,

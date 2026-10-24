@@ -13,17 +13,18 @@ use super::generators::{BallDesc, RadiusClass, Sign};
 use super::modular::sub_u64;
 use super::rng::SplitMix64;
 
-/// `(-1)^neg * mant * 2^exp`, normalised.
+/// `(-1)^neg * mant * 2^exp`, normalised. The exponent is `i128` so every grid of an `i64` mid exponent at a `u32` precision is
+/// exact (headroom for zenith-float 2.0 `i64` exponents: `mid_exp - prec - 1 - t` stays far inside `i128`).
 #[derive(Debug, PartialEq, Eq)]
 pub struct Term {
     pub neg: bool,
     pub mant: u128,
-    pub exp: i64,
+    pub exp: i128,
 }
 
 impl Term {
     /// The normalised term for `(-1)^neg * mant * 2^exp`.
-    pub fn new(neg: bool, mant: u128, exp: i64) -> Result<Term, String> {
+    pub fn new(neg: bool, mant: u128, exp: i128) -> Result<Term, String> {
         if mant == 0 {
             return Ok(Term {
                 neg: false,
@@ -33,7 +34,7 @@ impl Term {
         }
         let tz = mant.trailing_zeros();
         let e = exp
-            .checked_add(i64::from(tz))
+            .checked_add(i128::from(tz))
             .ok_or_else(|| format!("term exponent overflow: {} + {}", exp, tz))?;
         Ok(Term {
             neg,
@@ -85,23 +86,21 @@ fn mid_term(b: &BallDesc) -> Result<Term, String> {
     if b.mid_mant == 0 {
         return Err(String::from("nonzero mid with a zero mantissa"));
     }
-    let e = b
-        .mid_exp
+    let e = i128::from(b.mid_exp)
         .checked_sub(64)
         .ok_or_else(|| String::from("mid exponent underflow"))?;
     Term::new(b.sign == Sign::Minus, u128::from(b.mid_mant), e)
 }
 
 /// The radius as `(mant, exp)` with value `mant * 2^exp`; `Ok(None)` for a zero radius.
-pub fn radius_value(b: &BallDesc, prec: u32) -> Result<Option<(u64, i64)>, String> {
+pub fn radius_value(b: &BallDesc, prec: u32) -> Result<Option<(u64, i128)>, String> {
     match b.radius {
         RadiusClass::Zero => Ok(None),
         RadiusClass::RandomMag => {
             if b.rad_mant == 0 {
                 return Ok(None);
             }
-            let e = b
-                .rad_exp
+            let e = i128::from(b.rad_exp)
                 .checked_sub(64)
                 .ok_or_else(|| String::from("radius exponent underflow"))?;
             Ok(Some((b.rad_mant, e)))
@@ -110,10 +109,9 @@ pub fn radius_value(b: &BallDesc, prec: u32) -> Result<Option<(u64, i64)>, Strin
             if b.mid_is_zero {
                 return Err(String::from("an ulp radius needs a nonzero mid"));
             }
-            let half = i64::from(b.radius == RadiusClass::HalfUlp);
-            let e = b
-                .mid_exp
-                .checked_sub(i64::from(prec))
+            let half = i128::from(b.radius == RadiusClass::HalfUlp);
+            let e = i128::from(b.mid_exp)
+                .checked_sub(i128::from(prec))
                 .and_then(|v| v.checked_sub(half))
                 .ok_or_else(|| String::from("ulp exponent underflow"))?;
             Ok(Some((1, e)))
@@ -125,7 +123,7 @@ pub fn radius_value(b: &BallDesc, prec: u32) -> Result<Option<(u64, i64)>, Strin
     }
 }
 
-fn offset(rad: Option<(u64, i64)>, j: i64, t: u32) -> Result<Term, String> {
+fn offset(rad: Option<(u64, i128)>, j: i64, t: u32) -> Result<Term, String> {
     match rad {
         None => Term::new(false, 0, 0),
         Some((m, e)) => {
@@ -133,7 +131,7 @@ fn offset(rad: Option<(u64, i64)>, j: i64, t: u32) -> Result<Term, String> {
                 .checked_mul(u128::from(j.unsigned_abs()))
                 .ok_or_else(|| String::from("offset mantissa overflow"))?;
             let ex = e
-                .checked_sub(i64::from(t))
+                .checked_sub(i128::from(t))
                 .ok_or_else(|| String::from("offset exponent underflow"))?;
             Term::new(j < 0, prod, ex)
         }
