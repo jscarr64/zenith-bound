@@ -111,6 +111,13 @@ echo "$out" | grep -c "^SURVIVED 002-add-commute" > /dev/null || fail "persisten
 [ -e "$t/zb-mutate.persist" ] && fail "persistent target: fixed worktree left behind"
 MUTATE_TARGET="relative/dir" run >/dev/null 2>&1 && fail "relative MUTATE_TARGET accepted"
 MUTATE_TARGET="$r/target" run >/dev/null 2>&1 && fail "MUTATE_TARGET inside the repo accepted"
+# the fixed persistent worktree lives beside the persistent target (or under MUTATE_PERSIST), never under MUTATE_TMP, whose default was
+# /tmp (wiped on reboot): an unwritable MUTATE_TMP must not matter in persistent mode
+ro="$t/ro"; mkdir -p "$ro"; chmod 555 "$ro"; setm m.killed
+out="$(MUTATE_TMP="$ro" MUTATE_PERSIST="$t/pp" MUTATE_TARGET="$pt" run 2>&1)" || fail "MUTATE_PERSIST: worktree not placed under it: $out"
+[ -d "$t/pp" ] && [ ! -e "$t/pp/zb-mutate.persist" ] || fail "MUTATE_PERSIST: dir missing or worktree left behind"
+out="$(MUTATE_TMP="$ro" MUTATE_TARGET="$pt" run 2>&1)" || fail "persistent worktree not placed beside MUTATE_TARGET: $out"
+chmod 755 "$ro"
 rm -rf "$pt"
 
 # mutate.sh tests the COMMITTED HEAD, so a dirty tree would test code other than what is on disk (2102-zb-mut180: SURVIVED because the
@@ -143,6 +150,6 @@ printf '# empty\n' > "$r/tools/mutants/manifest.txt"; cm
 out="$(MFLOOR="$t/f.at" run)" && fail "0 mutants with a floor passed: $out"; echo "$out" | grep -c "0 mutants ran" > /dev/null || fail "0 mutants: wrong message: $out"
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-want_cases=26; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+want_cases=28; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
 [ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
 echo "mutate selftest: ok ($ncases cases)"

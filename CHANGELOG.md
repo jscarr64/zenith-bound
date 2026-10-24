@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- mutate.sh (2026-10-24): the fixed persistent worktree (`zb-mutate.persist`) now goes under `MUTATE_PERSIST`, by default the parent of
+  `MUTATE_TARGET`, instead of `MUTATE_TMP` (default /tmp, wiped by the 10/23 reboot). mutate_selftest gains 2 cases (28): an unwritable
+  `MUTATE_TMP` does not matter in persistent mode, with and without `MUTATE_PERSIST`.
+
 - runlog selftest (2026-10-24): the other agent's RUNNING row now uses a live `sleep` pid started by the selftest (it used pid 1, and
   poplog b6e2dcf prunes a row when `kill -0` fails, which for pid 1 is EPERM, so the row was wrongly pruned). A second row with pid 1
   asserts that a live pid this user cannot signal is kept; it FAILS until poplog prunes only on ESRCH (`poplog.sh:65`, reported to

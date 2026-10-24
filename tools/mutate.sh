@@ -16,8 +16,9 @@
 #        MUTATE_TIMEOUT=DURATION    per `cargo test` run of a suite (default 20m); a timeout counts as a kill
 #        MUTATE_BUILD_TIMEOUT=DUR   per build (default 20m)
 #        MUTATE_TMP=DIR             parent of the throwaway worktree and target dir (default /tmp)
+#        MUTATE_PERSIST=DIR         parent of that fixed worktree (default: the parent of MUTATE_TARGET, so not /tmp, which a reboot wipes)
 #        MUTATE_TARGET=DIR          optional PERSISTENT cargo target dir, kept across mutants and runs (outside the repo). The worktree then has a
-#                                   fixed path ($MUTATE_TMP/zb-mutate.persist, still created fresh from committed HEAD and removed after each
+#                                   fixed path ($MUTATE_PERSIST/zb-mutate.persist, still created fresh from committed HEAD and removed after each
 #                                   mutant), so cargo rebuilds only what the patch touched. Unset: a fresh target dir per mutant, removed after it.
 #
 # For each manifest row it creates a throwaway `git worktree` under /tmp (never inside the repo), applies ONE patch, builds the suite,
@@ -108,9 +109,13 @@ if [ -n "$persist" ]; then
   case "$persist" in /*) ;; *) echo "mutate: MUTATE_TARGET must be an absolute path"; exit 2 ;; esac
   case "$persist" in /home/jsc64/MathWorks*|"$repo"|"$repo"/*) echo "mutate: MUTATE_TARGET must be outside the repo"; exit 2 ;; esac
   mkdir -p "$persist" || { echo "mutate: cannot create MUTATE_TARGET $persist"; exit 2; }
+  pbase=${MUTATE_PERSIST:-$(dirname "$persist")}
+  case "$pbase" in /*) ;; *) echo "mutate: MUTATE_PERSIST must be an absolute path"; exit 2 ;; esac
+  case "$pbase" in /home/jsc64/MathWorks*|"$repo"|"$repo"/*) echo "mutate: MUTATE_PERSIST must be outside the repo"; exit 2 ;; esac
+  mkdir -p "$pbase" || { echo "mutate: cannot create MUTATE_PERSIST $pbase"; exit 2; }
 fi
 newtgt() { if [ -n "$persist" ]; then tgt=$persist; else tgt=$(mktemp -d "$base/zb-mutate-target.XXXXXX"); fi; }
-newwork() { if [ -n "$persist" ]; then work="$base/zb-mutate.persist"; git -C "$repo" worktree remove --force "$work" >/dev/null 2>&1; rm -rf "$work"; git -C "$repo" worktree prune >/dev/null 2>&1; else work=$(mktemp -d "$base/zb-mutate.XXXXXX"); rmdir "$work"; fi; }
+newwork() { if [ -n "$persist" ]; then work="$pbase/zb-mutate.persist"; git -C "$repo" worktree remove --force "$work" >/dev/null 2>&1; rm -rf "$work"; git -C "$repo" worktree prune >/dev/null 2>&1; else work=$(mktemp -d "$base/zb-mutate.XXXXXX"); rmdir "$work"; fi; }
 work=""; tgt=""
 cleanup() {
   if [ -n "$work" ]; then
