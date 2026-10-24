@@ -99,14 +99,10 @@ impl Ball {
 
     /// `-self`, exact and infallible (CONTRACT 15.1): the midpoint negated with −0 normalised to +0 (6.3);
     /// radius and prec unchanged. Crate-only: `impl Neg for Ball` lives in `arith` (slice S1).
-    pub(crate) fn negated(self) -> Ball {
-        let mut mid = self.mid;
-        mid.inv_sign();
-        Ball {
-            mid: positive_zero(mid),
-            rad: self.rad,
-            prec: self.prec,
-        }
+    pub(crate) fn negated(mut self) -> Ball {
+        self.mid.inv_sign();
+        self.mid = positive_zero(self.mid);
+        self
     }
 }
 
