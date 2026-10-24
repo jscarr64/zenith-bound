@@ -2,7 +2,7 @@
 # Red-marker gate (Spence 2026-10-24): every `red: not implemented` test marker in tests/**/*.rs names its CONTRACT item
 # (`CONTRACT <SLICE>.<n>`, e.g. CONTRACT LA4.1), and slice LA4 may not be marked done (a `Status: done` line in the
 # docs/CONTRACT.md "### Slice LA4" section) while any marker naming an LA4 item remains. usage: tools/la4_red_markers.sh [ROOT]
-# Exit 0 ok, 1 violation, 2 setup error (missing tool or CONTRACT.md).
+# Every CONTRACT id a marker names must have a **<id>** entry in docs/CONTRACT.md. Exit 0 ok, 1 violation, 2 setup error (missing tool or CONTRACT.md).
 set -u
 export LC_ALL=C
 root=${1:-$(cd "$(dirname "$0")/.." && pwd)}
@@ -12,6 +12,14 @@ contract="$root/docs/CONTRACT.md"
 markers=$(grep -rn --include='*.rs' -F 'red: not implemented' "$root/tests" 2> /dev/null)
 bad=$(printf '%s\n' "$markers" | grep -vE 'CONTRACT [A-Z]+[0-9]*\.[0-9]+' | grep -v '^$')
 if [ -n "$bad" ]; then echo "la4_red_markers: FAIL red marker without its CONTRACT <SLICE>.<n> item:"; echo "$bad"; exit 1; fi
+# every named CONTRACT id must be a **<id>** entry in CONTRACT.md (a prose mention is not an entry)
+missing=""
+for id in $(printf '%s\n' "$markers" | grep -oE 'CONTRACT [A-Z]+[0-9]*\.[0-9]+' | awk '{ print $2 }' | sort -u); do
+  grep -qF "**$id**" "$contract" || missing="$missing $id"
+done
+if [ -n "$missing" ]; then
+  for id in $missing; do echo "la4_red_markers: FAIL CONTRACT $id has no entry in docs/CONTRACT.md (want a **$id** line):"; printf '%s\n' "$markers" | grep -F "CONTRACT $id:"; done; exit 1
+fi
 la4=$(printf '%s\n' "$markers" | grep -E 'CONTRACT LA4\.[0-9]+')
 n=$(printf '%s\n' "$la4" | grep -c .)
 done_line=$(awk '/^### Slice LA4([^0-9]|$)/ { f = 1; next } /^##/ { f = 0 } f && tolower($0) ~ /status:?[*_ ]*done/' "$contract")
