@@ -75,7 +75,7 @@ run gate-selftest "require mktemp ln sed grep wc stat tee touch cargo git timeou
 run pubfn-coverage "require awk grep git && tools/pubfn_coverage_selftest.sh && tools/pubfn_coverage.sh"
 run gen-la-guard "require python3 env && tools/gen_la_guard_selftest.sh"
 run la4-red-markers "require grep awk && tools/la4_red_markers_selftest.sh && tools/la4_red_markers.sh"
-run goldens-regen "require sha256sum grep cmp && tools/goldens_regen_selftest.sh && tools/goldens_regen.sh"
+run goldens-regen "require sha256sum grep cmp && tools/goldens_regen_selftest.sh && tools/popguard_selftest.sh && tools/goldens_regen.sh"
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"

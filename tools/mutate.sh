@@ -89,7 +89,7 @@ inrange() { local olo ohi oname; while read -r olo ohi oname; do [ -n "$olo" ] &
 while IFS=$'\t' read -r _ cid _ _; do
   [ -n "$cid" ] || continue
   cnum=${cid%%-*}; [[ $cnum =~ ^[0-9]{1,6}$ ]] || { echo "mutate: FAIL $manifest: id $cid does not start with a number"; exit 1; }
-  owner=$(inrange "$((10#$cnum))")
+  owner=$(inrange "$((10#$cnum))") || true   # no owning range is the normal case (rc 1): no ERR trap line
   [ -z "$owner" ] || { echo "mutate: FAIL $manifest: id $cid is inside the range of manifest.d/$owner (owned by slice ${owner%.txt}); move it there"; exit 1; }
 done <<< "$(grep -v -E '^[[:space:]]*(#|$)' "$manifest" || true)"
 # manifest integrity, before any mutant runs: every id exactly once, every referenced patch file present
@@ -121,7 +121,7 @@ for e in "${equivs[@]}"; do
     { [ "$eid" != "$eline" ] && [ -n "${ereason//[[:space:]]/}" ]; } || { echo "mutate: FAIL $e: entry '$eline' needs ID<TAB>REASON"; exit 1; }
     printf '%s\n' "$ids" | grep -qxF -- "$eid" || { echo "mutate: FAIL $e: equivalent id $eid is not in the manifest"; exit 1; }
     if [ -n "$eslice" ]; then
-      enum=${eid%%-*}; erange=$(inrange "$((10#$enum))")
+      enum=${eid%%-*}; erange=$(inrange "$((10#$enum))") || true
       [ "$erange" = "$eslice.txt" ] || { echo "mutate: FAIL $e: id $eid is not in slice $eslice's range"; exit 1; }
     fi
   done < "$e"
@@ -211,7 +211,8 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
   if ! (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$bttl" cargo test --offline --frozen --test "$suite" --no-run >"$tgt/build.log" 2>&1 </dev/null); then
     echo "INVALID $id: mutant does not build suite $suite (see: first lines below)"; head -5 "$tgt/build.log" | sed 's/^/    /'; ni=$((ni + 1))
   else
-    (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$ttl" cargo test --offline --frozen --test "$suite" >"$tgt/run.log" 2>&1 </dev/null); rc=$?
+    # rc captured explicitly: a failing suite is the EXPECTED outcome for a mutant, so it must not trip the poplog ERR trap
+    rc=0; (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$ttl" cargo test --offline --frozen --test "$suite" >"$tgt/run.log" 2>&1 </dev/null) || rc=$?
     if [ "$rc" = 0 ]; then
       if [ "${#equivs[@]}" -gt 0 ] && awk -F'\t' -v id="$id" '!/^[[:space:]]*(#|$)/ && $1 == id { f = 1 } END { exit !f }' "${equivs[@]}"; then
         echo "SURVIVED-EQUIVALENT $id ($fnpath, suite $suite): documented in EQUIVALENT.txt or equivalent.d"; ne=$((ne + 1))
@@ -222,7 +223,8 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
     # a kill is a test binary that ran and failed: cargo then prints "error: test failed, to rerun pass". Anything else (resolve,
     # network, lock, I/O error) proves nothing about the mutant.
     elif grep -q '^error: test failed, to rerun pass' "$tgt/run.log"; then echo "KILLED $id ($fnpath, suite $suite): suite failed (rc $rc)"; nk=$((nk + 1))
-    else echo "INVALID $id: suite run failed without a test failure (rc $rc; see: first lines below)"; head -5 "$tgt/run.log" | sed 's/^/    /'; ni=$((ni + 1)); fi
+    else (exit "$rc")   # unexpected: re-raise rc so the ERR trap still records it
+      echo "INVALID $id: suite run failed without a test failure (rc $rc; see: first lines below)"; head -5 "$tgt/run.log" | sed 's/^/    /'; ni=$((ni + 1)); fi
   fi
   cleanup; newtgt
 done <<< "$rows"
