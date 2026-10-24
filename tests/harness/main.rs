@@ -29,6 +29,7 @@ mod w1_translation;
 // Per-slice harness files (S0, 2026-10-24): each belongs to its slice alone; this list is final.
 mod slice_arith;
 mod slice_bridge;
+mod slice_cball;
 mod slice_carlson;
 mod slice_cholesky;
 mod slice_eigen;
