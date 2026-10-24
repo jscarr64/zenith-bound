@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Self-test for the per-slice checks of tools/goldens_regen.sh (Paul, 2026-10-24). Runs `goldens_regen.sh --slices-only` (no oracle,
-# no generators, nothing under the repo written) on fixtures under ${TMPDIR:-/tmp}. Proves: a SHA256SUMS with no entries passes only when
+# no generators, nothing under the repo written) on fixtures under $(zb_scratch). Proves: a SHA256SUMS with no entries passes only when
 # it carries the explicit `# EMPTY` marker; a marked file that also lists entries FAILS; a malformed line FAILS (sha256sum --strict);
 # a changed, unlisted or missing golden FAILS; an untracked *_heavy.txt (hashes pinned elsewhere, .gitignored) is not demanded; a slice
 # without GENERATORS FAILS.
@@ -36,5 +36,22 @@ fx; printf 'a\n' > "$d/a.txt"; sum a.txt > "$d/SHA256SUMS"; rm "$d/a.txt"
 ck; out=$(gr) && fail "a listed but missing golden passed: $out"
 fx; printf '# EMPTY\n' > "$d/SHA256SUMS"; rm "$d/GENERATORS"
 ck; out=$(gr) && fail "a slice without GENERATORS passed: $out"
+# Spence (2026-10-24, 1158-zb-l0a1-goldens-regen-proof): a '# EMPTY' slice made the ERR trap log `entries=$(grep ...)` rc=1 once per
+# slice. Run with a real run log (fresh POPLOG_ROOT, not nested in this selftest's log): it passes and the log holds no ERR line.
+fx; printf '# header\n# EMPTY: no goldens yet\n' > "$d/SHA256SUMS"
+out=$( unset POPLOG_FILE POPLOG_PID POPLOG_STATE_DIR POPLOG_PROGRESS_FILE POPLOG_RUNNING RUNLOG_INNER RUNLOG_ACTIVE
+       POPLOG_ROOT="$t/pl" RUNLOG_AGENT=selftest GOLDENS_ROOT="$root" "$here/goldens_regen.sh" --slices-only 2>&1 )
+ck; [ $? = 0 ] || fail "logged marked-empty run failed: $out"
+lg=$(find "$t/pl/selftest" -name '*-goldens_regen.log' | head -1)
+ck; [ -n "$lg" ] || fail "logged marked-empty run: no run log: $out"
+ck; grep -q ' ERR ' "$lg" && fail "a marked-empty slice logged ERR trap lines: $(grep ' ERR ' "$lg")"
+ck; grep -q "slice x: SHA256SUMS marked '# EMPTY', skipped" <<< "$out" || fail "a marked-empty slice was not reported as skipped: $out"
+# a '# EMPTY' slice with a golden next to it FAILS, naming the marker
+fx; printf 'a\n' > "$d/a.txt"; printf '# EMPTY\n' > "$d/SHA256SUMS"
+ck; out=$(gr) && fail "a marked-empty slice with a.txt passed: $out"
+ck; printf '%s\n' "$out" | grep -q "marked '# EMPTY' but has a.txt" || fail "marked-empty with a.txt: unclear message: $out"
+# '# EMPTY' plus a malformed line FAILS
+fx; printf '# EMPTY\nnot a sum\n' > "$d/SHA256SUMS"
+ck; out=$(gr) && fail "a marked-empty SHA256SUMS with a malformed line passed: $out"
 echo "goldens_regen selftest: ok"
-st_done goldens_regen 12   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done goldens_regen 19   # WANT: cases this script runs (tools/selftest_cases.sh)

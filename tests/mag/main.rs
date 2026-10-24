@@ -11,6 +11,8 @@ mod corners;
 mod div_up;
 mod equivalent_ledger;
 mod golden;
+mod golden_l0a1;
+mod l0a_close;
 mod lower_div;
 mod lower_mul;
 mod lower_sqrt;
