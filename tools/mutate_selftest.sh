@@ -58,7 +58,7 @@ export MUTATE_REPO="$r" MUTATE_TMP="$t"
 # Every run() is one case; the count is asserted at the end, so a selftest that silently skips its cases cannot read ok (Paul, 2026-10-23:
 # the zb-green-mutate-dirty2 step ran 0 tests and exited 0).
 printf '# fixture floor\nkilled\t0\nkilled+equivalent\t1\n' > "$t/mfloor.txt"
-run() { printf 'x\n' >> "$t/cases"; MUTATE_FLOOR_ZERO_OK="${MZERO-1}" MUTATE_FLOOR="${MFLOOR:-$t/mfloor.txt}" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@"; }
+run() { printf 'x\n' >> "$t/cases"; MUTATE_FLOOR_ZERO_OK="${MZERO-1}" MUTATE_FLOOR="${MFLOOR:-$t/mfloor.txt}" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@" 2>&1; }   # mutate.sh FAIL lines go to stderr (9e8612d); the cases grep both streams
 leftovers() { git -C "$r" worktree list | grep -c 'zb-mutate\.' ; find "$t" -maxdepth 1 \( -name "zb-mutate.*" -o -name "zb-mutate-target.*" \) | wc -l; }
 cm() { git -C "$r" add -A; git -C "$r" commit -qm fixture-edit >/dev/null 2>&1 || :; }   # commit a fixture edit: mutate.sh refuses a dirty tree
 setm() { cp "$r/$1" "$r/tools/mutants/manifest.txt"; cm; }   # committed: mutate.sh refuses a dirty tree
