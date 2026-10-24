@@ -106,6 +106,6 @@ src/mag/mod.rs:Mag::finite	088-N16	088-N16.patch	mag
 src/mag/mul.rs:mul_checked	089-N4b	089-N4b.patch	mag
 src/mag/div.rs:div_checked	090-N9b	090-N9b.patch	mag
 src/mag/mul.rs:mul_checked	091-N17	091-N17.patch	mag
-src/mag/add.rs:add_checked	092-N18	092-N18.patch	mag
-src/mag/lower.rs:sub_checked	093-N19	093-N19.patch	mag
-src/mag/lower.rs:sub_checked	094-N20	094-N20.patch	mag
+src/mag/add.rs:add_checked	175-N18	175-N18.patch	mag
+src/mag/lower.rs:sub_checked	176-N19	176-N19.patch	mag
+src/mag/lower.rs:sub_checked	177-N20	177-N20.patch	mag
