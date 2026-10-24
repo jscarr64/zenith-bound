@@ -230,7 +230,11 @@ fn wide_exponent_sweep_round_trips_or_rejects() -> Result<(), String> {
         e = if (emin() - 70..emin() + 70).contains(&e) || e >= emax() - 70 {
             e.checked_add(1).ok_or("overflow")?
         } else {
-            e.checked_add(1 << 24).ok_or("overflow")?.min(emax() - 70)
+            {
+                // i64 exponent range (2^63 wide): geometric stride, at least 2^24.
+                let stride = (e.checked_abs().ok_or("overflow")? / 64).max(1 << 24);
+                e.checked_add(stride).ok_or("overflow")?.min(emax() - 70)
+            }
         };
     }
     if checked < 400 {
