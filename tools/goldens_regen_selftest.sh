@@ -7,7 +7,7 @@
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap goldens_regen_selftest "$@"   # run log (tools/runlog.sh)
 set -u
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "${TMPDIR:-/tmp}/goldens-regen-selftest.XXXXXX")"; runlog_on_exit "rm -rf \"$t\""
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "$(zb_scratch)/goldens-regen-selftest.XXXXXX")"; runlog_on_exit "rm -rf \"$t\""
 . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }
 n=0

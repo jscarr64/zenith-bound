@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Self-test for tools/digests.sh (S13): fixtures under /tmp prove `compare` PASSES on identical digests (ignoring the '#' header lines, which
+# Self-test for tools/digests.sh (S13): fixtures under $(zb_scratch) prove `compare` PASSES on identical digests (ignoring the '#' header lines, which
 # name the arch) and FAILS, naming the first differing line, on each failure mode (a changed digest, a changed word count, a missing suite row,
 # an extra row, runs that agree with each other but not with the expected file, no runs at all, a missing expected file); and a fake cargo
 # proves `run` builds the right command lines (profile, --target, test threads) and fails when a run fails or writes no file.
@@ -8,7 +8,7 @@
 runlog_detach_children
 set -u
 export LC_ALL=C
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/digests-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "$(zb_scratch)"/digests-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 fail() { echo "digests SELFTEST FAIL: $*"; exit 1; }
 d="$here/digests.sh"
 ROWS='splitmix 65536 824ce7a05302bb45

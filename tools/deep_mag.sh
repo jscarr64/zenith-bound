@@ -8,13 +8,14 @@
 # A failing property prints a replay line (`ZB_REPLAY=<seed>:<case>`) with the failing input: report it, do not patch src/.
 # Replay a deep failure with ZB_FUZZ_DEEP=1 ZB_REPLAY=<seed>:<case> cargo test --test harness fuzz_mag:: (the seed already encodes the stream).
 set -u
+. "${BASH_SOURCE[0]%/*}/scratch.sh"
 export PYTHONNOUSERSITE=1
 tag=${1:-$(date +%Y%m%d-%H%M%S)}
-T=${T:-/tmp/zb-gate-logs}; mkdir -p "$T"
+T=${T:-$(zb_scratch)/zb-gate-logs}; mkdir -p "$T"
 cd "${REPO:-$(cd "$(dirname "$0")/.." && pwd)}" || exit 2
 exec 9> /tmp/pop-deep.lock
 flock -n 9 || { echo "deep_mag: /tmp/pop-deep.lock is held by another deep run" >&2; exit 75; }
-export CARGO_TARGET_DIR=${DEEP_TARGET:-/tmp/target-deep-mag}
+export CARGO_TARGET_DIR=${DEEP_TARGET:-$(zb_scratch)/target-deep-mag}
 export CARGO_BUILD_JOBS=${DEEP_JOBS:-7}
 export ZB_FUZZ_DEEP=1
 export ZB_FUZZ_CASES=${ZB_FUZZ_CASES:-100000000}

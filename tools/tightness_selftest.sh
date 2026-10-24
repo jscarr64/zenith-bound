@@ -8,7 +8,7 @@
 runlog_detach_children
 set -u
 export LC_ALL=C PYTHONNOUSERSITE=1
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/tightness-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "$(zb_scratch)"/tightness-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 tool=("/usr/bin/python3" "$here/tightness_report.py")
 fail() { echo "tightness SELFTEST FAIL: $*"; exit 1; }
 expect_rc() { # expect_rc <rc> <label> <cmd...>

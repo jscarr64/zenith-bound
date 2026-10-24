@@ -411,7 +411,7 @@ done
 printf 'fn a() {}\n' > src/x.rs
 ck; scan --count-only >/dev/null || fail "tree not clean after the prec fixtures: $(scan --count-only)"
 # no vacuous pass: --working and --staged outside a git repo (git diff fails) must exit nonzero, not report "0 flagged"
-nogit=$(mktemp -d /tmp/rules-nogit.XXXXXX)
+nogit=$(mktemp -d "$(zb_scratch)"/rules-nogit.XXXXXX)
 for mode in --working --staged; do
   ck; out="$(RULES_SCAN_ROOT="$nogit" python3 "$here/rules_scan.py" $mode 2>&1)" && { rm -rf "$nogit"; fail "$mode passed although git diff failed: $out"; }
   ck; echo "$out" | grep -c "git diff .*failed" > /dev/null || { rm -rf "$nogit"; fail "$mode: no git failure message: $out"; }

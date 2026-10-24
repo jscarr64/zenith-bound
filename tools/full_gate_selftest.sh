@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Self-test of tools/full_gate.sh: no step may pass VACUOUSLY when the tool it calls is missing (a `! grep ...` step passes if grep is absent),
-# and the scan steps must still catch a planted hit and pass a clean tree. Runs the gate on throwaway fixtures under /tmp with GATE_STEPS.
+# and the scan steps must still catch a planted hit and pass a clean tree. Runs the gate on throwaway fixtures under $(zb_scratch) with GATE_STEPS.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap full_gate_selftest "$@"   # run log (tools/runlog.sh)
 runlog_detach_children
@@ -8,10 +8,10 @@ set -u
 export LC_ALL=C
 root=$(cd "$(dirname "$0")/.." && pwd)
 fail() { echo "full_gate selftest FAIL: $*"; exit 1; }
-t=$(mktemp -d /tmp/zb-gate-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
+t=$(mktemp -d "$(zb_scratch)"/zb-gate-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 SCANS="unsafe-scan no-float-scan no-panic-scan no-clone-scan derive-scan manifest-scan"
 # The fixture gates run outside this self-test's own run log (their planted failures must not fail it), with no poplog at all.
-fe=(env -u POPLOG_FILE -u POPLOG_STATE_DIR -u POPLOG_PID -u POPLOG_PROGRESS_FILE RUNLOG_POPLOG=/nonexistent RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1)
+fe=(env -u GATE_STEPS -u POPLOG_FILE -u POPLOG_STATE_DIR -u POPLOG_PID -u POPLOG_PROGRESS_FILE RUNLOG_POPLOG=/nonexistent RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1)
 rcof() { sed -n "s/^$2=//p" "$t/logs/$1.rc"; }
 
 # 1. stripped PATH: only what the gate driver itself needs; every tool a step calls (cargo, grep, python3, ...) is missing
@@ -85,4 +85,6 @@ ck; grep -q SHARED "$t/logs/mu-foreign-mutants.log" || fail "mutants step does n
 ck; tag=mu-default; mu env || fail "mutants step failed on a fresh default MUTATE_TARGET: $(cat "$t/logs/mu-default-mutants.log")"
 ck; [ "$(cat "$t/mu-target/mutate/.worktree-owner" 2> /dev/null)" = "$(cd "$t/mu" && pwd -P)" ] || fail "default MUTATE_TARGET got no owner marker"
 st_done full_gate 72   # WANT: cases this script runs (tools/selftest_cases.sh)
+# the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 from the caller's env (only the selftest fixture may use a 0 floor)
+grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -q 'env -u MUTATE_FLOOR_ZERO_OK tools/mutate\.sh' || fail "mutants step runs tools/mutate.sh without env -u MUTATE_FLOOR_ZERO_OK"
 echo "full_gate selftest: ok"

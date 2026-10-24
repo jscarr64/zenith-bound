@@ -11,13 +11,13 @@
 #   tools/fuzz_deep.sh [--cases N|NeK] [--shards K] [--seed HEX] [--out DIR]     defaults: 100000000 cases in total, 7 shards, seed 0x5eed
 #   tools/fuzz_deep.sh --replay <seed hex>:<case>                           one case, the replay line's seed=... and case=...
 #   tools/fuzz_deep.sh --selftest                                             proves argument checks, shard seeds, a small run and replay
-# Deep runs are env-driven: CARGO_TARGET_DIR (default /tmp/target-fuzz-deep), CARGO_BUILD_JOBS (default 7). No repo file is written.
+# Deep runs are env-driven: CARGO_TARGET_DIR (default $(zb_scratch)/target-fuzz-deep), CARGO_BUILD_JOBS (default 7). No repo file is written.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap fuzz_deep "$@"   # run log (tools/runlog.sh)
 set -u
 export LC_ALL=C
 root=$(cd "$(dirname "$0")/.." && pwd)
-export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-/tmp/target-fuzz-deep}
+export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$(zb_scratch)/target-fuzz-deep}
 export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-7}
 fail() { echo "fuzz_deep FAIL: $*" >&2; exit 2; }
 # count_of <text> <label>: a case count, plain decimal digits or <digits>e<digits> (1e8, 25e5); at most 10^18; anything else fails naming <label>
@@ -78,7 +78,7 @@ if [ "$selftest" = 1 ]; then
   [ "$a" = 0000000000005eed ] || fail "selftest: shard 0 seed is $a"
   [ "$b" = 9e3779b97f4adb02 ] || fail "selftest: shard 1 seed is $b"
   if ! { [ "$a" != "$b" ] && [ "$b" != "$c" ]; }; then fail "selftest: shard seeds collide"; fi
-  t=$(mktemp -d /tmp/fuzz-deep-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""
+  t=$(mktemp -d "$(zb_scratch)"/fuzz-deep-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""
   "$me" --cases 4000 --shards 2 --out "$t" >"$t/run.txt" 2>&1 || { cat "$t/run.txt"; fail "selftest: small run failed"; }
   grep -q 'fuzz_deep: 2 shards ok, 4000 cases' "$t/run.txt" || { cat "$t/run.txt"; fail "selftest: no summary line"; }
   if ! { [ -s "$t/fuzz_mag.fuzz_mag_gate/shard-0.log" ] && [ -s "$t/fuzz_mag.fuzz_mag_gate/shard-1.log" ]; }; then fail "selftest: shard logs missing"; fi
@@ -124,7 +124,7 @@ fi
 
 if [ -n "$replay" ]; then
   case "$replay" in *:*) ;; *) fail "--replay must be <seed hex>:<case>" ;; esac
-  rt=${rtarget:-${targets[0]}}; rl=$(mktemp /tmp/fuzz-deep-replay.XXXXXX); runlog_on_exit "rm -f \"$rl\""
+  rt=${rtarget:-${targets[0]}}; rl=$(mktemp "$(zb_scratch)"/fuzz-deep-replay.XXXXXX); runlog_on_exit "rm -f \"$rl\""
   ZB_REPLAY="$replay" run_test "$rt" > "$rl"; rc=$?
   grep -E 'replay|why:|test result' "$rl" | head -20
   [ "$rc" = 0 ] || { echo "fuzz_deep: replay $replay FAILED (rc $rc)"; exit 1; }
@@ -137,7 +137,7 @@ exec 9>"$lock" || fail "cannot open the deep lock $lock"
 echo "fuzz_deep: waiting up to ${lock_wait}s for deep lock $lock"
 flock -w "$lock_wait" 9 || fail "deep lock $lock is busy (waited ${lock_wait}s)"
 echo "fuzz_deep: holding deep lock $lock"
-[ -n "$out" ] || out=$(mktemp -d /tmp/fuzz-deep.XXXXXX)
+[ -n "$out" ] || out=$(mktemp -d "$(zb_scratch)"/fuzz-deep.XXXXXX)
 mkdir -p "$out" || fail "cannot create $out"
 (cd "$root" && timeout "$build_to" cargo test --release --test harness --no-run >"$out/build.log" 2>&1); brc=$?
 [ "$brc" != 124 ] || fail "release build timed out after $build_to"
