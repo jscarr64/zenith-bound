@@ -98,6 +98,8 @@ This is zenith-float's `exponent()` convention (`3` is `e = 2`, `m = 0xC000…`)
 
 8.3 Midpoint exponents are zenith-float's `EXPONENT_MIN..=EXPONENT_MAX`. (The 32-bit-target sentence of PLAN Part L 4 is dropped, decision O3: zenith-float's `EXPONENT_MAX`/`EXPONENT_MIN` are `i32::MAX`/`i32::MIN` on every target, so no target refuses a midpoint on range grounds.)
 
+> TODO (S0, 2026-10-24): O21 moves zenith-float's `Exponent` to `i64` (±(2^62−1)), which supersedes the `i32` wording of 8.3 and of O3 below. This text stays as is until zb pins Rusty's pushed i64 zenith-float SHA (SP-i64); the 8.3/O3 rewrite lands with that pin, not before.
+
 ## 9. Rounding and radius rules (PLAN Part L 5 and 6; division is clause 4)
 
 9.1 **Rounding.** The midpoint is rounded once to `prec` to nearest (`ToEven`) from an exact or fully accounted value (clause 5); there is no caller `rm` (O19, DECIDED 2026-10-23, Paul). The radius is rounded **up** at every step. No rounding error is ever dropped. Directed modes are used internally only (radius and endpoint bounds) and never change containment. `RoundingMode::None` truncates and is never used in a bound path.
@@ -185,6 +187,62 @@ All of this section is integer-only (`u64`/`u128`/`i64` and wider integers in te
 15.5 **Allocation failure (API freeze F7, behaviour contract).** Storage that zenith-bound itself allocates in proportion to a caller's size (container storage: `BallArray::zeros` today, and every later container or LA op) is reserved with `try_reserve`/`try_reserve_exact`; when it cannot be allocated the op returns `Err(BoundError::Resource { .. })` and does not abort. A shape whose element count overflows `usize` is `InvalidArgument` instead. Out of scope: allocations inside zenith-float (one bignum's limbs) and the shrink in `Vec::into_boxed_slice` of a caller-supplied `Vec`; those follow Rust's global allocator (abort on OOM).
 
 15.6 **Container and linear-algebra op signatures (API freeze F8).** Every container or LA op that computes balls (elementwise ops, norms, products, solves, factorizations, eigen) takes an explicit `prec: Precision` and **no `RoundingMode`** (the clause 15.1 rule: midpoints round to nearest internally, radii outward), and returns `BoundResult<_>`. Iteration budgets come from the `SolveOpts`/`EigOpts` option structs; running out of budget is `NotConverged`. Pure accessors (`shape`, `rank`, `len`, `get`, `nrows`, `ncols`, `as_slice`) take no `prec` and return plain values or `Option`.
+
+## 16. Slice sections (S0, 2026-10-24)
+
+One section per parallel slice. Each section belongs to its slice alone: a slice writes its clauses only in its own section (numbered 16.<slice>.n, e.g. `16.S1.3`, `16.LA2.1`), so no two slices edit the same lines. Shared clauses 1 to 15 change only through Paul. Every section starts empty and is not normative until its slice fills it and the clauses are reviewed.
+
+### Slice S1 (`src/arith.rs`)
+
+_Empty (S0 stub). Owner: slice S1._
+
+### Slice S2 (`src/bridge.rs`)
+
+_Empty (S0 stub). Owner: slice S2._
+
+### Slice S3 (`src/elementary.rs`)
+
+_Empty (S0 stub). Owner: slice S3._
+
+### Slice S4a (`src/hypergeom.rs`)
+
+_Empty (S0 stub). Owner: slice S4a._
+
+### Slice S4b (`src/carlson.rs`)
+
+_Empty (S0 stub). Owner: slice S4b._
+
+### Slice S4c (`src/zf_special.rs`)
+
+_Empty (S0 stub). Owner: slice S4c._
+
+### Slice S5 (`src/quadrature.rs`)
+
+_Empty (S0 stub). Owner: slice S5._
+
+### Slice S6 (`src/matrix.rs`)
+
+_Empty (S0 stub). Owner: slice S6._
+
+### Slice LA1 (`src/cholesky.rs`)
+
+_Empty (S0 stub). Owner: slice LA1._
+
+### Slice LA2 (`src/lu.rs`)
+
+_Empty (S0 stub). Owner: slice LA2._
+
+### Slice LA3 (`src/qr.rs`)
+
+_Empty (S0 stub). Owner: slice LA3._
+
+### Slice LA4 (`src/gls.rs`)
+
+_Empty (S0 stub). Owner: slice LA4._
+
+### Slice LA5 (`src/eigen.rs`)
+
+_Empty (S0 stub). Owner: slice LA5._
 
 ## Decisions recorded (formerly open items; decided 2026-10-15 by Rusty with Paul, private fields also by Jeff via Paul; O2 detection rule and O11-W to O17-W on Rusty's second review; O1, O6, D14, D15, 10.2a to 10.2e and O13-C decided 2026-10-16 by Paul under Jeff's delegation, Rusty recommended)
 
