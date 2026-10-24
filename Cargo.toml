@@ -8,9 +8,9 @@ description = "Guaranteed-bounds (ball arithmetic) on zenith-float. Pre-release:
 publish = false
 
 [dependencies]
-# zenith-float Stage A interim pin (PLAN C1): fe5c15d, as a git rev (the /tmp/zf-pin-fe5c15d worktree was lost in a reboot, 2026-10-24).
+# zenith-float pin: rusty/zf-r13 829f112 (R13 directed div/reciprocal/hypot, div_exact; on w6-redo 66040be, i64 Exponent), 2026-10-24.
 # ExactNum lives in zenith-float-num. No std feature: zb does not need it. No other dependency is allowed.
-zenith-float-num = { git = "https://github.com/jscarr64/zenith-float", rev = "fe5c15d843823a20b5da1d0a13f032a74bc65f77", default-features = false }
+zenith-float-num = { git = "https://github.com/jscarr64/zenith-float", rev = "829f112861ea28908053425feb665a75312b4f9f", default-features = false }
 
 # Applies to every target (lib, tests/, benches/, examples/): Jeff's rules hold in test code too.
 [lints.rust]

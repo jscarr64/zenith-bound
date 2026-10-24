@@ -781,7 +781,7 @@ fn row_val(s: &str, e: &str, m: &str) -> Result<ExactNum, String> {
             .mul_full_prec(&pow2(shift)?)
             .add_full_prec(&ExactNum::from(v));
     }
-    let exp: i32 = e.parse().map_err(|_| format!("exp {}", e))?;
+    let exp: i64 = e.parse().map_err(|_| format!("exp {}", e))?;
     x.set_exponent(exp);
     Ok(if s == "1" { -x } else { x })
 }
