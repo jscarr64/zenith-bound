@@ -669,7 +669,6 @@ fn precision_draws_come_from_their_source() -> Result<(), String> {
     for (op, want) in [
         (1u32, vec![1, 2]),
         (MAX_PREC, vec![MAX_PREC - 1, MAX_PREC, MAX_PREC + 1]),
-        (u32::MAX, vec![u32::MAX - 1, u32::MAX]),
     ] {
         let mut got: Vec<u32> = Vec::new();
         for _ in 0..200 {
@@ -685,6 +684,21 @@ fn precision_draws_come_from_their_source() -> Result<(), String> {
         return Err(String::from("operand precision 0 was accepted"));
     }
     Ok(())
+}
+
+// Headroom (Jeff, 2026-10-23 12:33 PM CT): an operand precision at the top of u32 keeps its -1 neighbour and itself; +1 would wrap, so it is dropped.
+#[test]
+fn operand_precision_at_u32_max_keeps_its_lower_neighbour() -> Result<(), String> {
+    let mut rng = pinned_rng()?;
+    let mut got: Vec<u32> = Vec::new();
+    for _ in 0..200 {
+        let v = draw_precision(&mut rng, &PrecSource::Operand(u32::MAX))?;
+        if !got.contains(&v) {
+            got.push(v);
+        }
+    }
+    got.sort_unstable();
+    expect_eq("operand at u32::MAX", &got, &vec![u32::MAX - 1, u32::MAX])
 }
 
 #[test]
