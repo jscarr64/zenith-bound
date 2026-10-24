@@ -542,8 +542,15 @@ fn raw(words: &[u64], exponent: i64, negative: bool) -> Result<ExactNum, String>
 
 /// `Mag` from_exact_num / from_exact_num_lower of `x` are exactly `up` / `lo`, for `x` and `-x`.
 fn want_up_lo(what: &str, x: &ExactNum, up: &Mag, lo: &Mag) -> Result<(), String> {
-    for (sign, v) in [("+", num(0).add_full_prec(x)), ("-", neg(x))] {
-        let (gu, gl) = (Mag::from_exact_num(&v), Mag::from_exact_num_lower(&v));
+    // Flip the sign through raw parts (zf arithmetic may flush subnormals, so `neg` is not used here).
+    let p = x.as_raw_parts();
+    let flipped = ExactNum::from_raw_parts(&RawParts {
+        negative: !p.negative,
+        ..p
+    })
+    .map_err(|e| format!("{}: flip: {:?}", what, e))?;
+    for (sign, v) in [("+", x), ("-", &flipped)] {
+        let (gu, gl) = (Mag::from_exact_num(v), Mag::from_exact_num_lower(v));
         if gu != *up || gl != *lo {
             return Err(format!(
                 "{}{}: got up {:?} lo {:?}, want {:?} {:?}",
