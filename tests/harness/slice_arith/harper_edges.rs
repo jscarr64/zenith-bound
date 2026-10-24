@@ -21,19 +21,33 @@ fn plus_zero(what: &str, b: &Ball) -> Result<(), String> {
     Ok(())
 }
 
-/// Every op applied to `a` (and `b` for the binary ones), each result paired with its name.
-fn all_ops(a: &Ball, b: &Ball, prec: usize) -> Result<Vec<(&'static str, Ball)>, String> {
-    let c = |x: &Ball| ok("copy", Ball::from_mid_rad(x.mid().add_full_prec(&num(0)), cm(x.rad())?, x.prec()));
+/// Every op applied to a fresh `a` from `mk` (and `b` for the binary ones), each result paired with its name.
+fn all_ops(
+    mk: &dyn Fn() -> Result<Ball, String>,
+    b: &Ball,
+    prec: usize,
+) -> Result<Vec<(&'static str, Ball)>, String> {
+    // `mk` rebuilds the operand from its source inputs, so no Ball is ever copied.
+    let a = mk()?;
     Ok(vec![
-        ("add", ok("add", c(a)?.add(b, prec))?),
-        ("sub", ok("sub", c(a)?.sub(b, prec))?),
-        ("mul", ok("mul", c(a)?.mul(b, prec))?),
-        ("mul_exact", ok("mul_exact", c(a)?.mul_exact(b.mid(), prec))?),
-        ("sqr", ok("sqr", c(a)?.sqr(prec))?),
-        ("powi3", ok("powi", c(a)?.powi(3, prec))?),
-        ("neg", -c(a)?),
+        ("add", ok("add", mk()?.add(b, prec))?),
+        ("sub", ok("sub", mk()?.sub(b, prec))?),
+        ("mul", ok("mul", mk()?.mul(b, prec))?),
+        (
+            "mul_exact",
+            ok("mul_exact", mk()?.mul_exact(b.mid(), prec))?,
+        ),
+        ("sqr", ok("sqr", mk()?.sqr(prec))?),
+        ("powi3", ok("powi", mk()?.powi(3, prec))?),
+        ("neg", -mk()?),
         // sqrt of |a| (a negative mid would just be the Domain row, covered by Spence's sqrt rows).
-        ("sqrt", ok("sqrt", if a.mid().is_negative() { -c(a)? } else { c(a)? }.sqrt(prec, &DomainPolicy::Clip))?),
+        (
+            "sqrt",
+            ok(
+                "sqrt",
+                if a.mid().is_negative() { -a } else { a }.sqrt(prec, &DomainPolicy::Clip),
+            )?,
+        ),
     ])
 }
 
@@ -44,9 +58,12 @@ fn signed_zero_operands_give_plus_zero() -> Result<(), String> {
     for prec in [1usize, 53, 4096] {
         let z1 = ok("exact -0", Ball::exact(nz.add_full_prec(&num(0)), prec))?;
         let z2 = ok("mul_exact -1", pt(0, prec)?.mul_exact(&num(-1), prec))?;
-        for z in [&z1, &z2] {
+        let mk1 = || ok("exact -0", Ball::exact(nz.add_full_prec(&num(0)), prec));
+        let mk2 = || ok("mul_exact -1", pt(0, prec)?.mul_exact(&num(-1), prec));
+        let pairs: [(&Ball, &dyn Fn() -> Result<Ball, String>); 2] = [(&z1, &mk1), (&z2, &mk2)];
+        for (z, mk) in pairs {
             plus_zero("operand", z)?;
-            for (name, r) in all_ops(z, z, prec)? {
+            for (name, r) in all_ops(mk, z, prec)? {
                 plus_zero(name, &r)?;
                 if !r.rad().is_zero() {
                     return Err(format!("{} of exact zeros: rad {:?}", name, r.rad()));
@@ -55,15 +72,28 @@ fn signed_zero_operands_give_plus_zero() -> Result<(), String> {
         }
         // a zero scalar of either sign on a ball with radius: 0·(3 ± 1) = +0 ± 0.
         let b = ball(num(3), mag(TOP, 1)?, prec)?;
-        want_exact("(3±1)·-0", &ok("mul_exact", b.mul_exact(&nz, prec))?, &num(0), &Mag::zero())?;
+        want_exact(
+            "(3±1)·-0",
+            &ok("mul_exact", b.mul_exact(&nz, prec))?,
+            &num(0),
+            &Mag::zero(),
+        )?;
         // cancellation to zero keeps the radius sum: (3 ± 1) - (3 ± 1) = +0 ± 2; (-5) + 5 = +0 ± 0.
-        let d = ok("sub", ball(num(3), mag(TOP, 1)?, prec)?.sub(&ball(num(3), mag(TOP, 1)?, prec)?, prec))?;
+        let d = ok(
+            "sub",
+            ball(num(3), mag(TOP, 1)?, prec)?.sub(&ball(num(3), mag(TOP, 1)?, prec)?, prec),
+        )?;
         want_exact("x-x", &d, &num(0), &mag(TOP, 2)?)?;
         plus_zero("x-x", &d)?;
         plus_zero("-5+5", &ok("add", pt(-5, prec)?.add(&pt(5, prec)?, prec))?)?;
         // (-3)·0 and powi(-0, 0) = 1 exactly.
         plus_zero("-3·0", &ok("mul", pt(-3, prec)?.mul(&z1, prec))?)?;
-        want_exact("(-0)^0", &ok("powi", z2.powi(0, prec))?, &num(1), &Mag::zero())?;
+        want_exact(
+            "(-0)^0",
+            &ok("powi", z2.powi(0, prec))?,
+            &num(1),
+            &Mag::zero(),
+        )?;
     }
     Ok(())
 }
@@ -75,17 +105,55 @@ fn radius_zero_vs_nonzero_at_zero_mid() -> Result<(), String> {
     let z = ball(num(0), cm(&r)?, p)?;
     let zz = pt(0, p)?;
     // (0 ± 2^-10) + (0 ± 0) = 0 ± 2^-10; (0 ± 2^-10) + (0 ± 2^-10) = 0 ± 2^-9.
-    want_exact("z+0", &ok("add", ball(num(0), cm(&r)?, p)?.add(&zz, p))?, &num(0), &r)?;
-    want_exact("z+z", &ok("add", ball(num(0), cm(&r)?, p)?.add(&z, p))?, &num(0), &mag(TOP, -8)?)?;
+    want_exact(
+        "z+0",
+        &ok("add", ball(num(0), cm(&r)?, p)?.add(&zz, p))?,
+        &num(0),
+        &r,
+    )?;
+    want_exact(
+        "z+z",
+        &ok("add", ball(num(0), cm(&r)?, p)?.add(&z, p))?,
+        &num(0),
+        &mag(TOP, -8)?,
+    )?;
     // (0 ± 2^-10)(0 ± 2^-10) = 0 ± 2^-20 (only the r·s term); (0 ± 2^-10)·5 = 0 ± 5·2^-10.
-    want_exact("z*z", &ok("mul", ball(num(0), cm(&r)?, p)?.mul(&z, p))?, &num(0), &mag(TOP, -19)?)?;
-    want_exact("z*5", &ok("mul", ball(num(0), cm(&r)?, p)?.mul(&pt(5, p)?, p))?, &num(0), &mag(0xA000_0000_0000_0000, -7)?)?;
+    want_exact(
+        "z*z",
+        &ok("mul", ball(num(0), cm(&r)?, p)?.mul(&z, p))?,
+        &num(0),
+        &mag(TOP, -19)?,
+    )?;
+    want_exact(
+        "z*5",
+        &ok("mul", ball(num(0), cm(&r)?, p)?.mul(&pt(5, p)?, p))?,
+        &num(0),
+        &mag(0xA000_0000_0000_0000, -7)?,
+    )?;
     // sqr(0 ± 2^-10) = 0 ± 2^-20; powi(0 ± 2^-10, 3) = 0 ± 2^-30 (all three are tight because the mid is 0).
-    want_exact("sqr z", &ok("sqr", ball(num(0), cm(&r)?, p)?.sqr(p))?, &num(0), &mag(TOP, -19)?)?;
-    want_exact("z^3", &ok("powi", ball(num(0), cm(&r)?, p)?.powi(3, p))?, &num(0), &mag(TOP, -29)?)?;
+    want_exact(
+        "sqr z",
+        &ok("sqr", ball(num(0), cm(&r)?, p)?.sqr(p))?,
+        &num(0),
+        &mag(TOP, -19)?,
+    )?;
+    want_exact(
+        "z^3",
+        &ok("powi", ball(num(0), cm(&r)?, p)?.powi(3, p))?,
+        &num(0),
+        &mag(TOP, -29)?,
+    )?;
     // sqrt(0 ± 4) under Clip: endpoint ball over [0, √4] = [0, 2] is 1 ± 1 exactly (16.S1.8); Strict is Domain.
     let four = mag(TOP, 3)?;
-    want_exact("sqrt(0±4)", &ok("sqrt", ball(num(0), cm(&four)?, p)?.sqrt(p, &DomainPolicy::Clip))?, &num(1), &mag(TOP, 1)?)?;
+    want_exact(
+        "sqrt(0±4)",
+        &ok(
+            "sqrt",
+            ball(num(0), cm(&four)?, p)?.sqrt(p, &DomainPolicy::Clip),
+        )?,
+        &num(1),
+        &mag(TOP, 1)?,
+    )?;
     // sqrt(4 ± 4) (lo = 0 exactly): [0, √8] — contains 0 and √8's lower bracket, both policies.
     for pol in [DomainPolicy::Clip, DomainPolicy::Strict] {
         let s = ok("sqrt(4±4)", ball(num(4), cm(&four)?, p)?.sqrt(p, &pol))?;
@@ -93,7 +161,7 @@ fn radius_zero_vs_nonzero_at_zero_mid() -> Result<(), String> {
         want_contains("sqrt(4±4) 2", &s, &num(2))?;
     }
     // exact zero: every op gives exactly 0 ± 0, P6 (radius zero iff exact) with zero radius in.
-    for (name, b) in all_ops(&zz, &zz, p)? {
+    for (name, b) in all_ops(&|| pt(0, p), &zz, p)? {
         want_exact(name, &b, &num(0), &Mag::zero())?;
     }
     Ok(())
@@ -103,15 +171,26 @@ fn radius_zero_vs_nonzero_at_zero_mid() -> Result<(), String> {
 fn mag_exponent_extremes() -> Result<(), String> {
     let p = 64;
     let mids = [num(0), num(1), num(-3)];
-    let rads = [mag(TOP, i64::MIN)?, mag(TOP, i64::MIN.checked_add(1).ok_or("min+1")?)?, mag(u64::MAX, i64::MIN)?, mag(TOP, i64::MAX)?, mag(u64::MAX, i64::MAX)?];
+    let rads = [
+        mag(TOP, i64::MIN)?,
+        mag(TOP, i64::MIN.checked_add(1).ok_or("min+1")?)?,
+        mag(u64::MAX, i64::MIN)?,
+        mag(TOP, i64::MAX)?,
+        mag(u64::MAX, i64::MAX)?,
+    ];
     for m in &mids {
         for r in &rads {
-            let a = ball(m.add_full_prec(&num(0)), cm(r)?, p)?;
             let b = ball(num(2), cm(r)?, p)?;
-            for (name, res) in all_ops(&a, &b, p)? {
+            for (name, res) in all_ops(&|| ball(m.add_full_prec(&num(0)), cm(r)?, p), &b, p)? {
                 // Every op answers; the radius never drops below the input radius for the ops that carry it whole.
                 if matches!(name, "add" | "sub" | "neg") && res.rad() < r {
-                    return Err(format!("{} mid {:?} rad {:?}: result rad {:?} below input", name, m, r, res.rad()));
+                    return Err(format!(
+                        "{} mid {:?} rad {:?}: result rad {:?} below input",
+                        name,
+                        m,
+                        r,
+                        res.rad()
+                    ));
                 }
                 let x = m.add_full_prec(&num(0));
                 {
@@ -141,14 +220,45 @@ fn below_mag_range_rounds_to_smallest() -> Result<(), String> {
     let p = 53;
     let s = smallest()?;
     let z = ball(num(0), cm(&s)?, p)?;
-    want_exact("s*s", &ok("mul", ball(num(0), cm(&s)?, p)?.mul(&z, p))?, &num(0), &s)?;
-    want_exact("sqr s", &ok("sqr", ball(num(0), cm(&s)?, p)?.sqr(p))?, &num(0), &s)?;
-    want_exact("s^2", &ok("powi", ball(num(0), cm(&s)?, p)?.powi(2, p))?, &num(0), &s)?;
-    want_exact("s^7", &ok("powi", ball(num(0), cm(&s)?, p)?.powi(7, p))?, &num(0), &s)?;
+    want_exact(
+        "s*s",
+        &ok("mul", ball(num(0), cm(&s)?, p)?.mul(&z, p))?,
+        &num(0),
+        &s,
+    )?;
+    want_exact(
+        "sqr s",
+        &ok("sqr", ball(num(0), cm(&s)?, p)?.sqr(p))?,
+        &num(0),
+        &s,
+    )?;
+    want_exact(
+        "s^2",
+        &ok("powi", ball(num(0), cm(&s)?, p)?.powi(2, p))?,
+        &num(0),
+        &s,
+    )?;
+    want_exact(
+        "s^7",
+        &ok("powi", ball(num(0), cm(&s)?, p)?.powi(7, p))?,
+        &num(0),
+        &s,
+    )?;
     // a scalar 2^-1000 times s: still s, never 0 (a zero radius would claim exactness).
-    want_exact("s*2^-1000", &ok("mul_exact", ball(num(0), cm(&s)?, p)?.mul_exact(&pow2(-1000)?, p))?, &num(0), &s)?;
+    want_exact(
+        "s*2^-1000",
+        &ok(
+            "mul_exact",
+            ball(num(0), cm(&s)?, p)?.mul_exact(&pow2(-1000)?, p),
+        )?,
+        &num(0),
+        &s,
+    )?;
     // the radius stays positive on a nonzero mid too.
-    let one = ok("mul", ball(num(1), cm(&s)?, p)?.mul(&ball(num(1), cm(&s)?, p)?, p))?;
+    let one = ok(
+        "mul",
+        ball(num(1), cm(&s)?, p)?.mul(&ball(num(1), cm(&s)?, p)?, p),
+    )?;
     if one.rad().is_zero() || one.rad() < &s {
         return Err(format!("(1±s)^2 rad {:?}", one.rad()));
     }
@@ -162,7 +272,10 @@ fn cancellation_sweep() -> Result<(), String> {
     for p in [2usize, 24, 53, 64, 113, 256] {
         let pi = i64::try_from(p).map_err(|_| "p")?;
         for k in 1..=300i64 {
-            let s = ok("add", pt(1, p)?.add(&ok("exact", Ball::exact(pow2(-k)?, p))?, p))?;
+            let s = ok(
+                "add",
+                pt(1, p)?.add(&ok("exact", Ball::exact(pow2(-k)?, p))?, p),
+            )?;
             let d = ok("sub", s.sub(&pt(1, p)?, p))?;
             let e = pow2(-k)?;
             want_contains("cancel", &d, &e)?;
@@ -193,16 +306,30 @@ fn ties_round_to_even() -> Result<(), String> {
         let t1 = tie(pow2(np)?)?;
         want_exact("tie down", &t1, &one, &eps)?;
         // at p = 2 the even neighbour is 2 = 0.1b·2^2, one binade up, so there ε = half_ulp(2, 2) = 2^-1.
-        let eps2 = if p == 2 { mag(TOP, 0)? } else { mag(TOP, 1i64.checked_sub(pi).ok_or("e")?)? };
+        let eps2 = if p == 2 {
+            mag(TOP, 0)?
+        } else {
+            mag(TOP, 1i64.checked_sub(pi).ok_or("e")?)?
+        };
         let t2 = tie(num(3).mul_full_prec(&pow2(np)?))?;
-        want_exact("tie up", &t2, &one.add_full_prec(&ulp).add_full_prec(&ulp), &eps2)?;
+        want_exact(
+            "tie up",
+            &t2,
+            &one.add_full_prec(&ulp).add_full_prec(&ulp),
+            &eps2,
+        )?;
         let below = pow2(np)?.sub_full_prec(&pow2(np.checked_sub(40).ok_or("b")?)?);
         want_exact("below tie", &tie(below)?, &one, &eps)?;
         let above = pow2(np)?.add_full_prec(&pow2(np.checked_sub(40).ok_or("a")?)?);
         want_exact("above tie", &tie(above)?, &one.add_full_prec(&ulp), &eps)?;
         // the same tie reached by mul_exact: (1 + 2^-p)·1 at p from an exact 4096-bit ball.
         let b = ok("exact", Ball::exact(one.add_full_prec(&pow2(np)?), 4096))?;
-        want_exact("mul tie", &ok("mul_exact", b.mul_exact(&one, p))?, &one, &eps)?;
+        want_exact(
+            "mul tie",
+            &ok("mul_exact", b.mul_exact(&one, p))?,
+            &one,
+            &eps,
+        )?;
     }
     Ok(())
 }
@@ -214,31 +341,60 @@ fn overflow_and_error_paths_answer() -> Result<(), String> {
     let top = pow2(i64::from(EXPONENT_MAX).checked_sub(1).ok_or("t")?)?;
     let big = ok("exact", Ball::exact(top.add_full_prec(&num(0)), p))?;
     // overflowing mids give the all-reals ball, never an Err or a finite wrong ball.
-    for (name, r) in all_ops(&big, &big, p)? {
+    for (name, r) in all_ops(
+        &|| ok("exact", Ball::exact(top.add_full_prec(&num(0)), p)),
+        &big,
+        p,
+    )? {
         if matches!(name, "add" | "mul" | "mul_exact" | "sqr" | "powi3") && r.is_informative() {
-            return Err(format!("{} at 2^(EMAX-1) stayed informative: {:?}", name, r));
+            return Err(format!(
+                "{} at 2^(EMAX-1) stayed informative: {:?}",
+                name, r
+            ));
         }
     }
     // tiny mids: products below EXPONENT_MIN answer (Ok) and contain 0 or the image.
     let tiny = pow2(i64::from(EXPONENT_MIN).checked_add(2).ok_or("m")?)?;
     let tb = ok("exact", Ball::exact(tiny.add_full_prec(&num(0)), p))?;
-    for (name, r) in all_ops(&tb, &tb, p)? {
+    for (name, r) in all_ops(
+        &|| ok("exact", Ball::exact(tiny.add_full_prec(&num(0)), p)),
+        &tb,
+        p,
+    )? {
         if matches!(name, "mul" | "mul_exact" | "sqr" | "powi3") {
             want_contains(name, &r, &num(0))?;
         }
     }
     // powi with u64::MAX: 1, -1, 0 stay exact; 2 overflows to all reals; 1 ± 2^-60 answers and contains 1.
     let n = u64::MAX;
-    want_exact("1^max", &ok("powi", pt(1, p)?.powi(n, p))?, &num(1), &Mag::zero())?;
-    want_exact("(-1)^max", &ok("powi", pt(-1, p)?.powi(n, p))?, &num(-1), &Mag::zero())?;
-    want_exact("0^max", &ok("powi", pt(0, p)?.powi(n, p))?, &num(0), &Mag::zero())?;
+    want_exact(
+        "1^max",
+        &ok("powi", pt(1, p)?.powi(n, p))?,
+        &num(1),
+        &Mag::zero(),
+    )?;
+    want_exact(
+        "(-1)^max",
+        &ok("powi", pt(-1, p)?.powi(n, p))?,
+        &num(-1),
+        &Mag::zero(),
+    )?;
+    want_exact(
+        "0^max",
+        &ok("powi", pt(0, p)?.powi(n, p))?,
+        &num(0),
+        &Mag::zero(),
+    )?;
     if ok("powi", pt(2, p)?.powi(n, p))?.is_informative() {
         return Err("2^(2^64-1) stayed informative".into());
     }
-    want_contains("(1±2^-60)^max", &ok("powi", ball(num(1), mag(TOP, -59)?, p)?.powi(n, p))?, &num(1))?;
+    want_contains(
+        "(1±2^-60)^max",
+        &ok("powi", ball(num(1), mag(TOP, -59)?, p)?.powi(n, p))?,
+        &num(1),
+    )?;
     // the all-reals ball in: add/mul/sqr/powi answer all reals; sqrt is Domain under Strict, all reals under Clip.
-    let all = ok("all", Ball::all_reals(p))?;
-    for (name, r) in all_ops(&all, &pt(1, p)?, p)? {
+    for (name, r) in all_ops(&|| ok("all", Ball::all_reals(p)), &pt(1, p)?, p)? {
         if r.is_informative() && name != "mul_exact" {
             return Err(format!("{} of all reals is informative: {:?}", name, r));
         }
@@ -248,7 +404,12 @@ fn overflow_and_error_paths_answer() -> Result<(), String> {
         other => return Err(format!("Strict sqrt(all reals): {:?}", other)),
     }
     // bad precisions are InvalidArgument for every op (0 and MAX + 1).
-    for bad in [0usize, zenith_bound::precision::MAX_PRECISION.checked_add(1).ok_or("max")?] {
+    for bad in [
+        0usize,
+        zenith_bound::precision::MAX_PRECISION
+            .checked_add(1)
+            .ok_or("max")?,
+    ] {
         let r = pt(1, p)?.add(&pt(1, p)?, bad);
         if !matches!(r, Err(BoundError::InvalidArgument { .. })) {
             return Err(format!("add at prec {}: {:?}", bad, r));
@@ -274,22 +435,52 @@ fn cosmology_scale() -> Result<(), String> {
     }
     let small = pow2(-405)?;
     for p in [53usize, 113] {
-        let b = ok("big", Ball::exact(big.add_full_prec(&num(0)), 4096))?;
         let s = ok("small", Ball::exact(small.add_full_prec(&num(0)), p))?;
-        let cp = |x: &Ball| ok("copy", Ball::from_mid_rad(x.mid().add_full_prec(&num(0)), cm(x.rad())?, x.prec()));
-        want_contains("big+1", &ok("add", cp(&b)?.add(&pt(1, p)?, p))?, &big.add_full_prec(&num(1)))?;
-        want_contains("big-small", &ok("sub", cp(&b)?.sub(&s, p))?, &big.sub_full_prec(&small))?;
-        want_contains("big*small", &ok("mul", cp(&b)?.mul(&s, p))?, &big.mul_full_prec(&small))?;
-        want_contains("sqr big", &ok("sqr", cp(&b)?.sqr(p))?, &big.mul_full_prec(&big))?;
-        want_contains("sqrt big", &ok("sqrt", cp(&b)?.sqrt(p, &DomainPolicy::Strict))?, &r61)?;
+        // operands are rebuilt from their exact mids for each use, never copied.
+        let cb = || ok("big", Ball::exact(big.add_full_prec(&num(0)), 4096));
+        let cs = || ok("small", Ball::exact(small.add_full_prec(&num(0)), p));
+        want_contains(
+            "big+1",
+            &ok("add", cb()?.add(&pt(1, p)?, p))?,
+            &big.add_full_prec(&num(1)),
+        )?;
+        want_contains(
+            "big-small",
+            &ok("sub", cb()?.sub(&s, p))?,
+            &big.sub_full_prec(&small),
+        )?;
+        want_contains(
+            "big*small",
+            &ok("mul", cb()?.mul(&s, p))?,
+            &big.mul_full_prec(&small),
+        )?;
+        want_contains(
+            "sqr big",
+            &ok("sqr", cb()?.sqr(p))?,
+            &big.mul_full_prec(&big),
+        )?;
+        want_contains(
+            "sqrt big",
+            &ok("sqrt", cb()?.sqrt(p, &DomainPolicy::Strict))?,
+            &r61,
+        )?;
         let rb = ok("r61", Ball::exact(r61.add_full_prec(&num(0)), 4096))?;
         want_contains("r61^2", &ok("powi", rb.powi(2, p))?, &big)?;
-        want_contains("small^3", &ok("powi", cp(&s)?.powi(3, p))?, &small.mul_full_prec(&small).mul_full_prec(&small))?;
+        want_contains(
+            "small^3",
+            &ok("powi", cs()?.powi(3, p))?,
+            &small.mul_full_prec(&small).mul_full_prec(&small),
+        )?;
         // a 2^-405 relative radius on 10^122 survives sqr: rad ≥ 2·10^122·(10^122·2^-405).
         let rel = Mag::from_exact_num(&big.mul_full_prec(&small));
         let br = ball(big.add_full_prec(&num(0)), rel, 4096)?;
         let sq = ok("sqr rel", br.sqr(p))?;
-        want_contains("sqr rel hi", &sq, &big.add_full_prec(&big.mul_full_prec(&small)).mul_full_prec(&big.add_full_prec(&big.mul_full_prec(&small))))?;
+        want_contains(
+            "sqr rel hi",
+            &sq,
+            &big.add_full_prec(&big.mul_full_prec(&small))
+                .mul_full_prec(&big.add_full_prec(&big.mul_full_prec(&small))),
+        )?;
     }
     Ok(())
 }

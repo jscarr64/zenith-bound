@@ -28,10 +28,14 @@ fn rmid(rng: &mut SplitMix64, bits: u64, e: i64) -> Result<ExactNum, String> {
     while left > 0 {
         let take = left.min(60);
         let chunk = i64::try_from(rng.below(1u64 << take)).map_err(|_| "chunk")?;
-        x = x.mul_full_prec(&pow2(i64::try_from(take).map_err(|_| "take")?)?).add_full_prec(&num(chunk));
+        x = x
+            .mul_full_prec(&pow2(i64::try_from(take).map_err(|_| "take")?)?)
+            .add_full_prec(&num(chunk));
         left = left.checked_sub(take).ok_or("left")?;
     }
-    let shift = e.checked_sub(i64::try_from(bits).map_err(|_| "bits")?).ok_or("shift")?;
+    let shift = e
+        .checked_sub(i64::try_from(bits).map_err(|_| "bits")?)
+        .ok_or("shift")?;
     x = x.mul_full_prec(&pow2(shift)?);
     Ok(if rng.below(2) == 0 { -x } else { x })
 }
@@ -40,10 +44,6 @@ fn rrad(rng: &mut SplitMix64, e: i64) -> Result<Mag, String> {
     let mant = rng.next_u64() | TOP;
     let off = below(rng, 200)?.checked_sub(150).ok_or("off")?;
     mag(mant, e.checked_add(off).ok_or("rexp")?)
-}
-
-fn copy(b: &Ball) -> Result<Ball, String> {
-    ok("copy", Ball::from_mid_rad(b.mid().add_full_prec(&num(0)), cm(b.rad())?, b.prec()))
 }
 
 /// Unary view of every op: binary ops take `other` as the fixed second operand. sqrt runs Strict (K8 excludes the
@@ -72,26 +72,44 @@ fn k8_radius_monotone_same_mid() -> Result<(), String> {
     let mut rng = SplitMix64::new(0x2180_0000_0000_0001);
     let mut compared = 0u32;
     for case in 0..1200u32 {
-        let prec = *PRECS.get(usize::try_from(rng.below(8)).map_err(|_| "i")?).ok_or("prec")?;
+        let prec = *PRECS
+            .get(usize::try_from(rng.below(8)).map_err(|_| "i")?)
+            .ok_or("prec")?;
         let e = below(&mut rng, 400)?.checked_sub(200).ok_or("e")?;
-        let m = rmid(&mut rng, 1u64.max(u64::try_from(prec).map_err(|_| "p")?.min(200)), e)?;
+        let m = rmid(
+            &mut rng,
+            1u64.max(u64::try_from(prec).map_err(|_| "p")?.min(200)),
+            e,
+        )?;
         let r1 = rrad(&mut rng, e)?;
         let r2 = r1.add_up(&rrad(&mut rng, e)?);
         let oe = below(&mut rng, 40)?.checked_sub(20).ok_or("oe")?;
         let om = rmid(&mut rng, 40, oe)?;
         let other = ball(om, rrad(&mut rng, 0)?, prec)?;
-        let b1 = ball(m.add_full_prec(&num(0)), cm(&r1)?, prec)?;
-        let b2 = ball(m.add_full_prec(&num(0)), cm(&r2)?, prec)?;
+        // operands are rebuilt from (m, r) for each op, never copied.
+        let b1 = || ball(m.add_full_prec(&num(0)), cm(&r1)?, prec);
+        let b2 = || ball(m.add_full_prec(&num(0)), cm(&r2)?, prec);
         for op in 0..8usize {
-            let f2 = apply(op, copy(&b2)?, &other, prec)?;
-            let f1 = apply(op, copy(&b1)?, &other, prec)?;
+            let f2 = apply(op, b2()?, &other, prec)?;
+            let f1 = apply(op, b1()?, &other, prec)?;
             match (f1, f2) {
                 (None, Some(y)) => {
-                    return Err(format!("case {} op {}: f(r2) = {:?} but f(r1) failed", case, op, y));
+                    return Err(format!(
+                        "case {} op {}: f(r2) = {:?} but f(r1) failed",
+                        case, op, y
+                    ));
                 }
                 (Some(x), Some(y)) => {
                     if x.mid() == y.mid() && x.rad() > y.rad() {
-                        return Err(format!("case {} op {}: rad1 {:?} > rad2 {:?} (r1 {:?} <= r2 {:?})", case, op, x.rad(), y.rad(), r1, r2));
+                        return Err(format!(
+                            "case {} op {}: rad1 {:?} > rad2 {:?} (r1 {:?} <= r2 {:?})",
+                            case,
+                            op,
+                            x.rad(),
+                            y.rad(),
+                            r1,
+                            r2
+                        ));
                     }
                     compared = compared.checked_add(1).ok_or("n")?;
                 }
@@ -111,37 +129,77 @@ fn radius_covers_true_error_exact_inputs() -> Result<(), String> {
     let mut rng = SplitMix64::new(0x2180_0000_0000_0002);
     let mut inexact = 0u32;
     for case in 0..1500u32 {
-        let prec = *PRECS.get(usize::try_from(rng.below(8)).map_err(|_| "i")?).ok_or("prec")?;
+        let prec = *PRECS
+            .get(usize::try_from(rng.below(8)).map_err(|_| "i")?)
+            .ok_or("prec")?;
         let bits = 1u64.checked_add(rng.below(2 * 128)).ok_or("bits")?;
         let ae = below(&mut rng, 600)?.checked_sub(300).ok_or("e")?;
         let a = rmid(&mut rng, bits, ae)?;
         let be = below(&mut rng, 600)?.checked_sub(300).ok_or("e")?;
         let b = rmid(&mut rng, bits, be)?;
-        let ba = ok("exact", Ball::exact(a.add_full_prec(&num(0)), 4096))?;
+        let ba = || ok("exact", Ball::exact(a.add_full_prec(&num(0)), 4096));
         let bb = ok("exact", Ball::exact(b.add_full_prec(&num(0)), 4096))?;
         let cases: [(&str, Ball, ExactNum, bool); 5] = [
-            ("add", ok("add", copy(&ba)?.add(&bb, prec))?, a.add_full_prec(&b), true),
-            ("sub", ok("sub", copy(&ba)?.sub(&bb, prec))?, a.sub_full_prec(&b), true),
-            ("mul", ok("mul", copy(&ba)?.mul(&bb, prec))?, a.mul_full_prec(&b), true),
-            ("mul_exact", ok("mul_exact", copy(&ba)?.mul_exact(&b, prec))?, a.mul_full_prec(&b), true),
-            ("powi3", ok("powi", copy(&ba)?.powi(3, prec))?, a.mul_full_prec(&a).mul_full_prec(&a), false),
+            (
+                "add",
+                ok("add", ba()?.add(&bb, prec))?,
+                a.add_full_prec(&b),
+                true,
+            ),
+            (
+                "sub",
+                ok("sub", ba()?.sub(&bb, prec))?,
+                a.sub_full_prec(&b),
+                true,
+            ),
+            (
+                "mul",
+                ok("mul", ba()?.mul(&bb, prec))?,
+                a.mul_full_prec(&b),
+                true,
+            ),
+            (
+                "mul_exact",
+                ok("mul_exact", ba()?.mul_exact(&b, prec))?,
+                a.mul_full_prec(&b),
+                true,
+            ),
+            (
+                "powi3",
+                ok("powi", ba()?.powi(3, prec))?,
+                a.mul_full_prec(&a).mul_full_prec(&a),
+                false,
+            ),
         ];
         for (name, res, x, single) in cases.iter() {
             want_contains(name, res, x).map_err(|e| format!("case {}: {}", case, e))?;
             let exact = res.mid() == x;
             if exact != res.rad().is_zero() && *single {
-                return Err(format!("case {} {} P6: mid==exact {} but rad {:?}", case, name, exact, res.rad()));
+                return Err(format!(
+                    "case {} {} P6: mid==exact {} but rad {:?}",
+                    case,
+                    name,
+                    exact,
+                    res.rad()
+                ));
             }
             if !exact && *single {
                 inexact = inexact.checked_add(1).ok_or("n")?;
                 let e = i64::from(res.mid().exponent().ok_or("exp")?);
                 let want = Mag::half_ulp(e, prec);
                 if res.rad() != &want {
-                    return Err(format!("case {} {} at {}: rad {:?}, want half_ulp {:?}", case, name, prec, res.rad(), want));
+                    return Err(format!(
+                        "case {} {} at {}: rad {:?}, want half_ulp {:?}",
+                        case,
+                        name,
+                        prec,
+                        res.rad(),
+                        want
+                    ));
                 }
             }
         }
-        let sq = ok("sqr", copy(&ba)?.sqr(prec))?;
+        let sq = ok("sqr", ba()?.sqr(prec))?;
         want_contains("sqr", &sq, &a.mul_full_prec(&a))?;
         if (sq.mid() == &a.mul_full_prec(&a)) != sq.rad().is_zero() {
             return Err(format!("case {} sqr P6: {:?}", case, sq));

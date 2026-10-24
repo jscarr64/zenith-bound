@@ -19,7 +19,9 @@ const WANT_ROWS: usize = 992;
 const LAMBDA: i64 = 1024;
 
 fn field<'a>(v: &[&'a str], i: usize) -> Result<&'a str, String> {
-    v.get(i).copied().ok_or_else(|| format!("missing field {}", i))
+    v.get(i)
+        .map(|s| *s)
+        .ok_or_else(|| format!("missing field {}", i))
 }
 
 fn value(v: &[&str], at: usize) -> Result<ExactNum, String> {
@@ -49,7 +51,9 @@ fn within(rad: &Mag, k: i64, rref: &ExactNum) -> Result<bool, String> {
     if rad.is_infinity() {
         return Ok(false);
     }
-    let r = rad.to_exact_num().map_err(|e| format!("rad to exact: {:?}", e))?;
+    let r = rad
+        .to_exact_num()
+        .map_err(|e| format!("rad to exact: {:?}", e))?;
     match r.partial_cmp(&rref.mul_full_prec(&num(k))) {
         Some(Ordering::Less | Ordering::Equal) => Ok(true),
         Some(Ordering::Greater) => Ok(false),
@@ -86,11 +90,20 @@ fn check_row(line: &str) -> Result<(), String> {
     let lo = value(&v, 16)?;
     let hi = value(&v, 19)?;
     let rref = value(&v, 22)?;
-    let a = ok("a", Ball::from_mid_rad(amid.add_full_prec(&num(0)), arad, prec))?;
-    let b = ok("b", Ball::from_mid_rad(bmid.add_full_prec(&num(0)), brad, prec))?;
+    let a = ok(
+        "a",
+        Ball::from_mid_rad(amid.add_full_prec(&num(0)), arad, prec),
+    )?;
+    let b = ok(
+        "b",
+        Ball::from_mid_rad(bmid.add_full_prec(&num(0)), brad, prec),
+    )?;
     // Strict must agree with Clip wherever the input ball lies in [0, inf).
     let strict_twin = if op == "sqrt" {
-        let rn = a.rad().to_exact_num().map_err(|e| format!("rad: {:?}", e))?;
+        let rn = a
+            .rad()
+            .to_exact_num()
+            .map_err(|e| format!("rad: {:?}", e))?;
         match amid.sub_full_prec(&rn).partial_cmp(&num(0)) {
             Some(Ordering::Less) => None,
             Some(Ordering::Equal | Ordering::Greater) => Some(ok(
@@ -107,15 +120,28 @@ fn check_row(line: &str) -> Result<(), String> {
     want_contains("HI", &res, &hi)?;
     let t = tau(op, n)?;
     if !within(res.rad(), t.checked_mul(LAMBDA).ok_or("loose k")?, &rref)? {
-        return Err(format!("LOOSE: rad {:?} > 2^10·{}·RREF {:?}", res.rad(), t, rref));
+        return Err(format!(
+            "LOOSE: rad {:?} > 2^10·{}·RREF {:?}",
+            res.rad(),
+            t,
+            rref
+        ));
     }
     if !within(res.rad(), t, &rref)? {
-        return Err(format!("TIGHT: rad {:?} > {}·RREF {:?}", res.rad(), t, rref));
+        return Err(format!(
+            "TIGHT: rad {:?} > {}·RREF {:?}",
+            res.rad(),
+            t,
+            rref
+        ));
     }
     if let Some(a2) = strict_twin {
         let s = ok("sqrt Strict", a2.sqrt(prec, &DomainPolicy::Strict))?;
         if s.mid() != res.mid() || s.rad() != res.rad() {
-            return Err(format!("Strict {:?} != Clip {:?} on a nonnegative ball", s, res));
+            return Err(format!(
+                "Strict {:?} != Clip {:?} on a nonnegative ball",
+                s, res
+            ));
         }
     }
     Ok(())
@@ -123,14 +149,24 @@ fn check_row(line: &str) -> Result<(), String> {
 
 #[test]
 fn oracle_rows_contained_tight_loose() -> Result<(), String> {
-    let path = golden_dir().join("slices").join("arith").join("arith_oracle_rows.txt");
+    let path = golden_dir()
+        .join("slices")
+        .join("arith")
+        .join("arith_oracle_rows.txt");
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{:?}: {}", path, e))?;
     let mut rows = 0usize;
     let mut bad: Vec<String> = Vec::new();
-    for line in text.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()) {
+    for line in text
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+    {
         rows = rows.checked_add(1).ok_or("rows")?;
         if let Err(e) = check_row(line) {
-            bad.push(format!("{}\n    row: {}", e, line.get(..160).unwrap_or(line)));
+            bad.push(format!(
+                "{}\n    row: {}",
+                e,
+                line.get(..160).unwrap_or(line)
+            ));
         }
     }
     if rows != WANT_ROWS {
@@ -138,7 +174,12 @@ fn oracle_rows_contained_tight_loose() -> Result<(), String> {
     }
     if !bad.is_empty() {
         let shown: Vec<&String> = bad.iter().take(12).collect();
-        return Err(format!("{} of {} oracle rows fail:\n{:#?}", bad.len(), rows, shown));
+        return Err(format!(
+            "{} of {} oracle rows fail:\n{:#?}",
+            bad.len(),
+            rows,
+            shown
+        ));
     }
     Ok(())
 }
