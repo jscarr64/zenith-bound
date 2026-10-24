@@ -23,7 +23,7 @@
 #
 # For each manifest row it creates a throwaway `git worktree` under /tmp (never inside the repo), applies ONE patch, builds the suite,
 # runs `cargo test --test <suite>` under `timeout`, and REQUIRES the suite to fail. The worktree is always removed (EXIT/INT/TERM).
-#   KILLED               the suite failed (a test failed, or the run timed out)
+#   KILLED               a test failed ("error: test failed, to rerun pass"), or the run timed out; any other run error is INVALID
 #   SURVIVED             the suite passed on the mutant: exit 1 (unless the id is in EQUIVALENT.txt: SURVIVED-EQUIVALENT, not a failure)
 #   INVALID              the patch does not apply or the mutant does not build (proves nothing): exit 1
 # Exit 0 only if at least one mutant ran and every mutant was KILLED or SURVIVED-EQUIVALENT (0 mutants is a failure), and, for a full
@@ -132,6 +132,10 @@ head_sha=$(git -C "$repo" rev-parse HEAD 2>/dev/null) || { echo "mutate: FAIL ca
 # test other code than the tree on disk. Refuse it (Spence, 2026-10-23: 2102-zb-mut180 SURVIVED on HEAD 7191a1f, before mag_sort was committed).
 dirty=$(git -C "$repo" status --porcelain 2>&1) || { echo "mutate: FAIL git status failed in $repo: $dirty"; exit 2; }
 if [ -n "$dirty" ]; then echo "mutate: FAIL dirty tree in $repo (mutants test the committed HEAD $head_sha; commit or stash first):"; printf '%s\n' "$dirty" | head -20 | sed 's/^/    /'; exit 2; fi
+# Cargo.lock is gitignored, so a worktree of HEAD has none: without it every cargo call re-resolves the git dependency over the network
+# (0934-zb-slice-a-full-gate3: DNS retries on every mutant ran out the 20m budget, and resolve errors were miscounted). Use the repo's lock,
+# offline and locked; no lock FAILS (fail closed).
+lock="$repo/Cargo.lock"; [ -f "$lock" ] || { echo "mutate: FAIL NOLOCK: $lock missing (run a normal cargo build in $repo first)" >&2; exit 2; }
 echo "mutate: testing committed HEAD $head_sha"
 nk=0; ns=0; ne=0; ni=0; total=0
 newtgt
@@ -147,10 +151,11 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
   src=${fnpath%%:*}
   if [ ! -f "$work/$src" ]; then echo "INVALID $id: $src does not exist at HEAD"; ni=$((ni + 1)); cleanup; newtgt; continue; fi
   if ! git -C "$work" apply "$pfile" >/dev/null 2>&1; then echo "INVALID $id: patch does not apply"; ni=$((ni + 1)); cleanup; newtgt; continue; fi
-  if ! (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$bttl" cargo test --test "$suite" --no-run >"$tgt/build.log" 2>&1 </dev/null); then
+  if ! cp "$lock" "$work/Cargo.lock"; then echo "INVALID $id: cannot copy Cargo.lock into the worktree"; ni=$((ni + 1)); cleanup; newtgt; continue; fi
+  if ! (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$bttl" cargo test --offline --locked --test "$suite" --no-run >"$tgt/build.log" 2>&1 </dev/null); then
     echo "INVALID $id: mutant does not build suite $suite (see: first lines below)"; head -5 "$tgt/build.log" | sed 's/^/    /'; ni=$((ni + 1))
   else
-    (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$ttl" cargo test --test "$suite" >"$tgt/run.log" 2>&1 </dev/null); rc=$?
+    (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$ttl" cargo test --offline --locked --test "$suite" >"$tgt/run.log" 2>&1 </dev/null); rc=$?
     if [ "$rc" = 0 ]; then
       if [ "${#equivs[@]}" -gt 0 ] && awk -F'\t' -v id="$id" '!/^[[:space:]]*(#|$)/ && $1 == id { f = 1 } END { exit !f }' "${equivs[@]}"; then
         echo "SURVIVED-EQUIVALENT $id ($fnpath, suite $suite): documented in EQUIVALENT.txt or equivalent.d"; ne=$((ne + 1))
@@ -158,7 +163,10 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
         echo "SURVIVED $id ($fnpath, suite $suite): the suite passed on the mutant"; ns=$((ns + 1))
       fi
     elif [ "$rc" = 124 ]; then echo "KILLED $id ($fnpath, suite $suite): timed out after $ttl"; nk=$((nk + 1))
-    else echo "KILLED $id ($fnpath, suite $suite): suite failed (rc $rc)"; nk=$((nk + 1)); fi
+    # a kill is a test binary that ran and failed: cargo then prints "error: test failed, to rerun pass". Anything else (resolve,
+    # network, lock, I/O error) proves nothing about the mutant.
+    elif grep -q '^error: test failed, to rerun pass' "$tgt/run.log"; then echo "KILLED $id ($fnpath, suite $suite): suite failed (rc $rc)"; nk=$((nk + 1))
+    else echo "INVALID $id: suite run failed without a test failure (rc $rc; see: first lines below)"; head -5 "$tgt/run.log" | sed 's/^/    /'; ni=$((ni + 1)); fi
   fi
   cleanup; newtgt
 done <<< "$rows"
