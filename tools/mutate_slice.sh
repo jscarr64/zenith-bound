@@ -18,7 +18,10 @@
 set -u
 export LC_ALL=C
 M=${MUTATE_SH:-${BASH_SOURCE[0]%/*}/mutate.sh}
-BUDGET_S=600; SETUP_S=1800   # interim conservative values; the measured ones replace them (CHANGELOG)
+# Measured 2026-10-24 (poprun log harper/2026-10-24/1644-zb-mslice-measure, f854a9d, tiny 4-mutant slice from a fresh MUTATE_TARGET,
+# one per suite mag/array/ball/harness): per-mutant max 14s (178-U-underflow-zero), whole run 21s (so setup ~1s). Also 1520-zb-mutq-merge-full-gate:
+# 184 mutants in a 4m19s step (~1.4s mean). BUDGET_S = max 14s x ~4 margin = 60s; SETUP_S = 300s (fetch + first suite build under load).
+BUDGET_S=60; SETUP_S=300
 budget=${MUTANT_BUDGET_S:-$BUDGET_S}; setup=${MUTATE_SETUP_S:-$SETUP_S}
 [[ $budget =~ ^[0-9]{1,6}$ ]] && [ "$budget" -gt 0 ] || { echo "mutate_slice: FAIL MUTANT_BUDGET_S '$budget' is not a positive integer"; exit 2; }
 [[ $setup =~ ^[0-9]{1,6}$ ]] || { echo "mutate_slice: FAIL MUTATE_SETUP_S '$setup' is not an integer"; exit 2; }
@@ -71,7 +74,7 @@ one() {
 case ${1:-} in
   --step-timeout)
     sl=$(slices) || exit 1; tot=600
-    for s in $sl; do ids=$(slice_ids "$s") || exit 1; tot=$((tot + $(printf '%s\n' "$ids" | awk 'NF' | wc -l) * budget + setup)); done
+    for s in $sl; do ids=$(slice_ids "$s") || exit 1; n=$(printf '%s\n' "$ids" | awk 'NF' | wc -l); [ "$n" = 0 ] || tot=$((tot + n * budget + setup)); done
     echo "$tot"; exit 0 ;;
   --all)
     sl=$(slices) || exit 1; frc=0; failed=""

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- full_gate mutants step per slice (Spence-approved design, 2026-10-24): the step runs tools/mutate_slice.sh --all, which runs each slice
+  (`mutate.sh --slices`: central + manifest.d) with `mutate.sh --slice` and checks the result lines itself instead of trusting the runner's
+  exit code. It FAILS on an INVALID mutant, a SURVIVED mutant with no equivalent entry, a slice under its floor (floor.txt for central,
+  floor.d/<slice>.txt), a manifest id with no result (`INCOMPLETE: 257 results for 268 ids ...; missing: <ids>`, per slice and over the
+  whole manifest), a duplicate/unknown result id, or a slice past its timeout (`TIMEOUT ...; never ran: <ids>`). Per-slice timeout =
+  ids x MUTANT_BUDGET_S + MUTATE_SETUP_S; the gate step's timeout is `mutate_slice.sh --step-timeout` (sum + 600s), and the step FAILS if
+  it cannot be computed. Budget source: a real tiny-slice run (pop-logs harper/2026-10-24/1644-zb-mslice-measure, f854a9d: 4 mutants,
+  one per suite, fresh MUTATE_TARGET) had a max of 14s per mutant and ~1s setup; 1520-zb-mutq-merge-full-gate ran 184 mutants in 4m19s.
+  BUDGET_S = 60 (14s x ~4), SETUP_S = 300. mutate.sh gains --slices, --slice SLICE and a `TIME <id> <s>s` line per mutant.
+  full_gate_selftest has 82 cases (+10: timeout, missing results, INVALID, unexplained survivor, below floor, each against a runner that
+  always exits 0). Note: origin/spence/zb-s1 (fba8ec9) has a different tools/mutate_slice.sh (SLICE [ID_REGEX]); reconcile on merge.
+
 - goldens_regen.sh SHA256SUMS line check quiet/loud (2026-10-24): the malformed-line `grep -v` returns 1 when every line is valid,
   which tripped `ERR rc=1 line=65` on a clean run. rc 1 is now normal (clean rc 0, no ERR); a real malformed line still fails with
   its text, and a grep rc 2 fails with "grep failed (rc 2)". goldens_regen_selftest has 25 cases (+6).
