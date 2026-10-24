@@ -44,7 +44,7 @@ def _popguard():
         _sys.exit(rc if rc > 0 else 3)
 _popguard()
 
-import sys, os, random, hashlib, argparse, difflib, tempfile
+import sys, os, random, hashlib, argparse, difflib, tempfile, signal, time
 from fractions import Fraction as F
 from math import isqrt
 
@@ -529,6 +529,7 @@ def row(cid, dims, A, outs, heavy=None):
 def gen_lu():
     rows = Rows()
     for cid, A in square_corpus("lu") + [("refuse.rect_2x3", [[F(1), F(2), F(3)], [F(4), F(5), F(6)]]), ("refuse.rect_3x1", [[F(1)], [F(0)], [F(-2)]])]:
+        begin("lu." + cid)
         if len(A) != len(A[0]):
             rows.append(row("lu." + cid, dims_mn(A), A, err("DimensionMismatch", "rectangular"))); continue
         perm, L, U = lu_pp(A)
@@ -544,6 +545,7 @@ def gen_lu():
 def gen_solve():
     rows = Rows()
     for cid, A in square_corpus("solve"):
+        begin("solve." + cid)
         n = len(A); b = [F(1)] * n if cid.startswith("hilbert") else [F(i + 1, 2) - 1 for i in range(n)]
         x = solve(A, b)
         outs = err("Singular", "singular") if x is None else [q(v) for v in x]
@@ -557,6 +559,7 @@ def gen_solve():
 def gen_logdet():
     rows = Rows(); ext = {b: Rows() for b in LOGDET_EXT_BITS}
     for cid, A in square_corpus("logdet"):
+        begin("logdet." + cid)
         d = det(A); heavy = is_heavy(A)
         if d == 0: outs = err("Singular", "singular")
         else: outs = [str(1 if d > 0 else -1), q(d), pair(*enclose_log(d, BITS))]
@@ -565,6 +568,7 @@ def gen_logdet():
             for b in LOGDET_EXT_BITS:
                 ext[b].append(row("logdet." + cid, dims_sq(A), A, outs if d == 0 else [pair(*enclose_log(d, b))], True)[0])
     for cid, A, dk in logdet_cosmo_corpus():
+        begin("logdet." + cid)
         heavy = is_heavy(A)
         if heavy and SKIP_HEAVY: continue                  # --skip-heavy: heavy cosmo rows are never computed
         if dk is None or not heavy:
@@ -591,6 +595,7 @@ def gen_logdet():
 def gen_cholesky():
     rows = Rows(); ext = {b: Rows() for b in EXT_BITS}
     for cid, A in spd_corpus():
+        begin("cholesky." + cid)
         r = ldl(A); n = len(A); heavy = is_heavy(A)
         if isinstance(r, str): outs = ldl_err(r, "a")
         else:
@@ -627,6 +632,7 @@ def gen_qr():
     C += [("refuse.zero2", zero(2)), ("refuse.onebyone_zero", [[F(0)]]), ("refuse.rankdef3", [[F(1), F(2), F(3)], [F(4), F(5), F(6)], [F(7), F(8), F(9)]]),
           ("refuse.dupcol_4x2", [[F(i), F(i)] for i in range(1, 5)]), ("refuse.wide2x3", [[F(1), F(0), F(0)], [F(0), F(1), F(0)]])]
     for cid, A in C:
+        begin(OP + "." + cid)
         m, n = len(A), len(A[0])
         g = None if m < n else gram_schmidt(A); heavy = is_heavy(A)
         if g is None: outs = err("DimensionMismatch", "wide") if m < n else err("Singular", "rank_deficient")
@@ -673,6 +679,7 @@ def gen_gls():
          ("refuse.sigma_singular", design(3, 2), zero(3), [F(1), F(2), F(3)]),
          ("refuse.rankdef_X", [[F(1), F(2)], [F(2), F(4)], [F(3), F(6)]], ident(3), [F(1), F(2), F(3)])]
     for cid, Xm, S, y in C:
+        begin("gls." + cid)
         m, p = len(Xm), len(Xm[0])
         r = ldl(S)
         if isinstance(r, str): outs = ldl_err(r, "sigma")
@@ -692,6 +699,7 @@ def gen_gls():
                 outs = [q(v) for v in beta] + [q(v) for v in flat(cov)] + [q(rss)]
         rows.append((" ".join(["gls." + cid, f"{m}x{p}"] + [q(v) for v in flat(Xm)] + [q(v) for v in flat(S)] + [q(v) for v in y] + outs), is_heavy(Xm, S, y)))
     for cid, Xm, S, y, sol, spd_known in gls_cosmo_corpus():
+        begin("gls." + cid)
         m, p = len(Xm), len(Xm[0]); big = is_heavy(Xm, S, y); heavy = big or cid in GLS_COSMO_HEAVY
         if heavy and SKIP_HEAVY: continue                  # --skip-heavy: heavy cosmo rows are never computed
         r = None if big and spd_known else ldl(S)         # heavy cosmo covariances are SPD by construction (D > 0 plus U U^T, blocks B B^T + I)
@@ -737,6 +745,7 @@ def gen_eig():
     for n in (3, 4, 6, 8, 12, 16): C.append(("random_z.%02d" % n, rsym(n)))
     C += [("refuse.nonsym2", [[F(0), F(1)], [F(-1), F(0)]])]
     for cid, A in C:
+        begin(OP + "." + cid)
         n = len(A)
         if not issym(A): outs = err("NotSymmetric", "a")
         else:
@@ -770,23 +779,60 @@ OPS = [("lu", gen_lu), ("cholesky", gen_cholesky), ("qr", gen_qr), ("solve", gen
 SKIP_HEAVY = False
 SPOOL_DIR = os.path.join(ROOT, "target", "la-goldens-spool")   # /target is gitignored; spool files are unlinked at creation
 
+# Heavy-run progress contract (Jeff, 2026-10-24, after la4-heavy2 sat 90 min at 100% CPU with zero output; selftest
+# tools/gen_la_progress_selftest.sh). Whenever heavy rows are computed (not --skip-heavy): each row prints
+#   progress: op=<op> case=<case_id> tier=<gate|heavy> row_s=<s> elapsed_s=<s>
+# to stderr after it is on disk; with --heavy DIR heavy rows also go to DIR/<slice>/la_<op>.rows<k>.partial, flushed and
+# fsynced per row (removed once the final file is written; left behind if the run dies). A per-case wall budget
+# (--case-budget, SIGALRM, re-armed at every case start and row) exits 5 naming the op and the case_id being computed.
+OP = ""; CASE = ""; PROGRESS = False; PARTIAL_DIR = None; BUDGET = 0.0; T0 = time.monotonic(); T_ROW = T0; N_ROWS_OBJ = 0
+
+class CaseBudget(Exception):
+    pass
+
+def _on_alarm(*_):
+    raise CaseBudget()
+
+def _arm():
+    if BUDGET > 0: signal.setitimer(signal.ITIMER_REAL, BUDGET)
+
+def begin(cid):
+    """Marks the case_id being computed (named by the budget failure) and re-arms the per-case budget."""
+    global CASE
+    CASE = cid; _arm()
+
 class Rows:
     """Row sink: append((text, heavy)) or append(text) (= heavy). Text goes straight to disk."""
     def __init__(self):
+        global N_ROWS_OBJ
         os.makedirs(SPOOL_DIR, exist_ok=True)
-        self.spool = {False: tempfile.TemporaryFile(dir=SPOOL_DIR), True: tempfile.TemporaryFile(dir=SPOOL_DIR)}
+        heavy_spool, self.partial = tempfile.TemporaryFile(dir=SPOOL_DIR), None
+        if PARTIAL_DIR is not None:
+            os.makedirs(PARTIAL_DIR, exist_ok=True)
+            self.partial = os.path.join(PARTIAL_DIR, f"la_{OP}.rows{N_ROWS_OBJ}.partial"); heavy_spool = open(self.partial, "w+b")
+        N_ROWS_OBJ += 1
+        self.spool = {False: tempfile.TemporaryFile(dir=SPOOL_DIR), True: heavy_spool}
         self.count = {False: 0, True: 0}; self.ids = []
     def append(self, item):
+        global T_ROW
         text, heavy = item if isinstance(item, tuple) else (item, True)
-        heavy = bool(heavy)
-        self.spool[heavy].write(text.encode("utf-8") + b"\n"); self.count[heavy] += 1
-        self.ids.append((text.split(" ", 1)[0], heavy))
+        heavy = bool(heavy); cid = text.split(" ", 1)[0]
+        f = self.spool[heavy]; f.write(text.encode("utf-8") + b"\n"); self.count[heavy] += 1
+        if heavy and self.partial is not None: f.flush(); os.fsync(f.fileno())
+        self.ids.append((cid, heavy))
+        if PROGRESS:
+            now = time.monotonic()
+            print(f"progress: op={OP} case={cid} tier={'heavy' if heavy else 'gate'} row_s={now - T_ROW:.3f} elapsed_s={now - T0:.3f}",
+                  file=sys.stderr, flush=True)
+            T_ROW = now
+        _arm()
     def __bool__(self): return bool(self.ids)
     def lines(self, heavy):
         f = self.spool[heavy]; f.flush(); f.seek(0)
         for l in f: yield l
     def close(self):
         for f in self.spool.values(): f.close()
+        if self.partial is not None: os.remove(self.partial)
 
 def header_bytes(name, tier, hdr, nrows):
     h = [f"generator: {GEN}", f"sympy: {SYMPY_PIN}", f"mpmath: {MPMATH_PIN}", f"seed: {SEED} (python random.Random('{SEED}:{name}'))",
@@ -837,8 +883,8 @@ HEAVY_HDR = ("# sha256 of heavy-tier LA golds (not committed; rebuilt determinis
 def render(gate_dir, heavy_dir, skip_heavy):
     """Streams every op: gate files to gate_dir/<slice>/ (written as .tmp then renamed), heavy files to heavy_dir/<slice>/ if
     heavy_dir else hash only. Returns {slice: {"gate": {fname: (sha, size)}, "heavy": {fname: (sha, size)}}}."""
-    global rng, SKIP_HEAVY
-    SKIP_HEAVY = skip_heavy
+    global rng, SKIP_HEAVY, OP, CASE, PROGRESS, PARTIAL_DIR, N_ROWS_OBJ
+    SKIP_HEAVY = skip_heavy; PROGRESS = not skip_heavy
     out = {}
     def to(d, sl, k):
         if d is None: return None
@@ -847,6 +893,9 @@ def render(gate_dir, heavy_dir, skip_heavy):
         if f is not None: f.close(); os.replace(os.path.join(d, sl, k + ".tmp"), os.path.join(d, sl, k))
     for name, fn in OPS:
         rng = random.Random(f"{SEED}:{name}")   # per-op stream: ops are independent
+        OP, CASE, N_ROWS_OBJ = name, name + ".(corpus-setup)", 0
+        PARTIAL_DIR = None if heavy_dir is None or skip_heavy else os.path.join(heavy_dir, SLICE_OF[name])
+        _arm()
         hdr, rows, expect, *rest = fn(); exts = rest[0] if rest else {}; stub = "stub" in rest
         ids = [i for i, _ in rows.ids]; assert len(ids) == len(set(ids)), "duplicate case_id"
         if stub: assert not rows, "stub file must have zero rows"
@@ -865,13 +914,30 @@ def render(gate_dir, heavy_dir, skip_heavy):
             if not skip_heavy: sl["heavy"][k] = r
             erows.close()
         rows.close()
+    if BUDGET > 0: signal.setitimer(signal.ITIMER_REAL, 0)
     return out
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", nargs="?", const="", default=None, metavar="DIR")
     ap.add_argument("--heavy", metavar="DIR"); ap.add_argument("--skip-heavy", action="store_true")
+    def positive(v):
+        x = float(v)
+        if not x > 0: raise argparse.ArgumentTypeError(f"must be > 0 seconds, got {v}")
+        return x
+    ap.add_argument("--case-budget", type=positive, default=1800.0, metavar="SECONDS",
+                    help="per-case wall budget; exceeding it exits 5 naming the op and case_id (default 1800)")
     a = ap.parse_args()
+    global BUDGET
+    BUDGET = a.case_budget; signal.signal(signal.SIGALRM, _on_alarm)
+    try:
+        run(a)
+    except CaseBudget:
+        print(f"gen_la_goldens: CASE BUDGET exceeded ({a.case_budget:g} s): op={OP} case={CASE} "
+              f"elapsed_s={time.monotonic() - T0:.3f}; no row finished within the budget. Not a pass.", file=sys.stderr, flush=True)
+        sys.exit(5)
+
+def run(a):
     if a.check is not None:
         cdir = a.check or tempfile.mkdtemp(dir=(os.makedirs(SPOOL_DIR, exist_ok=True) or SPOOL_DIR))
         out = render(cdir, None, a.skip_heavy); bad = 0

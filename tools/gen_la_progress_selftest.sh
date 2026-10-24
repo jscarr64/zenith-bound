@@ -22,12 +22,12 @@ ck; grep -Eq '^gen_la_goldens: CASE BUDGET exceeded \(0\.001 s\): op=[a-z_]+ cas
 ck; run "$py" "$gen" --heavy "$t/h0" --case-budget 0; [[ $(rc) == 2 ]] || fail "--case-budget 0 exited $(rc), want 2"
 # 3. progress + fsync: run --heavy until the first heavy progress line, SIGKILL it, then that row must already be in a .partial file
 "$py" "$gen" --heavy "$t/h2" > "$t/out2" 2> "$t/err2" & pid=$!
-for _ in $(seq 1 600); do grep -q 'tier=heavy' "$t/err2" && break; kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
+for _ in $(seq 1 6000); do grep -q 'tier=heavy' "$t/err2" && break; kill -0 "$pid" 2>/dev/null || break; sleep 0.05; done
 kill -9 "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
 ck; line=$(grep -m1 'tier=heavy' "$t/err2") || fail "no heavy progress line within 300 s: $(tail -c 400 "$t/err2")"
 ck; [[ $line =~ ^progress:\ op=[a-z_]+\ case=([a-z_]+\.[^ ]+)\ tier=heavy\ row_s=[0-9]+\.[0-9]+\ elapsed_s=[0-9]+\.[0-9]+$ ]] || fail "bad progress line: $line"
 cid=${BASH_REMATCH[1]}
 ck; grep -Eq '^progress: op=[a-z_]+ case=[^ ]+ tier=gate row_s=' "$t/err2" || fail "no gate progress lines"
-ck; cat "$t/h2"/*/*.partial 2>/dev/null | grep -q "^$cid " || fail "row $cid was reported but is not in a .partial file after SIGKILL"
+ck; grep -qs "^$cid " "$t/h2"/*/*.partial "$t/h2"/*/*_heavy.txt || fail "row $cid was reported but is on disk in neither a .partial nor a finished heavy file after SIGKILL"
 st_done gen_la_progress 7   # WANT: cases this script runs (tools/selftest_cases.sh)
 echo "gen_la_progress selftest: ok"
