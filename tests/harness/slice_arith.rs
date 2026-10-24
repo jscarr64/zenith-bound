@@ -257,6 +257,19 @@ fn sqrt_rows() -> Result<(), String> {
 }
 
 #[test]
+fn sqrt_lo_zero_is_the_endpoint_ball() -> Result<(), String> {
+    // 4 ± 4 has lo == 0: Strict accepts it, and the result is the endpoint ball [0, sqrt_up(8)] (16.S1.7), whose top
+    // stays below 3. The lo > 0 formula would give 2 ± 2, reaching 4.
+    let b = ok("sqrt", ball(num(4), mag(TOP, 3)?, 53)?.sqrt(53, &DomainPolicy::Strict))?;
+    want_contains("sqrt lo 0", &b, &num(0))?;
+    let top = Mag::from_exact_num(b.mid()).add_up(b.rad());
+    if top >= Mag::from_exact_num(&num(3)) {
+        return Err(format!("sqrt(4 ± 4) reaches {:?}, want below 3: {:?}", top, b));
+    }
+    Ok(())
+}
+
+#[test]
 fn prec_out_of_range_is_invalid_argument() -> Result<(), String> {
     let checks = [
         pt(1, 53)?.add(&pt(1, 53)?, 0),

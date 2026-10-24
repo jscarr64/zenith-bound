@@ -1,5 +1,5 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index deeda66..7f9b175 100644
+index deeda66..eeafe52 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
 @@ -212,7 +212,7 @@ fn endpoint_ball(op: &'static str, u: Mag, prec: Precision) -> BoundResult<Ball>
@@ -7,7 +7,7 @@ index deeda66..7f9b175 100644
      let u_half = u.mul_up(&half);
      match (u.to_exact_num(), ExactNum::from_mag_parts(HALF_MANT, 0, 64)) {
 -        (Ok(un), Ok(h)) => finish(op, un.mul(&h, prec, MID_RM), u_half, prec, false),
-+        (Ok(un), Ok(h)) => finish(op, un.mul(&h, prec, MID_RM), Mag::zero(), prec, false),
++        (Ok(un), Ok(h)) => finish(op, un.mul(&h, prec, MID_RM), u_half.mul_up(&half), prec, false),
          (Err(_), _) | (_, Err(_)) => Ball::from_mid_rad(ExactNum::from(0i64), u, prec),
      }
  }
