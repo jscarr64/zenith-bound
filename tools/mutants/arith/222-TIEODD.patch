@@ -1,5 +1,5 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index fe2a377..151c975 100644
+index f86eb99..264462a 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
 @@ -18,7 +18,7 @@ use crate::policy::DomainPolicy;
@@ -10,4 +10,4 @@ index fe2a377..151c975 100644
 +const MID_RM: RoundingMode = RoundingMode::ToOdd;
  /// Extra bits `powi` carries through its squaring chain before the one final rounding to `prec` (16.S1.6).
  const POWI_GUARD_BITS: Precision = 64;
- /// `Mag` mantissa of one half: `0.1b * 2^0`.
+ /// Guard bits for the hypot endpoint magnitudes `|m| ± r`.
