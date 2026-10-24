@@ -3,6 +3,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+mod ball_boundary;
 mod ball_goldens_selftest;
 mod edges_selftest;
 mod enclosure_selftest;

@@ -1,6 +1,6 @@
 //! COVERS: common::BallDesc::encode, common::ExpBand::Edge, common::ExpBand::Gap, common::ExpBand::Near0, common::ExpBand::PowerOfTwo, common::ExpBand::Uniform, common::ExpBand::from_index, common::ExpBand::index, common::ExpDomain::edge_values, common::ExpDomain::in_raw_range, common::GapClass::One, common::GapClass::P, common::GapClass::PGuard, common::GapClass::PGuardMinus1, common::GapClass::PGuardPlus1, common::GapClass::PMinus1, common::GapClass::PPlus1, common::GapClass::Random, common::GapClass::Two, common::GapClass::Zero, common::GapClass::from_index, common::GapClass::index, common::GapClass::magnitude, common::MantPattern::Aaab, common::MantPattern::AllOnes, common::MantPattern::Alt5555, common::MantPattern::C000, common::MantPattern::MaxMinus1, common::MantPattern::SingleBit, common::MantPattern::TieAtP, common::MantPattern::TieMinus1, common::MantPattern::TiePlus1, common::MantPattern::Top, common::MantPattern::TopPlus1, common::MantPattern::Uniform, common::MantPattern::from_index, common::MantPattern::index, common::ModeOrNone::None, common::ModeOrNone::Valid, common::ModeOrNone::all_with_none, common::ModeOrNone::is_valid, common::ModeOrNone::name, common::PrecSource::Fast, common::PrecSource::Operand, common::PrecSource::Schedule, common::PrecSource::Uniform, common::RadiusClass::HalfUlp, common::RadiusClass::Huge, common::RadiusClass::Infinity, common::RadiusClass::OneUlp, common::RadiusClass::RandomMag, common::RadiusClass::Zero, common::RadiusClass::from_index, common::RadiusClass::index, common::RadiusClass::tag, common::RoundingMode::Down, common::RoundingMode::FromZero, common::RoundingMode::ToEven, common::RoundingMode::ToOdd, common::RoundingMode::ToZero, common::RoundingMode::Up, common::RoundingMode::all, common::RoundingMode::index, common::RoundingMode::name, common::RoundingMode::parse, common::Sign::Minus, common::Sign::Plus, common::Sign::symbol, common::generators::check_exp_mix, common::generators::check_mant_mix, common::generators::draw_ball, common::generators::draw_exponent, common::generators::draw_exponent_pair, common::generators::draw_exponent_with, common::generators::draw_gap, common::generators::draw_mantissa, common::generators::draw_mantissa_with, common::generators::draw_mode, common::generators::draw_precision, common::generators::gap_pair, common::generators::tie_mantissa, common::generators::uniform_in
 //! Self-tests of tests/common/generators.rs. Oracle: the plan (TEST_PLAN section 7, 9), hand-derived expectations, and pinned counts/digests
-//! for the fixed seed `seed_for("common", CASE_CLASS_GATE)` at GENERATOR_VERSION 4 (a drift detector, produced by this generator; the band
+//! for the fixed seed `seed_for("common", CASE_CLASS_GATE)` at GENERATOR_VERSION 5 (a drift detector, produced by this generator; the band
 //! counts were also recomputed independently by scripts/goldlib.py, see the comment at EXP_BAND_COUNTS).
 
 use crate::common::expect_eq;
@@ -59,7 +59,7 @@ fn exponent_run(
     Ok((counts, digest))
 }
 
-// Pinned for GENERATOR_VERSION 4 (band counts unchanged since 1; the digest moved at 3 with the log-scale Uniform band), seed_for("common", CASE_CLASS_GATE), 10,000 draws, MAG domain, anchor 0, prec 53.
+// Pinned for GENERATOR_VERSION 5, unchanged since 4 (MAG domain; band counts unchanged since 1; the digest moved at 3 with the log-scale Uniform band), seed_for("common", CASE_CLASS_GATE), 10,000 draws, MAG domain, anchor 0, prec 53.
 // The digests are pinned from this generator (drift detectors only). The counts were recomputed independently in Python (scripts/goldlib.py splitmix64 + the band rule `below(100)` against the cumulative
 // 30/50/80/90/100 thresholds, with the fixed consumption per band: Edge 1, Near0 1, Uniform 1, PowerOfTwo 3, Gap 3 extra outputs).
 const EXP_BAND_COUNTS: [usize; 5] = [2976, 2040, 3008, 994, 982];
@@ -89,9 +89,9 @@ fn schedules_constants_and_zf_range_are_as_documented() -> Result<(), String> {
     expect_eq("MAX_PREC", &MAX_PREC, &4096)?;
     expect_eq("GUARD", &GUARD, &64)?;
     expect_eq("TOP", &TOP, &(1u64 << 63))?;
-    // zenith-float 2.0 moves `Exponent` from i32 to i64 (Jeff, 2026-10-23 12:36 PM CT): mid exponents span the whole i64 range
-    expect_eq("ZF_EXPONENT_MIN", &ZF_EXPONENT_MIN, &i64::MIN)?;
-    expect_eq("ZF_EXPONENT_MAX", &ZF_EXPONENT_MAX, &i64::MAX)?;
+    // zenith-float 2.0 moves `Exponent` from i32 to i64 (Jeff, 2026-10-23 12:36 PM CT) with range +-(2^62 - 1) (Rusty)
+    expect_eq("ZF_EXPONENT_MIN", &ZF_EXPONENT_MIN, &(-(1i64 << 62) + 1))?;
+    expect_eq("ZF_EXPONENT_MAX", &ZF_EXPONENT_MAX, &((1i64 << 62) - 1))?;
     expect_eq(
         "ZF_MIN_NORMAL_EXPONENT",
         &ZF_MIN_NORMAL_EXPONENT,
@@ -182,7 +182,7 @@ fn exponent_band_counts_are_pinned_for_the_fixed_seed() -> Result<(), String> {
     expect_eq(
         "GENERATOR_VERSION (re-pin the counts below when it changes)",
         &GENERATOR_VERSION,
-        &4,
+        &5,
     )?;
     let (counts, digest) = exponent_run(&EXP_MIX, &ExpDomain::MAG, N)?;
     expect_eq(
@@ -274,12 +274,15 @@ fn edge_tables_hold_the_extremes_the_subnormal_boundary_and_the_raw_off_by_ones(
         }
     }
     let mid = ExpDomain::MID.edge_values();
-    expect_eq("MID edge length", &mid.len(), &11)?;
+    // zf 2.0 range +-(2^62 - 1): the raw off-by-ones min - 1 and max + 1 are representable, so all 13 entries are present
+    expect_eq("MID edge length", &mid.len(), &13)?;
     for v in [
-        i64::MIN,
-        i64::MIN + 3,
-        i64::MAX,
-        i64::MAX - 3,
+        ZF_EXPONENT_MIN - 1,
+        ZF_EXPONENT_MIN,
+        ZF_EXPONENT_MIN + 3,
+        ZF_EXPONENT_MAX + 1,
+        ZF_EXPONENT_MAX,
+        ZF_EXPONENT_MAX - 3,
         ZF_MIN_NORMAL_EXPONENT - 1,
         ZF_MIN_NORMAL_EXPONENT,
         ZF_MIN_NORMAL_EXPONENT + 1,
@@ -288,9 +291,20 @@ fn edge_tables_hold_the_extremes_the_subnormal_boundary_and_the_raw_off_by_ones(
             return Err(format!("MID edge table lacks {}", v));
         }
     }
-    // i64 mid exponents: the raw range is the whole i64 range, nothing outside it is representable
-    if !ExpDomain::MID.in_raw_range(i64::MIN) || !ExpDomain::MID.in_raw_range(i64::MAX) {
-        return Err(String::from("MID raw range excludes an i64 extreme"));
+    // MID raw range: one tick outside +-(2^62 - 1) and no further
+    if !ExpDomain::MID.in_raw_range(ZF_EXPONENT_MIN - 1)
+        || !ExpDomain::MID.in_raw_range(ZF_EXPONENT_MAX + 1)
+    {
+        return Err(String::from("MID raw range excludes a raw off-by-one"));
+    }
+    if ExpDomain::MID.in_raw_range(ZF_EXPONENT_MIN - 2)
+        || ExpDomain::MID.in_raw_range(ZF_EXPONENT_MAX + 2)
+        || ExpDomain::MID.in_raw_range(i64::MIN)
+        || ExpDomain::MID.in_raw_range(i64::MAX)
+    {
+        return Err(String::from(
+            "MID raw range reaches past one tick outside the zf range",
+        ));
     }
     if !ExpDomain::MAG.in_raw_range(i64::MIN) || !ExpDomain::MAG.in_raw_range(i64::MAX) {
         return Err(String::from("MAG raw range excludes an i64 extreme"));
@@ -368,11 +382,23 @@ fn gap_pair_reports_overflow_as_an_error() -> Result<(), String> {
             ));
         }
     }
-    // MID is i64 now: a gap past either i64 extreme is an error, never a wrap
-    if gap_pair(ZF_EXPONENT_MAX, 1, &ExpDomain::MID).is_ok()
-        || gap_pair(ZF_EXPONENT_MIN, -1, &ExpDomain::MID).is_ok()
+    // MID is +-(2^62 - 1): one tick past either bound is a raw value, two ticks past is an error, never a wrap
+    expect_eq(
+        "MID one tick past max",
+        &gap_pair(ZF_EXPONENT_MAX, 1, &ExpDomain::MID),
+        &Ok((ZF_EXPONENT_MAX, ZF_EXPONENT_MAX + 1)),
+    )?;
+    expect_eq(
+        "MID one tick past min",
+        &gap_pair(ZF_EXPONENT_MIN, -1, &ExpDomain::MID),
+        &Ok((ZF_EXPONENT_MIN, ZF_EXPONENT_MIN - 1)),
+    )?;
+    if gap_pair(ZF_EXPONENT_MAX, 2, &ExpDomain::MID).is_ok()
+        || gap_pair(ZF_EXPONENT_MIN, -2, &ExpDomain::MID).is_ok()
     {
-        return Err(String::from("MID gap past an i64 extreme was accepted"));
+        return Err(String::from(
+            "MID gap two ticks past a zf bound was accepted",
+        ));
     }
     Ok(())
 }
@@ -808,7 +834,8 @@ fn ball_descriptors_cover_signs_zeros_radius_classes_and_independent_exponents(
     )
 }
 
-const BALL_DIGEST: u64 = 5_168_648_304_406_370_894;
+// Re-pinned at GENERATOR_VERSION 5: the MID domain moved to +-(2^62 - 1) (Rusty), so mid exponents drawn by ball descriptors changed.
+const BALL_DIGEST: u64 = 6_896_748_639_994_193_576;
 
 #[test]
 fn rounding_modes_are_six_named_distinct_and_none_is_separate() -> Result<(), String> {
@@ -907,8 +934,12 @@ fn uniform_band_reaches_cosmology_scale_exponents_and_every_bit_length() -> Resu
                 cosmology, N
             ));
         }
-        let missing = lengths.iter().take(63).filter(|hit| !**hit).count();
-        expect_eq("bit lengths 1..=63 missing", &missing, &0)?;
+        // MAG reaches bit length 63; MID stops at 62 (|e| <= 2^62 - 1)
+        let top = if dom.max == ZF_EXPONENT_MAX { 62 } else { 63 };
+        let missing = lengths.iter().take(top).filter(|hit| !**hit).count();
+        expect_eq("bit lengths 1..=top missing", &missing, &0)?;
+        let past = lengths.iter().skip(top).filter(|hit| **hit).count();
+        expect_eq("bit lengths past the domain", &past, &0)?;
     }
     Ok(())
 }

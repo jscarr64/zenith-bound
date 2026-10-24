@@ -24,10 +24,11 @@ pub const MAX_PREC: u32 = 4096;
 /// The top bit of a `Mag` mantissa.
 pub const TOP: u64 = 1 << 63;
 
-/// zenith-float 2.0 `Exponent` range (`Exponent = i64`, Jeff 2026-10-23 12:36 PM CT; zf 1.x was `i32`). zb tests the 2.0 range so
-/// cosmology-scale exponents and far more headroom are covered.
-pub const ZF_EXPONENT_MIN: i64 = i64::MIN;
-pub const ZF_EXPONENT_MAX: i64 = i64::MAX;
+/// zenith-float 2.0 `Exponent` range (`Exponent = i64`, Jeff 2026-10-23 12:36 PM CT; zf 1.x was `i32`): Rusty set it to +-(2^62 - 1), so
+/// the sum or difference of two in-range exponents fits in i64. Defined ONCE here; every zb test uses these. NOTE: Rusty's zf i64 SHA brings
+/// the real zf constant names (`EXPONENT_MIN` / `EXPONENT_MAX`); when it is pinned, bind these to them (the pinned fe5c15d is still i32).
+pub const ZF_EXPONENT_MAX: i64 = (1i64 << 62) - 1;
+pub const ZF_EXPONENT_MIN: i64 = -ZF_EXPONENT_MAX;
 /// PLACEHOLDER for zf's `MIN_NORMAL_EXPONENT` until the zf pin exists (`seeds::ZF_PIN`): `EXPONENT_MIN + 4096`, the lowest exponent at
 /// which a 4096-bit precision still fits above `EXPONENT_MIN`. Replace with zf's constant (it changes the edge table, so bump the generator version).
 pub const ZF_MIN_NORMAL_EXPONENT: i64 = ZF_EXPONENT_MIN + 4096;

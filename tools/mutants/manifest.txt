@@ -188,4 +188,4 @@ src/array.rs:element_count	174-A-zerodimone	174-A-zerodimone.patch	array
 src/mag/add.rs:add_checked	175-N18	175-N18.patch	mag
 src/mag/lower.rs:sub_checked	176-N19	176-N19.patch	mag
 src/mag/lower.rs:sub_checked	177-N20	177-N20.patch	mag
-src/mag/ulp.rs:place_pow2	178-U-underflow-zero	178-U-underflow-zero.patch	ball
+src/mag/ulp.rs:place_pow2	178-U-underflow-zero	178-U-underflow-zero.patch	harness
