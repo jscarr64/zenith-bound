@@ -1,15 +1,15 @@
 //! CONTRACT 6.4, 15.3, O11-W; PLAN C5 rulings a/b (2026-10-23): struct variants {op, detail},
 //! #[non_exhaustive], NotPositiveDefinite and Singular; NotConverged (Paul 2026-10-23: an iteration out of budget, e.g.
 //! eig past max_sweeps, returns NotConverged, never a silently loose answer); DimensionMismatch (S0, 2026-10-24: operand shapes
-//! disagree, e.g. matmul, solve, GLS; reserved up front so no later slice edits the enum).
-//! COVERS: BoundError::Representation, BoundError::InvalidArgument, BoundError::Domain, BoundError::Resource, BoundError::NotPositiveDefinite, BoundError::Singular, BoundError::NotConverged, BoundError::DimensionMismatch, BoundError::op, BoundError::detail, Display for BoundError, Error for BoundError
+//! disagree, e.g. matmul, solve, GLS; reserved up front so no later slice edits the enum); NotSymmetric (LA plan, 2026-10-24: LA5a).
+//! COVERS: BoundError::Representation, BoundError::InvalidArgument, BoundError::Domain, BoundError::Resource, BoundError::NotPositiveDefinite, BoundError::Singular, BoundError::NotConverged, BoundError::DimensionMismatch, BoundError::NotSymmetric, BoundError::op, BoundError::detail, Display for BoundError, Error for BoundError
 
 use zenith_bound::ball::Ball;
 use zenith_bound::error::{BoundError, BoundResult};
 use zenith_bound::mag::Mag;
 use zenith_float_num::ExactNum;
 
-fn all() -> [BoundError; 8] {
+fn all() -> [BoundError; 9] {
     [
         BoundError::Representation {
             op: "op-rep",
@@ -43,6 +43,10 @@ fn all() -> [BoundError; 8] {
             op: "op-dim",
             detail: "d-dim",
         },
+        BoundError::NotSymmetric {
+            op: "op-sym",
+            detail: "d-sym",
+        },
     ]
 }
 
@@ -56,6 +60,7 @@ fn name(e: &BoundError) -> &'static str {
         BoundError::Singular { .. } => "Singular",
         BoundError::NotConverged { .. } => "NotConverged",
         BoundError::DimensionMismatch { .. } => "DimensionMismatch",
+        BoundError::NotSymmetric { .. } => "NotSymmetric",
         _ => "unknown",
     }
 }
@@ -200,6 +205,7 @@ fn each_variant_matches_its_own_pattern() -> Result<(), String> {
         matches!(all()[5], BoundError::Singular { op: "op-sing", .. }),
         matches!(all()[6], BoundError::NotConverged { op: "op-conv", .. }),
         matches!(all()[7], BoundError::DimensionMismatch { op: "op-dim", .. }),
+        matches!(all()[8], BoundError::NotSymmetric { op: "op-sym", .. }),
     ];
     match checks.iter().position(|ok| !ok) {
         None => Ok(()),
@@ -219,6 +225,7 @@ fn display_kind_text_per_variant() -> Result<(), String> {
         "matrix singular",
         "iteration did not converge",
         "dimensions do not match",
+        "matrix not symmetric",
     ];
     for (e, w) in all().iter().zip(want.iter()) {
         if !format!("{}", e).starts_with(w) {
@@ -245,6 +252,23 @@ fn dimension_mismatch_constructs_and_displays() -> Result<(), String> {
         return Err(format!("Display was {:?}, want {:?}", e.to_string(), want));
     }
     if e.op() != "BallMat::matmul" || e.detail() != "inner dimensions 2 and 3" {
+        return Err(format!("op/detail wrong: {:?}", e));
+    }
+    Ok(())
+}
+
+#[test]
+fn not_symmetric_constructs_and_displays() -> Result<(), String> {
+    // LA plan (2026-10-24): LA5a's refusal for a non-symmetric input (CONTRACT 16.LA.1).
+    let e = BoundError::NotSymmetric {
+        op: "eig_sym",
+        detail: "a[0][1] != a[1][0]",
+    };
+    let want = "matrix not symmetric in eig_sym: a[0][1] != a[1][0]";
+    if e.to_string() != want {
+        return Err(format!("Display was {:?}, want {:?}", e.to_string(), want));
+    }
+    if e.op() != "eig_sym" || e.detail() != "a[0][1] != a[1][0]" {
         return Err(format!("op/detail wrong: {:?}", e));
     }
     Ok(())
