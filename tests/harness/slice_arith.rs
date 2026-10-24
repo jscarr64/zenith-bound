@@ -1139,3 +1139,48 @@ fn radius_below_exponent_min_rounds_out_to_smallest_mag() -> Result<(), String> 
     }
     Ok(())
 }
+
+/// 16.S1.8 edges: divisors wider than a 64-bit `Mag` (the `|n|` lower bound and the denominator must round down), and
+/// the midpoint of `inv` rounded `ToEven`, including a negative divisor.
+#[test]
+fn div_inv_wide_divisor_and_mid_rounding() -> Result<(), String> {
+    let p = 200;
+    for (j, k) in [(1i64, 99i64), (3, 98), (-5, 97), (7, 100), (-1, 96)] {
+        // n = ±(2^100 + 2^37 + j), 101 significant bits; s = 2^(k-1).
+        let base = ExactNum::from_mag_parts(TOP | 1, 101, 64).map_err(|e| format!("{:?}", e))?;
+        let n = base.add(&num(j), p, RoundingMode::ToEven);
+        for sign in [1i64, -1] {
+            let n = n.clone().mul(&num(sign), p, RoundingMode::ToEven);
+            let s = mag(TOP, k)?;
+            let s_x = pow2(k - 1)?;
+            let lo = n.clone().sub(&s_x, p, RoundingMode::ToEven);
+            let hi = n.clone().add(&s_x, p, RoundingMode::ToEven);
+            let inv_b = ok("inv wide", ball(n.clone(), s, p)?.inv(p))?;
+            let div_b = ok(
+                "div wide",
+                pt(3, p)?.div(&ball(n.clone(), mag(TOP, k)?, p)?, p),
+            )?;
+            for end in [&lo, &hi] {
+                for x in brackets(&|rm| num(1).div(end, 512, rm)) {
+                    want_contains("inv wide end", &inv_b, &x)?;
+                }
+                for x in brackets(&|rm| num(3).div(end, 512, rm)) {
+                    want_contains("div wide end", &div_b, &x)?;
+                }
+            }
+        }
+    }
+    for v in [3i64, -3, 10, -7, 11] {
+        let b = ok("inv mid", pt(v, 53)?.inv(53))?;
+        let want = num(1).div(&num(v), 53, RoundingMode::ToEven);
+        if b.mid() != &want {
+            return Err(format!(
+                "inv {}: mid {:?}, want ToEven {:?}",
+                v,
+                b.mid(),
+                want
+            ));
+        }
+    }
+    Ok(())
+}
