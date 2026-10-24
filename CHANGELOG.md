@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Pop direct-run guard (2026-10-24, 11:49 incident: a bare 58 GB goldens python run global-OOMed Pop): tools/goldens_regen.sh
+  (before its first generator) and scripts/goldlib.py (at import, before the oracle check, so every mpmath generator) call
+  ~/pop-logs/bin/popguard.sh and exit 3 outside a popslot/poprun memory scope (6G per job, swap 0); hosts without popguard.sh
+  run unguarded. New tools/popguard_selftest.sh (8 cases, in the goldens-regen step).
+
 - full_gate (2026-10-24): gate-selftest now runs tools/mutate_selftest.sh (and requires cargo, git, timeout). Red: 0915-zb-red-gate-skips-mutate-selftest
   (step PASS with a planted break); 0915-zb-red2 FAIL with it; 0917-zb-green-gate-mutate-selftest PASS, 28 cases.
 
