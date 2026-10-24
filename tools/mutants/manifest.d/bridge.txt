@@ -16,6 +16,7 @@ src/bridge.rs:Mag::cmp_far_diff	312-FSPLUS	bridge/312-FSPLUS.patch	harness
 src/bridge.rs:Mag::cmp_far_diff	313-UZERO	bridge/313-UZERO.patch	harness
 src/bridge.rs:Mag::cmp_exact_diff	314-EXACTGAP	bridge/314-EXACTGAP.patch	harness
 src/bridge.rs:Mag::cmp_far_diff	315-ZERORAD	bridge/315-ZERORAD.patch	harness
+src/bridge.rs:Mag::cmp_exact_num	321-NUMZERORAD	bridge/321-NUMZERORAD.patch	harness
 src/bridge.rs:Mag::cmp_exact_diff	316-DIFFINF	bridge/316-DIFFINF.patch	harness
 src/bridge.rs:Mag::cmp_far_diff	317-REVERSE	bridge/317-REVERSE.patch	harness
 src/bridge.rs:Mag::cmp_far_diff	318-UKEEP	bridge/318-UKEEP.patch	harness

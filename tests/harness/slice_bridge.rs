@@ -70,8 +70,16 @@ fn cmp_exact_num_zero_and_infinity() -> Result<(), String> {
         Ordering::Less,
     )?;
     // Zero radius against values below 1 (Mag zero stores exponent 0; it must not compare by exponent).
-    want("0 vs 2^-10", Mag::zero().cmp_exact_num(&pow2(-10)?), Ordering::Less)?;
-    want("0 vs -2^-5000", Mag::zero().cmp_exact_num(&neg(&pow2(-5000)?)), Ordering::Less)?;
+    want(
+        "0 vs 2^-10",
+        Mag::zero().cmp_exact_num(&pow2(-10)?),
+        Ordering::Less,
+    )?;
+    want(
+        "0 vs -2^-5000",
+        Mag::zero().cmp_exact_num(&neg(&pow2(-5000)?)),
+        Ordering::Less,
+    )?;
     want(
         "1 vs 0",
         mag(TOP, 1)?.cmp_exact_num(&num(0)),
@@ -406,8 +414,16 @@ fn cmp_exact_diff_huge_exponent_gap() -> Result<(), String> {
         Mag::zero().cmp_exact_diff(&a, &b),
         Ordering::Less,
     )?;
-    want("0 vs |2^-100-2^-1000|", Mag::zero().cmp_exact_diff(&pow2(-100)?, &b), Ordering::Less)?;
-    want("0 vs |2^-1000-2^-100|", Mag::zero().cmp_exact_diff(&b, &pow2(-100)?), Ordering::Less)?;
+    want(
+        "0 vs |2^-100-2^-1000|",
+        Mag::zero().cmp_exact_diff(&pow2(-100)?, &b),
+        Ordering::Less,
+    )?;
+    want(
+        "0 vs |2^-1000-2^-100|",
+        Mag::zero().cmp_exact_diff(&b, &pow2(-100)?),
+        Ordering::Less,
+    )?;
     // |big| just under 2^1000 plus a same-sign small term crosses 2^1000: a = 2^1000 - 2^700, b = -2^800.
     let under_big = a.sub_full_prec(&pow2(700)?);
     want(
