@@ -833,6 +833,7 @@ fn enclosure_rows_contained() -> Result<(), String> {
 
 // ---- Harper L0b harness (child modules under tests/harness/slice_arith/) -------------------------------------------
 
+mod harper_cmp;
 mod harper_edges;
 mod harper_oracle;
 mod harper_props;
