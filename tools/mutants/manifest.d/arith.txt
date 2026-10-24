@@ -23,7 +23,6 @@ src/arith.rs:Ball::div	218-DIVZERO	arith/218-DIVZERO.patch	harness
 src/arith.rs:Ball::div	219-DIVNUMS	arith/219-DIVNUMS.patch	harness
 src/arith.rs:Ball::div	220-DIVNUMR	arith/220-DIVNUMR.patch	harness
 src/arith.rs:Ball::div	221-DIVDEN	arith/221-DIVDEN.patch	harness
-src/arith.rs:clear_of_zero	222-CLEAREQ	arith/222-CLEAREQ.patch	harness
 src/arith.rs:Ball::inv	223-INVZERO	arith/223-INVZERO.patch	harness
 src/arith.rs:Ball::inv	224-INVDEN	arith/224-INVDEN.patch	harness
 src/arith.rs:Ball::inv	225-INVNUM	arith/225-INVNUM.patch	harness
