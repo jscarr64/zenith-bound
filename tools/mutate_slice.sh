@@ -6,7 +6,8 @@
 #   INVALID     an INVALID mutant
 #   SURVIVED    a survivor with no equivalent entry (mutate.sh prints SURVIVED-EQUIVALENT for documented ones)
 #   BELOW floor the slice's KILLED / KILLED+SURVIVED-EQUIVALENT counts are under its floor (mutate.sh --floor --slice)
-# and on a duplicate or unknown result id, an unreadable id list or floor, or a nonzero runner exit.
+# and on a duplicate result id, a result for an id other than the run's --only id, an unreadable id list or floor, or a nonzero runner exit.
+# A result is an UNINDENTED line `KILLED|SURVIVED-EQUIVALENT|SURVIVED|INVALID <id>` (mutate.sh echoes suite output indented; that never counts).
 #   TIMEOUT <id> one mutant ran past MUTANT_TIMEOUT_S (each id runs as its own `mutate.sh --slice S --only ID` under that limit)
 # usage: tools/mutate_slice.sh SLICE     one slice (central, or a manifest.d/<slice>.txt name)
 #        tools/mutate_slice.sh SLICE ID_REGEX   PARTIAL: only the slice ids matching the ERE; floor and completeness are NOT checked (says so,
@@ -43,7 +44,7 @@ slices() { local sl; sl=$("$M" --slices) || { echo "mutate_slice: FAIL mutate.sh
 slice_ids() { "$M" --list --slice "$1" || { echo "mutate_slice: FAIL mutate.sh --list --slice $1 failed" >&2; return 1; }; }
 # one SLICE: run and check one slice; its result ids go to $w/SLICE.got
 one() {
-  local s=$1 re=${2-} partial=0 ids n fl id left lim t0 irc tmo="" cut=""  fk fke to rc=0 out=$w/$1.out res got nres miss dup unk inv sur nk ne bad=0 tmax
+  local s=$1 re=${2-} partial=0 ids n fl id left lim t0 irc tmo="" cut=""  fk fke to rc=0 out=$w/$1.out res got nres miss dup oth inv sur nk ne bad=0 tmax
   ids=$(slice_ids "$s") || return 1; ids=$(printf '%s\n' "$ids" | awk 'NF')
   if [ $# -ge 2 ]; then
     partial=1
@@ -57,7 +58,7 @@ one() {
   [[ $fk =~ ^[0-9]+$ && $fke =~ ^[0-9]+$ ]] || { echo "mutate_slice: FAIL slice $s: unreadable floor: $(words "$fl")"; return 1; }
   to=$((n * budget + setup))
   echo "mutate_slice: slice $s: $n ids, timeout ${to}s ($n x ${budget}s + ${setup}s setup), floor killed $fk killed+equivalent $fke"
-  : > "$w/$s.got"
+  : > "$w/$s.got"; : > "$w/$s.res"; : > "$w/$s.oth"
   if [ "$n" -gt 0 ]; then
     : > "$out"; t0=$SECONDS
     for id in $ids; do
@@ -66,18 +67,21 @@ one() {
       lim=$mto; [ "$left" -lt "$lim" ] && lim=$left
       irc=0; timeout -k 30 "$lim" "$M" --slice "$s" --only "$id" > "$out.1" 2>&1 < /dev/null || irc=$?
       cat "$out.1"; cat "$out.1" >> "$out"
+      # results of this run: unindented lines only, and only for the --only id (anything else is named and fails the slice)
+      awk -v want="$id" -v res="$w/$s.res" -v oth="$w/$s.oth" '/^(KILLED|SURVIVED-EQUIVALENT|SURVIVED|INVALID) / { r = $2; sub(/:$/, "", r)
+        if (r == want) print $1, r >> res; else print want, r >> oth }' "$out.1"
       if [ "$irc" = 124 ] || [ "$irc" = 137 ]; then
         if [ "$lim" = "$mto" ]; then echo "TIMEOUT $id: ran past the ${mto}s per-mutant limit"; tmo+=" $id"; else cut+=" $id"; fi
       elif [ "$irc" != 0 ] && [ "$rc" = 0 ]; then rc=$irc; fi
     done
     [ -z "$cut" ] || rc=124
   else : > "$out"; fi
-  res=$(awk '$1 ~ /^(KILLED|SURVIVED-EQUIVALENT|SURVIVED|INVALID)$/ { id = $2; sub(/:$/, "", id); print $1, id }' "$out")
+  res=$(cat "$w/$s.res")
   got=$(printf '%s\n' "$res" | awk 'NF { print $2 }'); printf '%s\n' "$got" | awk 'NF' > "$w/$s.got"
   nres=$(awk 'NF' "$w/$s.got" | wc -l)
   miss=$(printf '%s\n' "$ids" | awk -v f="$w/$s.got" 'BEGIN { while ((getline l < f) > 0) g[l] = 1 } NF && !($1 in g)')
   dup=$(sort "$w/$s.got" | uniq -d)
-  unk=$(printf '%s\n' "$ids" | awk -v f="$w/$s.got" 'NF { k[$1] = 1 } END { while ((getline l < f) > 0) if (!(l in k)) print l }')
+  oth=$(awk '{ printf "the --only %s run printed a result for %s; ", $1, $2 }' "$w/$s.oth")
   [ -z "$tmo" ] || { echo "mutate_slice: FAIL TIMEOUT (per-mutant ${mto}s): $(words "$(printf '%s\n' $tmo)") (slice $s)"; bad=1
     miss=$(printf '%s\n' "$miss" | grep -vxF -f <(printf '%s\n' $tmo) || true); }
   if [ "$partial" = 1 ]; then
@@ -88,7 +92,7 @@ one() {
     echo "mutate_slice: FAIL INCOMPLETE: $nres results for $n ids in slice $s; missing: $(words "$miss")"; bad=1
   fi
   [ -z "$dup" ] || { echo "mutate_slice: FAIL slice $s: duplicate result for $(words "$dup")"; bad=1; }
-  [ -z "$unk" ] || { echo "mutate_slice: FAIL slice $s: result for an id not in the slice: $(words "$unk")"; bad=1; }
+  [ -z "$oth" ] || { echo "mutate_slice: FAIL slice $s: ${oth%; }"; bad=1; }
   inv=$(printf '%s\n' "$res" | awk '$1 == "INVALID" { print $2 }'); sur=$(printf '%s\n' "$res" | awk '$1 == "SURVIVED" { print $2 }')
   [ -z "$inv" ] || { echo "mutate_slice: FAIL INVALID: $(words "$inv") (slice $s)"; bad=1; }
   [ -z "$sur" ] || { echo "mutate_slice: FAIL SURVIVED (no equivalent entry): $(words "$sur") (slice $s)"; bad=1; }
@@ -97,7 +101,7 @@ one() {
     echo "mutate_slice: FAIL BELOW floor: slice $s: $nk killed (floor $fk), $((nk + ne)) killed+equivalent (floor $fke)"; bad=1
   fi
   case $rc in 0|124|137) ;; *) echo "mutate_slice: FAIL slice $s: mutate.sh exited $rc"; bad=1 ;; esac
-  tmax=$(awk '$1 == "TIME" { v = $3; sub(/s$/, "", v); if (v + 0 > m) { m = v + 0; id = $2 } } END { if (id != "") print m "s (" id ")"; else print "-" }' "$out")
+  tmax=$(awk '/^TIME / { v = $3; sub(/s$/, "", v); if (v + 0 > m) { m = v + 0; id = $2 } } END { if (id != "") print m "s (" id ")"; else print "-" }' "$out")
   if [ "$partial" = 1 ]; then
     echo "mutate_slice: PARTIAL run (ID_REGEX=$re): floor/completeness not checked"
     echo "mutate_slice: slice $s PARTIAL: $nres results for $n matching ids, $nk killed, $ne survived-equivalent, max per-mutant time $tmax (limit ${mto}s) -> $([ "$bad" = 0 ] && echo 'PARTIAL, not a gate pass' || echo FAIL)"
