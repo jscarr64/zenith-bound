@@ -45,7 +45,7 @@ ck; [ $? = 0 ] || fail "logged marked-empty run failed: $out"
 lg=$(find "$t/pl/selftest" -name '*-goldens_regen.log' | head -1)
 ck; [ -n "$lg" ] || fail "logged marked-empty run: no run log: $out"
 ck; grep -q ' ERR ' "$lg" && fail "a marked-empty slice logged ERR trap lines: $(grep ' ERR ' "$lg")"
-ck; grep -q "slice x: SHA256SUMS marked '# EMPTY', skipped" "$lg" || fail "a marked-empty slice was not reported as skipped: $(cat "$lg")"
+ck; grep -q "slice x: SHA256SUMS marked '# EMPTY', skipped" <<< "$out" || fail "a marked-empty slice was not reported as skipped: $out"
 # a '# EMPTY' slice with a golden next to it FAILS, naming the marker
 fx; printf 'a\n' > "$d/a.txt"; printf '# EMPTY\n' > "$d/SHA256SUMS"
 ck; out=$(gr) && fail "a marked-empty slice with a.txt passed: $out"
