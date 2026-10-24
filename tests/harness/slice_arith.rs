@@ -1145,3 +1145,74 @@ fn radius_below_exponent_min_rounds_out_to_smallest_mag() -> Result<(), String> 
     }
     Ok(())
 }
+
+/// 16.S1.8 edges: divisors wider than a 64-bit `Mag` (the `|n|` lower bound and the denominator must round down), and
+/// the midpoint of `inv` rounded `ToEven`, including a negative divisor.
+#[test]
+fn div_inv_wide_divisor_and_mid_rounding() -> Result<(), String> {
+    let p = 200;
+    let ev = RoundingMode::ToEven;
+    for (j, k) in [(1i64, 99i64), (3, 98), (-5, 97), (7, 100), (-1, 96)] {
+        for sign in [1i64, -1] {
+            // n = ±(2^100 + 2^37 + j), 101 significant bits; s = 2^(k-1). Built afresh for each use.
+            let n = || -> Result<ExactNum, String> {
+                let base =
+                    ExactNum::from_mag_parts(TOP | 1, 101, 64).map_err(|e| format!("{:?}", e))?;
+                Ok(base.add(&num(j), p, ev).mul(&num(sign), p, ev))
+            };
+            let lo = n()?.sub(&pow2(k - 1)?, p, ev);
+            let hi = n()?.add(&pow2(k - 1)?, p, ev);
+            let inv_b = ok("inv wide", ball(n()?, mag(TOP, k)?, p)?.inv(p))?;
+            let div_b = ok("div wide", pt(3, p)?.div(&ball(n()?, mag(TOP, k)?, p)?, p))?;
+            for end in [&lo, &hi] {
+                for x in brackets(&|rm| num(1).div(end, 512, rm)) {
+                    want_contains("inv wide end", &inv_b, &x)?;
+                }
+                for x in brackets(&|rm| num(3).div(end, 512, rm)) {
+                    want_contains("div wide end", &div_b, &x)?;
+                }
+            }
+        }
+    }
+    for v in [3i64, -3, 10, -7, 11] {
+        let b = ok("inv mid", pt(v, 53)?.inv(53))?;
+        let want = num(1).div(&num(v), 53, RoundingMode::ToEven);
+        if b.mid() != &want {
+            return Err(format!(
+                "inv {}: mid {:?}, want ToEven {:?}",
+                v,
+                b.mid(),
+                want
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// 16.S1.8: the denominator `|n| (|n| - s)` is a lower bound. With `n` and `n - s` exact 64-bit values the endpoint
+/// `1/(n - s)` sits exactly `s / (n (n - s))` from `1/n`, so an upward-rounded product loses it on some draws.
+#[test]
+fn div_inv_denominator_rounds_down() -> Result<(), String> {
+    let p = 200;
+    let ev = RoundingMode::ToEven;
+    let mut rng = SplitMix64::new(0x5_1_8_d_e_4);
+    for _ in 0..200 {
+        let nm = rng.next_u64() | TOP;
+        let sm = (rng.next_u64() | TOP) & !3u64;
+        for sign in [1i64, -1] {
+            let n = || -> Result<ExactNum, String> {
+                let x = ExactNum::from_mag_parts(nm, 64, 64).map_err(|e| format!("{:?}", e))?;
+                Ok(x.mul(&num(sign), p, ev))
+            };
+            let sx = ExactNum::from_mag_parts(sm, 62, 64).map_err(|e| format!("{:?}", e))?;
+            let near = n()?.sub(&sx.mul(&num(sign), p, ev), p, ev);
+            let inv_b = ok("inv", ball(n()?, mag(sm, 62)?, p)?.inv(p))?;
+            let div_b = ok("div", pt(1, p)?.div(&ball(n()?, mag(sm, 62)?, p)?, p))?;
+            for x in brackets(&|rm| num(1).div(&near, 512, rm)) {
+                want_contains("inv near end", &inv_b, &x)?;
+                want_contains("div near end", &div_b, &x)?;
+            }
+        }
+    }
+    Ok(())
+}
