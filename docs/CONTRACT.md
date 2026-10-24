@@ -194,7 +194,17 @@ One section per parallel slice. Each section belongs to its slice alone: a slice
 
 ### Slice S1 (`src/arith.rs`)
 
-_Empty (S0 stub). Owner: slice S1._
+Owner: slice S1 (Spence). Code: `src/arith.rs`. Tests: `tests/harness/slice_arith.rs`. Mutants 200-299.
+
+- **16.S1.1 Propagation.** `add`/`sub`: `round(m ± n) ± (r + s + ε)`. `mul`: `round(mn) ± (|m|s + |n|r + rs + ε)`. Every `Mag` step rounds up; every midpoint is the zenith-float operation at `prec`, `ToEven` (O19). `prec` outside `MIN_PRECISION..=MAX_PRECISION` is `InvalidArgument`; a midpoint overflow is `Ok(all reals)` (10.4).
+- **16.S1.2 ε.** Zero for an exact midpoint. `half_ulp(e, prec)` for an inexact midpoint with exponent `e > EXPONENT_MIN`. For a zero or bottom-binade (subnormal) result that is inexact, or whose exact value was lost below the range, ε is the bottom ε `Mag::ulp_mag(EXPONENT_MIN, 0)`, so an underflow is never a silent flush. A shallow underflow that zenith-float keeps exactly (leading zero bits at `EXPONENT_MIN`) stays exact with radius 0.
+- **16.S1.3 neg.** `-(m ± r) = (-m) ± r`: exact and infallible, and a −0 midpoint becomes +0.
+- **16.S1.4 mul_exact.** `(m ± r)·c = round(mc) ± (|c|r + ε)` for an exact scalar `c`. A NaN or infinite `c` is `Representation`.
+- **16.S1.5 sqr.** `round(m²) ± (2|m|r + r² + ε)`. The square is taken at full precision with the inexact flag cleared first, so an underflow inside the square sets the lost flag and forces ε (16.S1.2). This bound is tighter than `mul` of the ball with itself.
+- **16.S1.6 powi.** `n == 0` is exactly `1 ± 0` for every ball, including one that contains 0 (10.2e). Otherwise, left-to-right binary exponentiation with `sqr`/`mul` at `prec + 64` bits (capped at `MAX_PRECISION`), then one final rounding to `prec`. A non-informative intermediate gives all reals.
+- **16.S1.7 sqrt.** The domain is closed, `[0, inf)` (10.2b). With `lo = m − r` and `hi = m + r` decided exactly: `lo > 0` gives `round(√m) ± (r / √m↓ + ε)`, and `lo == 0` gives the endpoint ball `[0, √hi↑]`. `lo < 0` is `Domain` under `Strict`. Under `Clip`, `hi < 0` is `Domain`, `hi == 0` is exactly 0, and `hi > 0` gives the endpoint ball. The all-reals input is `Domain` (Strict) or all reals (Clip). `Resource` applies if the sign of `m − r` cannot be decided.
+- **16.S1.8 Pending R13.** `div`, `inv` and a directed `hypot` need zenith-float R13 (directed division and hypot rounding) and are not in S1.
+- **16.S1.9 Tests.** The containment oracles bracket each true result at 128 bits finer than both the inputs and the target `prec`. The add/sub random operands keep their exponents within 200 of each other, because a wider gap only feeds ε and makes the exact oracle cost grow without bound.
 
 ### Slice S2 (`src/bridge.rs`)
 

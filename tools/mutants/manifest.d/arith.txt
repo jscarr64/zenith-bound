@@ -1,3 +1,21 @@
 # range: 200-299
 # Slice S1 (src/arith.rs) mutants, owned by S1 alone. Rows as in ../manifest.txt (fn_path<TAB>mutant_id<TAB>patch<TAB>suite);
 # ids NNN-<name> with NNN in 200..=299; patches go in tools/mutants/arith/ and the patch column reads arith/NNN-<name>.patch.
+src/arith.rs:Ball::add	200-ADDRAD	arith/200-ADDRAD.patch	harness
+src/arith.rs:Ball::sub	201-SUBADD	arith/201-SUBADD.patch	harness
+src/arith.rs:Ball::mul	202-MULRS	arith/202-MULRS.patch	harness
+src/arith.rs:Ball::mul	203-MULNR	arith/203-MULNR.patch	harness
+src/arith.rs:Ball::mul_exact	204-MULEX	arith/204-MULEX.patch	harness
+src/arith.rs:Ball::sqr	205-SQR2	arith/205-SQR2.patch	harness
+src/arith.rs:Ball::sqr	206-SQRLOST	arith/206-SQRLOST.patch	harness
+src/arith.rs:Ball::powi	207-POWI0	arith/207-POWI0.patch	harness
+src/arith.rs:Ball::powi	208-POWIBIT	arith/208-POWIBIT.patch	harness
+src/arith.rs:Ball::sqrt	209-SQRTDIV	arith/209-SQRTDIV.patch	harness
+src/arith.rs:Ball::sqrt	210-SQRTEQ	arith/210-SQRTEQ.patch	harness
+src/arith.rs:Ball::sqrt	211-SQRTSTRICT	arith/211-SQRTSTRICT.patch	harness
+src/arith.rs:endpoint_ball	212-ENDPT	arith/212-ENDPT.patch	harness
+src/arith.rs:eps	213-EPSBOT	arith/213-EPSBOT.patch	harness
+src/arith.rs:eps	214-EPSEX	arith/214-EPSEX.patch	harness
+src/arith.rs:classify	215-OVF	arith/215-OVF.patch	harness
+src/arith.rs:check_prec	216-PREC	arith/216-PREC.patch	harness
+src/arith.rs:cmp_abs_rad	217-CMPRAD	arith/217-CMPRAD.patch	harness

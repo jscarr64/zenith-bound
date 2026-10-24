@@ -1,0 +1,13 @@
+diff --git a/src/arith.rs b/src/arith.rs
+index deeda66..13753fb 100644
+--- a/src/arith.rs
++++ b/src/arith.rs
+@@ -59,7 +59,7 @@ impl Ball {
+         check_prec("Ball::sub", prec)?;
+         let (m, r, _) = self.into_parts();
+         let rad = r.add_up(other.rad());
+-        finish("Ball::sub", m.sub(other.mid(), prec, MID_RM), rad, prec, false)
++        finish("Ball::sub", m.add(other.mid(), prec, MID_RM), rad, prec, false)
+     }
+ 
+     /// `(m ± r)(n ± s) = round(m n) ± (|m| s + |n| r + r s + ε)` (CONTRACT 9.3, 16.S1.1).
