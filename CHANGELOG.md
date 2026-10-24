@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- popguard_selftest no-guard-host goldlib case (2026-10-24, Spence follow-up): asserts the exact WARNING line and exit 0. It was
+  rc 1 because the sandbox HOME had no oracle venv (goldlib failed its oracle check, not the guard); the sandbox now links the real
+  pinned venv as a stand-in and runs goldlib with it.
 - Pop guard bypass closed (2026-10-24, Spence blocked 7881073: POPGUARD=/nonexistent turned the cap off silently): goldens_regen.sh
   and goldlib.py REFUSE (exit 2) when POPGUARD is missing/not executable on a host that has ~/pop-logs/bin/popguard.sh; a host with
   no popguard.sh runs with a loud stderr WARNING. popguard.sh (pop-logs 6d1fc93) now also requires the scope's memory.max to be a
