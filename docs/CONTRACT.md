@@ -96,7 +96,7 @@ This is zenith-float's `exponent()` convention (`3` is `e = 2`, `m = 0xC000…`)
 
 8.2 Radii: `Mag` exponents are `i64`; beyond that the radius is `Infinity` (clause 3).
 
-8.3 Midpoint exponents are zenith-float's `EXPONENT_MIN..=EXPONENT_MAX`. (The 32-bit-target sentence of PLAN Part L 4 is dropped, decision O3: zenith-float's `Exponent` is `i64` and `EXPONENT_MAX`/`EXPONENT_MIN` are ±(2^62−1) on every target (O21, pinned at zenith-float `829f112`), so no target refuses a midpoint on range grounds.) Tests: `exponent_min_max_are_i64_62_bit` in tests/harness/slice_arith.rs.
+8.3 Midpoint exponents are zenith-float's `EXPONENT_MIN..=EXPONENT_MAX`. (The 32-bit-target sentence of PLAN Part L 4 is dropped, decision O3: zenith-float's `Exponent` is `i64` and `EXPONENT_MAX`/`EXPONENT_MIN` are ±(2^62−1) on every target (O21, pinned at zenith-float `829f112`), so no target refuses a midpoint on range grounds.) Tests: `exponent_min_max_are_i64_62_bit` and `radius_below_exponent_min_rounds_out_to_smallest_mag` (a radius below the range rounds outward to the smallest positive `Mag`, 10.4) in tests/harness/slice_arith.rs.
 
 
 ## 9. Rounding and radius rules (PLAN Part L 5 and 6; division is clause 4)

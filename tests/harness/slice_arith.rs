@@ -1109,3 +1109,33 @@ fn exponent_min_max_are_i64_62_bit() -> Result<(), String> {
         other => Err(format!("Mag above EXPONENT_MAX: {:?}", other.map(|_| ()))),
     }
 }
+
+/// CONTRACT 8.3 / 10.4: a radius that would fall below the `Mag` range rounds outward to the smallest positive `Mag`,
+/// never to zero. `2^EXPONENT_MIN · s` with `s` near the bottom of the `Mag` range underflows `|n| r`.
+#[test]
+fn radius_below_exponent_min_rounds_out_to_smallest_mag() -> Result<(), String> {
+    let smallest = mag(TOP, i64::MIN)?;
+    let tiny = ok("tiny", Ball::exact(pow2(EXPONENT_MIN)?, 53))?;
+    let low = ball(num(1), mag(TOP, i64::MIN + 1)?, 53)?;
+    for (what, r) in [
+        ("mul", low.mul(&tiny, 53)),
+        (
+            "mul_exact",
+            ball(num(1), mag(TOP, i64::MIN + 1)?, 53)?.mul_exact(&pow2(EXPONENT_MIN)?, 53),
+        ),
+    ] {
+        let b = ok(what, r)?;
+        if b.mid() != &pow2(EXPONENT_MIN)? || b.rad() != &smallest {
+            return Err(format!("{}: {:?}", what, b));
+        }
+    }
+    let q = ok(
+        "div",
+        ball(num(1), mag(TOP, i64::MIN + 1)?, 53)?
+            .div(&ok("big", Ball::exact(pow2(EXPONENT_MAX - 1)?, 53))?, 53),
+    )?;
+    if q.rad().is_zero() || q.rad() < &smallest {
+        return Err(format!("div: {:?}", q));
+    }
+    Ok(())
+}
