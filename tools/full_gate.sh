@@ -74,6 +74,7 @@ run manifest-scan "no_hits ':[0-9]+:\s*(//|\*|//!)' -rn --include='*.rs' -F 'env
 run gate-selftest "require mktemp ln sed grep wc stat tee touch && tools/full_gate_selftest.sh && tools/fresh_test_run_selftest.sh"
 run pubfn-coverage "require awk grep git && tools/pubfn_coverage_selftest.sh && tools/pubfn_coverage.sh"
 run goldens-regen "require sha256sum grep cmp && tools/goldens_regen.sh"
+run gen-la-guard "require python3 env && tools/gen_la_guard_selftest.sh"
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"
