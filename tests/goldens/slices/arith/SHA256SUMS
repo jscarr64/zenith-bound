@@ -1,2 +1,2 @@
 # Slice S1 golden checksums (sha256sum format), checked by tools/goldens_regen.sh. Every *.txt in this directory must be listed.
-# EMPTY: no goldens yet (delete this line with the first entry)
+1cb46a312ea8ba888f135921d57b4929b38c08c9ec3d2ae8c94e5dc1880aec3f  arith_oracle_rows.txt
