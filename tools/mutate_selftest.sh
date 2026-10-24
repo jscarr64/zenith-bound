@@ -179,8 +179,27 @@ out="$(run)" && fail "an unfetchable dependency passed: $out"
 echo "$out" | grep -q "^mutate: FAIL FETCH" || fail "fetch failure: no FAIL FETCH line: $out"
 echo "$out" | grep -q "^KILLED" && fail "fetch failure was counted as KILLED: $out"
 cp "$t/Cargo.toml.keep" "$r/Cargo.toml"; cm
+# Spence (2026-10-24, 1207-zb-popguard-full-gate1: 184 `ERR rc=1 line=92 owner=$(inrange ...)` and one `ERR rc=101 line=214` per
+# killed mutant): expected failures must not trip the poplog ERR trap; an unexpected one still must. Each runs with a real run log
+# (fresh POPLOG_ROOT, not nested in this selftest's log).
+logged() { # logged NAME [ENV...]: mutate.sh with its own run log under $t/pl-NAME; prints the output, then the log path on the last line
+  local n=$1; shift
+  ( unset POPLOG_FILE POPLOG_PID POPLOG_STATE_DIR POPLOG_PROGRESS_FILE POPLOG_RUNNING RUNLOG_INNER RUNLOG_ACTIVE
+    env "$@" POPLOG_ROOT="$t/pl-$n" RUNLOG_AGENT=selftest MUTATE_FLOOR_ZERO_OK=1 MUTATE_FLOOR="$t/mfloor.txt" \
+      MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" 2>&1; echo "rc=$?" )
+  find "$t/pl-$n/selftest" -name '*-mutate.log' | head -1
+}
+setm m.killed
+printf 'x\n' >> "$t/cases"; out="$(logged quiet)"; lg=$(tail -1 <<< "$out")
+grep -q '^rc=0$' <<< "$out" && grep -q '^KILLED 001-add-mul' <<< "$out" || fail "err-quiet: killable mutant not accepted: $out"
+[ -f "$lg" ] || fail "err-quiet: no run log: $out"
+grep -q ' ERR ' "$lg" && fail "err-quiet: expected failures (inrange miss, killed rc 101) logged ERR trap lines: $(grep ' ERR ' "$lg")"
+printf 'x\n' >> "$t/cases"; out="$(logged loud SHIM_NETFAIL=1 PATH="$sh:$PATH")"; lg=$(tail -1 <<< "$out")
+grep -q '^rc=0$' <<< "$out" && fail "err-loud: an unexpected suite-run failure passed: $out"
+grep -q '^INVALID 001-add-mul: suite run failed without a test failure' <<< "$out" || fail "err-loud: wrong report: $out"
+[ -f "$lg" ] && grep -q ' ERR rc=101 ' "$lg" || fail "err-loud: an unexpected failure (rc 101, no test failed) did not log an ERR trap line: $(cat "$lg" 2>/dev/null | grep ERR)"
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-want_cases=32; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+want_cases=34; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
 [ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
 echo "mutate selftest: ok ($ncases cases)"
