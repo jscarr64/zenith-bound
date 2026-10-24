@@ -118,6 +118,8 @@ fke=$(mrow killed+equivalent) || { echo "mutate: FAIL NOFLOOR: no 'killed+equiva
 for v in "$fk" "$fke"; do
   case "$v" in *$'\r') echo "mutate: FAIL BADCOUNT: floor row ends in CR (CRLF line ending): '${v%$'\r'}' in $mfloor; convert it to LF"; exit 1 ;; esac
   [[ $v =~ ^[0-9]{1,18}$ ]] || { echo "mutate: FAIL BADCOUNT: floor value '$v' in $mfloor is not a plain integer"; exit 1; }
+  # Spence (2026-10-23): a real floor of 0 proves nothing; only the selftest fixture sets MUTATE_FLOOR_ZERO_OK=1 to allow it.
+  [[ $v =~ ^0+$ ]] && [ "${MUTATE_FLOOR_ZERO_OK:-}" != 1 ] && { echo "mutate: FAIL BADCOUNT: floor value '$v' in $mfloor must be 1 or more"; exit 1; }
 done
 nke=$((nk + ne)); rc=0
 if [ "$nk" -ge "$fk" ]; then :; else echo "mutate: FAIL BELOW floor: $nk killed < $fk ($mfloor)"; rc=1; fi

@@ -152,7 +152,7 @@ fn finite_normalises_shifts_of_0_and_63() -> Result<(), String> {
 }
 
 #[test]
-fn add_up_at_gaps_0_63_64() -> Result<(), String> {
+fn add_up_at_gaps_0_63_64_65_200() -> Result<(), String> {
     for e in [0i64, 100, -100] {
         let a = mag(TOP, e)?;
         let rows = [
@@ -161,6 +161,11 @@ fn add_up_at_gaps_0_63_64() -> Result<(), String> {
             (
                 "gap 64 (half ulp, rounds up)",
                 mag(TOP, e - 64)?,
+                mag(TOP + 1, e)?,
+            ),
+            (
+                "gap 65 (below half ulp, rounds up)",
+                mag(TOP, e - 65)?,
                 mag(TOP + 1, e)?,
             ),
             ("gap 200 (rounds up)", mag(TOP, e - 200)?, mag(TOP + 1, e)?),

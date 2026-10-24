@@ -58,7 +58,7 @@ export MUTATE_REPO="$r" MUTATE_TMP="$t"
 # Every run() is one case; the count is asserted at the end, so a selftest that silently skips its cases cannot read ok (Paul, 2026-10-23:
 # the zb-green-mutate-dirty2 step ran 0 tests and exited 0).
 printf '# fixture floor\nkilled\t0\nkilled+equivalent\t1\n' > "$t/mfloor.txt"
-run() { printf 'x\n' >> "$t/cases"; MUTATE_FLOOR="${MFLOOR:-$t/mfloor.txt}" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@"; }
+run() { printf 'x\n' >> "$t/cases"; MUTATE_FLOOR_ZERO_OK="${MZERO-1}" MUTATE_FLOOR="${MFLOOR:-$t/mfloor.txt}" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@"; }
 leftovers() { git -C "$r" worktree list | grep -c 'zb-mutate\.' ; find "$t" -maxdepth 1 \( -name "zb-mutate.*" -o -name "zb-mutate-target.*" \) | wc -l; }
 cm() { git -C "$r" add -A; git -C "$r" commit -qm fixture-edit >/dev/null 2>&1 || :; }   # commit a fixture edit: mutate.sh refuses a dirty tree
 setm() { cp "$r/$1" "$r/tools/mutants/manifest.txt"; cm; }   # committed: mutate.sh refuses a dirty tree
@@ -136,10 +136,13 @@ printf 'killed\tlots\nkilled+equivalent\t1\n' > "$t/f.bad"; out="$(MFLOOR="$t/f.
 echo "$out" | grep -q "^mutate: FAIL BADCOUNT" || fail "garbage floor: wrong message: $out"
 printf 'killed\t1\r\nkilled+equivalent\t1\r\n' > "$t/f.crlf"; out="$(MFLOOR="$t/f.crlf" run)" && fail "a CRLF mutant floor passed: $out"
 echo "$out" | grep -q "^mutate: FAIL BADCOUNT.*CRLF" || fail "CRLF floor: wrong message: $out"
+# Spence (2026-10-23): a real floor of 0 FAILS; only this fixture (MUTATE_FLOOR_ZERO_OK=1, set by run()) may use 0.
+out="$(MZERO= run)" && fail "a 0 mutant floor without MUTATE_FLOOR_ZERO_OK passed: $out"
+echo "$out" | grep -q "^mutate: FAIL BADCOUNT.*must be 1 or more" || fail "0 floor: wrong message: $out"
 printf '# empty\n' > "$r/tools/mutants/manifest.txt"; cm
 out="$(MFLOOR="$t/f.at" run)" && fail "0 mutants with a floor passed: $out"; echo "$out" | grep -c "0 mutants ran" > /dev/null || fail "0 mutants: wrong message: $out"
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-want_cases=25; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+want_cases=26; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
 [ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
 echo "mutate selftest: ok ($ncases cases)"

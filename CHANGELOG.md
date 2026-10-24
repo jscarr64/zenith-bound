@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Spence nits (2026-10-23): `add_up` gets a gap-65 row (rounds up to TOP+1); the test is renamed `add_up_at_gaps_0_63_64_65_200`
+  (still 6 tests in `mag_rows.rs`, test floors stay 379). A mutant floor value of 0 now FAILS BADCOUNT ("must be 1 or more"); only the
+  mutate selftest fixture may use 0, via MUTATE_FLOOR_ZERO_OK=1. `tools/mutate_selftest.sh` gains that case (26 cases).
+
 - Selftest case counts (2026-10-23): `tools/selftest_cases.sh` (`st_init`/`ck`/`st_done`) makes 8 more gate selftests count the cases they
   actually run and FAIL on a mismatch: digests 22, fresh_test_run 26, full_gate 72, pubfn_coverage 15, rules_scan 284, tightness 33,
   toolchain_check 14, wildcard_enum 11. `runlog_selftest.sh` is not covered yet: it already FAILS at HEAD ("another agent's row was removed").
