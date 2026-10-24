@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- mutate.sh inrange forces base 10 itself (Spence nit on b5ac93f): `10#` on the id and the range bounds, so 0213 is 213 (not octal
+  139) and 0219 is not an arithmetic error. mutate_include_selftest has 36 cases (+1).
+
+- mutate.sh inrange quiet/loud (2026-10-24, Spence zb-s2 ceb4024 log 1422-zb-s2-const-steps: 368 `ERR rc=1 line=92`): inrange now
+  returns 0 with empty output on a miss (an id outside every slice range is normal), and rc 2 + a message on a malformed range row.
+  Call sites no longer mask it with `|| true`: a nonzero rc trips the ERR trap and fails the run. mutate_include_selftest has 35
+  cases (+7). Note: ceb4024 does not contain 7881073; rebasing zb-s2 on main also quiets line 92.
+
 - popguard_selftest no-guard-host goldlib case (2026-10-24, Spence follow-up): asserts the exact WARNING line and exit 0. It was
   rc 1 because the sandbox HOME had no oracle venv (goldlib failed its oracle check, not the guard); the sandbox now links the real
   pinned venv as a stand-in and runs goldlib with it.
