@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 # Hand-written mutant runner (TEST_PLAN section 11, default plan D3). No `cfg` switch is added to src/; a mutant is a patch.
 #
-# usage: tools/mutate.sh [--only MUTANT_ID] [--list]
+# usage: tools/mutate.sh [--only MUTANT_ID] [--list] [--floor]
+#   --list prints every mutant id (central manifest, then the per-slice includes) and exits; --floor prints the summed floor and exits.
+# PER-SLICE INCLUDES (S0, 2026-10-24), so parallel slices never edit a shared registry:
+#   manifest.d/<slice>.txt    more manifest rows (same 4 columns; the patch path is relative to the manifest's directory, e.g.
+#                             arith/201-x.patch). Its FIRST non-blank line must be `# range: LO-HI`: every id's leading number must lie in
+#                             LO..=HI, and no two include files may have overlapping ranges. Ids stay unique over all files.
+#   equivalent.d/<slice>.txt  more EQUIVALENT.txt entries (same format).
+#   floor.d/<slice>.txt       the slice's share of the floor (same KEY<TAB>MIN rows as floor.txt; 0 allowed here). The floor checked is
+#                             floor.txt plus every share. A slice raises its own share, never floor.txt.
 #   env: MUTATE_REPO=DIR            repo to mutate (default: the parent of tools/). Mutants apply to its COMMITTED HEAD.
 #        MUTATE_MANIFEST=FILE       default $MUTATE_REPO/tools/mutants/manifest.txt (patches are read from that file's directory)
 #        MUTATE_EQUIVALENT=FILE     default: EQUIVALENT.txt next to the manifest
@@ -33,11 +41,37 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --only) only=${2:-}; shift 2 ;;
     --list) list=1; shift ;;
-    *) echo "usage: tools/mutate.sh [--only MUTANT_ID] [--list]"; exit 2 ;;
+    --floor) list=2; shift ;;
+    *) echo "usage: tools/mutate.sh [--only MUTANT_ID] [--list] [--floor]"; exit 2 ;;
   esac
 done
 [ -f "$manifest" ] || { echo "mutate: no manifest at $manifest"; exit 2; }
 rows=$(grep -v -E '^[[:space:]]*(#|$)' "$manifest" || true)
+mdir=$(dirname "$manifest")
+# per-slice includes (header above): append each file's rows after checking its `# range: LO-HI` line and its ids against it
+ranges=""
+for inc in "$mdir"/manifest.d/*.txt; do
+  [ -f "$inc" ] || continue
+  rl=$(grep -v -E '^[[:space:]]*$' "$inc" | head -1)
+  if [[ ! $rl =~ ^#\ range:\ ([0-9]{1,6})-([0-9]{1,6})$ ]]; then echo "mutate: FAIL $inc: first line must be '# range: LO-HI'"; exit 1; fi
+  lo=$((10#${BASH_REMATCH[1]})); hi=$((10#${BASH_REMATCH[2]}))
+  [ "$lo" -le "$hi" ] || { echo "mutate: FAIL $inc: range $lo-$hi is empty"; exit 1; }
+  while read -r olo ohi oname; do
+    [ -n "$olo" ] || continue
+    if [ "$lo" -le "$ohi" ] && [ "$olo" -le "$hi" ]; then echo "mutate: FAIL $inc: range $lo-$hi overlaps $oname ($olo-$ohi)"; exit 1; fi
+  done <<< "$ranges"
+  ranges+="$lo $hi $(basename "$inc")"$'\n'
+  irows=$(grep -v -E '^[[:space:]]*(#|$)' "$inc" || true)
+  while IFS=$'\t' read -r _ iid _ _; do
+    [ -n "$iid" ] || continue
+    num=${iid%%-*}
+    if [[ ! $num =~ ^[0-9]{1,6}$ ]] || [ "$((10#$num))" -lt "$lo" ] || [ "$((10#$num))" -gt "$hi" ]; then
+      echo "mutate: FAIL $inc: id $iid is outside the file's range $lo-$hi"; exit 1
+    fi
+  done <<< "$irows"
+  [ -n "$irows" ] && rows+=$'\n'"$irows"
+done
+rows=$(printf '%s\n' "$rows" | grep -v -E '^[[:space:]]*$' || true)
 # manifest integrity, before any mutant runs: every id exactly once, every referenced patch file present
 dups=$(printf '%s\n' "$rows" | cut -f2 | grep -v '^$' | sort | uniq -d)
 if [ -n "$dups" ]; then printf 'mutate: FAIL duplicate manifest id %s\n' $dups; exit 1; fi
@@ -47,6 +81,26 @@ while IFS=$'\t' read -r _ mid mpatch _; do
 done <<< "$rows"
 [ "$missing" = 0 ] || exit 1
 if [ "$list" = 1 ]; then printf '%s\n' "$rows" | cut -f2; exit 0; fi
+equivs=()
+[ -f "$equiv" ] && equivs+=("$equiv")
+for e in "$mdir"/equivalent.d/*.txt; do [ -f "$e" ] && equivs+=("$e"); done
+# floor_total KEY: floor.txt's row plus every floor.d share (each a plain integer, a share may be 0); fails closed
+floor_total() {
+  local f v tot=0 first=1
+  for f in "$mfloor" "$mdir"/floor.d/*.txt; do
+    [ -f "$f" ] || { [ "$first" = 1 ] && { echo "mutate: FAIL NOFLOOR: mutant floor $f is missing or unreadable" >&2; return 1; }; continue; }
+    v=$(awk -F'\t' -v k="$1" '$1 == k { print $2; found = 1; exit } END { exit !found }' "$f") || { echo "mutate: FAIL NOFLOOR: no '$1' row in $f" >&2; return 1; }
+    case "$v" in *$'\r') echo "mutate: FAIL BADCOUNT: floor row ends in CR (CRLF line ending): '${v%$'\r'}' in $f; convert it to LF" >&2; return 1 ;; esac
+    [[ $v =~ ^[0-9]{1,18}$ ]] || { echo "mutate: FAIL BADCOUNT: floor value '$v' in $f is not a plain integer" >&2; return 1; }
+    if [ "$first" = 1 ] && [[ $v =~ ^0+$ ]] && [ "${MUTATE_FLOOR_ZERO_OK:-}" != 1 ]; then echo "mutate: FAIL BADCOUNT: floor value '$v' in $f must be 1 or more" >&2; return 1; fi
+    tot=$((tot + 10#$v)); first=0
+  done
+  printf '%s\n' "$tot"
+}
+if [ "$list" = 2 ]; then
+  fk=$(floor_total killed) || exit 1; fke=$(floor_total killed+equivalent) || exit 1
+  printf 'killed %s\nkilled+equivalent %s\n' "$fk" "$fke"; exit 0
+fi
 
 base=${MUTATE_TMP:-/tmp}; case "$base" in /home/jsc64/MathWorks*|"$repo"*) echo "mutate: MUTATE_TMP must be outside the repo"; exit 2 ;; esac
 persist=${MUTATE_TARGET:-}
@@ -93,8 +147,8 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
   else
     (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$ttl" cargo test --test "$suite" >"$tgt/run.log" 2>&1 </dev/null); rc=$?
     if [ "$rc" = 0 ]; then
-      if [ -f "$equiv" ] && awk -F'\t' -v id="$id" '!/^[[:space:]]*(#|$)/ && $1 == id { f = 1 } END { exit !f }' "$equiv"; then
-        echo "SURVIVED-EQUIVALENT $id ($fnpath, suite $suite): documented in $(basename "$equiv")"; ne=$((ne + 1))
+      if [ "${#equivs[@]}" -gt 0 ] && awk -F'\t' -v id="$id" '!/^[[:space:]]*(#|$)/ && $1 == id { f = 1 } END { exit !f }' "${equivs[@]}"; then
+        echo "SURVIVED-EQUIVALENT $id ($fnpath, suite $suite): documented in EQUIVALENT.txt or equivalent.d"; ne=$((ne + 1))
       else
         echo "SURVIVED $id ($fnpath, suite $suite): the suite passed on the mutant"; ns=$((ns + 1))
       fi
@@ -111,16 +165,9 @@ echo "mutate: $total mutants: $nk killed, $ns survived, $ne survived-equivalent,
 # Mutant floor (Paul, 2026-10-23): a full run must kill at least the checked-in number, so a manifest that loses rows, or a suite that
 # stops killing, cannot pass. --only runs one row by design and skips it (it still needs its one mutant run, above). Fails closed.
 [ -n "$only" ] && exit 0
-[ -f "$mfloor" ] && [ -r "$mfloor" ] || { echo "mutate: FAIL NOFLOOR: mutant floor $mfloor is missing or unreadable"; exit 1; }
-mrow() { awk -F'\t' -v k="$1" '$1 == k { print $2; found = 1; exit } END { exit !found }' "$mfloor"; }
-fk=$(mrow killed) || { echo "mutate: FAIL NOFLOOR: no 'killed' row in $mfloor"; exit 1; }
-fke=$(mrow killed+equivalent) || { echo "mutate: FAIL NOFLOOR: no 'killed+equivalent' row in $mfloor"; exit 1; }
-for v in "$fk" "$fke"; do
-  case "$v" in *$'\r') echo "mutate: FAIL BADCOUNT: floor row ends in CR (CRLF line ending): '${v%$'\r'}' in $mfloor; convert it to LF"; exit 1 ;; esac
-  [[ $v =~ ^[0-9]{1,18}$ ]] || { echo "mutate: FAIL BADCOUNT: floor value '$v' in $mfloor is not a plain integer"; exit 1; }
-  # Spence (2026-10-23): a real floor of 0 proves nothing; only the selftest fixture sets MUTATE_FLOOR_ZERO_OK=1 to allow it.
-  [[ $v =~ ^0+$ ]] && [ "${MUTATE_FLOOR_ZERO_OK:-}" != 1 ] && { echo "mutate: FAIL BADCOUNT: floor value '$v' in $mfloor must be 1 or more"; exit 1; }
-done
+# floor.txt plus the per-slice shares in floor.d (floor_total, above; a real floor.txt value of 0 still fails)
+fk=$(floor_total killed) || exit 1
+fke=$(floor_total killed+equivalent) || exit 1
 nke=$((nk + ne)); rc=0
 if [ "$nk" -ge "$fk" ]; then :; else echo "mutate: FAIL BELOW floor: $nk killed < $fk ($mfloor)"; rc=1; fi
 if [ "$nke" -ge "$fke" ]; then :; else echo "mutate: FAIL BELOW floor: $nke killed+equivalent < $fke ($mfloor)"; rc=1; fi
