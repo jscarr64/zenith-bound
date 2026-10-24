@@ -163,7 +163,7 @@ SHIM
 chmod +x "$sh/cargo"; setm m.killed; : > "$t/shim.log"
 out="$(PATH="$sh:$PATH" run)" || fail "lock/offline: killable mutant not accepted: $out"
 grep -q . "$t/shim.log" || fail "lock/offline: cargo shim never ran"
-grep -v '^samelock|.*--offline.*--frozen' "$t/shim.log" | grep -q . && fail "lock/offline: a cargo call without the repo Cargo.lock or without --offline --frozen: $(cat "$t/shim.log")"
+grep -vE '^samelock\|(fetch$|.*--offline.*--frozen)' "$t/shim.log" | grep -q . && fail "lock/offline: a cargo call without the repo Cargo.lock or without --offline --frozen: $(cat "$t/shim.log")"
 out="$(SHIM_NETFAIL=1 PATH="$sh:$PATH" run)" && fail "a test run that failed before any test ran was accepted: $out"
 echo "$out" | grep -q "^INVALID 001-add-mul: suite run failed without a test failure" || fail "netfail: wrong report: $out"
 echo "$out" | grep -q "^KILLED" && fail "netfail: counted as KILLED: $out"

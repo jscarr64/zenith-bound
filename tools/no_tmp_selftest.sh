@@ -11,7 +11,7 @@ here="$(cd "$(dirname "$0")" && pwd)"; . "$here/scratch.sh"
 fail() { echo "no-tmp selftest FAIL: $*"; exit 1; }
 t=$(mktemp -d "$(zb_scratch)/no-tmp-selftest.XXXXXX") || fail "mktemp failed"; runlog_on_exit "rm -rf \"$t\""; . "$here/selftest_cases.sh"; st_init "$t"
 scan() { # scan DIR: prints file:line for each code line naming /tmp
-  grep -HnE '(^|[ "'"'"'=:(-])/tmp([/ "'"'"'$]|$)' "$1"/*.sh | grep -vE '^[^:]+:[0-9]+: *#' | grep -vE 'pop-(deep|gate)\.lock|/no_tmp_selftest\.sh:'
+  grep -HnE '(^|[ "'"'"'=:(-])/tmp([/ "'"'"'$}]|$)' "$1"/*.sh | grep -vE '^[^:]+:[0-9]+: *#' | grep -vE 'pop-(deep|gate)\.lock|/no_tmp_selftest\.sh:'
 }
 ck; hits=$(scan "$here") && fail "tools hardcode /tmp (use \"\$(zb_scratch)\" from tools/scratch.sh):
 $hits"
