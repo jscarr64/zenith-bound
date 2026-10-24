@@ -148,6 +148,10 @@ fn cball_construct_invariants() -> Result<(), String> {
     if !z.identical(&ok("new", CBall::new(pt(3, 53)?, pt(-4, 53)?))?) || z.identical(&h) {
         return Err("identical".into());
     }
+    // identical compares both parts: same re, different im is not identical (kills 1521-IDENTIM).
+    if z.identical(&cpt(3, 4, 53)?) || z.identical(&cpt(-3, -4, 53)?) {
+        return Err("identical ignores a part".into());
+    }
     Ok(())
 }
 
