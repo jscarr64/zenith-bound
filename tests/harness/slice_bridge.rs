@@ -163,15 +163,15 @@ fn cmp_exact_num_ties_and_sticky() -> Result<(), String> {
 #[test]
 fn cmp_exact_num_radius_outside_the_zf_range() -> Result<(), String> {
     // Radii whose exponent lies far outside zenith-float's range compare by exponent, never via to_exact_num.
-    let hi = i64::from(EXPONENT_MAX);
-    let lo = i64::from(EXPONENT_MIN);
+    let hi = EXPONENT_MAX;
+    let lo = EXPONENT_MIN;
     let big_x = parts(u64::MAX, hi, 64)?; // just below 2^EXPONENT_MAX
     let tiny_x = parts(TOP, lo, 64)?; // 2^(EXPONENT_MIN - 1)
     for e in [
         hi.checked_add(1).ok_or("e")?,
         hi.checked_add(1000).ok_or("e")?,
-        1i64 << 40,
-        (1i64 << 62) - 1,
+        (1i64 << 62) + (1i64 << 61),
+        i64::MAX,
     ] {
         let m = mag(TOP, e)?;
         if m.to_exact_num().is_ok() && e > hi {
@@ -191,8 +191,8 @@ fn cmp_exact_num_radius_outside_the_zf_range() -> Result<(), String> {
     for e in [
         lo.checked_sub(1).ok_or("e")?,
         lo.checked_sub(1000).ok_or("e")?,
-        -(1i64 << 40),
-        1 - (1i64 << 62),
+        -((1i64 << 62) + (1i64 << 61)),
+        i64::MIN,
     ] {
         let m = mag(u64::MAX, e)?;
         want(
@@ -437,8 +437,8 @@ fn cmp_exact_diff_huge_exponent_gap() -> Result<(), String> {
         Ordering::Greater,
     )?;
     // The whole zf range apart: decided without an exact subtraction across ~2^32 bits.
-    let hi = i64::from(EXPONENT_MAX);
-    let lo = i64::from(EXPONENT_MIN);
+    let hi = EXPONENT_MAX;
+    let lo = EXPONENT_MIN;
     let big = parts(TOP, hi, 64)?; // 2^(EXPONENT_MAX - 1)
     let tiny = parts(TOP, lo, 64)?;
     want(
@@ -544,9 +544,9 @@ fn from_to_exact_num_sets_and_p9() -> Result<(), String> {
             Mag::from_exact_num_lower(&y)
         ));
     }
-    // A radius beyond zf's i32 exponent is an error, never a wrap.
-    let hi = i64::from(EXPONENT_MAX);
-    for e in [hi.checked_add(1).ok_or("e")?, 1i64 << 40] {
+    // A radius beyond zf's ±(2^62−1) exponent range is an error, never a wrap.
+    let hi = EXPONENT_MAX;
+    for e in [hi.checked_add(1).ok_or("e")?, i64::MAX] {
         if mag(TOP, e)?.to_exact_num().is_ok() {
             return Err(format!("to_exact_num(2^{}) should be Representation", e));
         }

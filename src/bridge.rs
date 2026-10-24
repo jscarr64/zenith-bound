@@ -44,7 +44,7 @@ fn exp_of(x: &ExactNum) -> Option<i64> {
     if x.is_zero() {
         return None;
     }
-    x.exponent().map(i64::from)
+    x.exponent()
 }
 
 impl Mag {
