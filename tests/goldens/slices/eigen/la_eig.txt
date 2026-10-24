@@ -9,7 +9,7 @@
 # canonical: real symmetric A only; eigenvalues listed ascending with algebraic multiplicity. charpoly = det(xI - A), monic, n+1 exact rational coefficients, highest degree first.
 # exact form: each eigenvalue is the unique root of the charpoly in [lo, hi] at its ascending index (sympy CRootOf of the irreducible factor); token 'p/q' if the eigenvalue is rational, else 'alg'.
 # enclosure: lo hi per eigenvalue; grid 2^e, e = floor(log2 |lambda|) - 255; from sympy exact rational root isolation/refinement (Poly.intervals/refine_root, exact QQ) then outward rounding; checked with exact Poly.count_roots(lo, hi) == 1 on the irreducible factor. Zero/dyadic rational eigenvalues have lo == hi.
-# scope: slice LA5a (symmetric). General nonsymmetric eigenvalues are LA5b, a separate later file; here a nonsymmetric A is refused.
+# scope: slice LA5a (symmetric). General nonsymmetric eigenvalues are LA5b, la_eig_general.txt in this slice (status: pending (needs complex Ball, L2-1); header only, zero rows); here a nonsymmetric A is refused.
 # refusals: 'ERR NotSymmetric a'.
 # columns: case_id dims(n) A[n*n] (charpoly[n+1] {exact lo hi}[n] | ERR NotSymmetric a)
 # numbers: every exact entry is p/q in lowest terms, q > 0, arbitrary-size signed integers; dyadics are m*2^e with m odd (or 0*2^0); fields are single-space separated; no floats.

@@ -11,7 +11,7 @@ Usage:
                                       if given, per the goldlib --check DIR convention) and compare the sha256 of every
                                       regenerated heavy file with HEAVY.SHA256. --skip-heavy limits it to the gate files.
 
-Slices (S0, tests/goldens/slices/<slice>/): LA1 cholesky, LA2 lu (+ solve, logdet), LA3 qr, LA4 gls, LA5a eigen (symmetric).
+Slices (S0, tests/goldens/slices/<slice>/): LA1 cholesky, LA2 lu (+ solve, logdet), LA3 qr, LA4 gls, LA5a eigen (symmetric), LA5b eigen (general, stub: pending complex Ball).
 Gate = every case with all dims <= 12 and every input integer < 2^(10^4+64) in size; heavy = the rest
 (n = 16..32, 2^+-10^6 scales). case_ids are fixed strings; the random streams are drawn in the same order for
 gate and heavy, so splitting never changes a row. The generator is a pure exact oracle and never calls zenith-bound.
@@ -38,13 +38,13 @@ sys.set_int_max_str_digits(0)
 GEN = "scripts/gen_la_goldens.py"
 SEED = 20261024
 BITS = 256          # default enclosure width (relative)
-LOG_BITS = (256, 4096)
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 SLICES = os.path.join(ROOT, "tests", "goldens", "slices")
-SLICE_OF = {"cholesky": "cholesky", "lu": "lu", "solve": "lu", "logdet": "cholesky", "qr": "qr", "gls": "gls", "eig": "eigen"}
+SLICE_OF = {"cholesky": "cholesky", "lu": "lu", "solve": "lu", "logdet": "cholesky", "qr": "qr", "gls": "gls", "eig": "eigen", "eig_general": "eigen"}
+SLICE_ID_OP = {"eig_general": "LA5b"}
 SLICE_ID = {"cholesky": "LA1", "lu": "LA2", "qr": "LA3", "gls": "LA4", "eigen": "LA5a"}
 GATE_MAX_DIM = 12
-EXT_BITS = (4096,)        # extra Cholesky/QR enclosure widths for gate-tier cases, emitted on the heavy tier (la_<op>_enc<b>_heavy.txt)
+EXT_BITS = (4096,)        # extra Cholesky/QR/logdet enclosure widths for gate-tier cases, emitted on the heavy tier (la_<op>_enc<b>_heavy.txt)
 GATE_MAX_BITS = 10 ** 4 + 64
 
 def is_heavy(*mats):
@@ -392,21 +392,26 @@ def gen_solve():
     return hdr, rows, expect
 
 def gen_logdet():
-    rows = []
+    rows = []; ext = {b: [] for b in EXT_BITS}
     for cid, A in square_corpus("logdet"):
-        d = det(A)
+        d = det(A); heavy = is_heavy(A)
         if d == 0: outs = err("Singular", "singular")
-        else:
-            outs = [str(1 if d > 0 else -1), q(d)]
-            for b in LOG_BITS: outs.append(pair(*enclose_log(d, b)))
-        rows.append(row("logdet." + cid, dims_sq(A), A, outs))
+        else: outs = [str(1 if d > 0 else -1), q(d), pair(*enclose_log(d, BITS))]
+        rows.append(row("logdet." + cid, dims_sq(A), A, outs, heavy))
+        if not heavy:
+            for b in EXT_BITS:
+                ext[b].append(row("logdet." + cid, dims_sq(A), A, outs if d == 0 else [pair(*enclose_log(d, b))], True)[0])
     hdr = ["op: logdet",
            "canonical: sign = sign(det A) in {1,-1}; det = exact rational determinant; logabsdet = ln|det A| (irrational unless det = +-1). det = 0 -> refusal 'ERR Singular singular'.",
            "exact form: ln(det) with det the exact rational in the row (sympy: log(Rational(det))).",
-           "enclosure: lo_256 hi_256 lo_4096 hi_4096; each pair encloses ln|det|; grid 2^e with e = floor(log2 max(|lo_raw|,|hi_raw|)) - bits + 1; computed with mpmath.iv.log at bits+64 and checked to contain an independent mpmath.iv enclosure at 2*bits+64.",
-           "columns: case_id dims(n) A[n*n] (sign det lo256 hi256 lo4096 hi4096 | ERR Singular singular)"]
-    expect = lambda m, n: (n * n, {6})
-    return hdr, rows, expect
+           "enclosure: lo hi pair enclosing ln|det|; at bits b the grid is 2^e with e = floor(log2 max(|lo_raw|,|hi_raw|)) - b + 1; computed with mpmath.iv.log at b+64 and checked to contain an independent mpmath.iv enclosure at 2*b+64. Gate and heavy files: b = 256 for every row. Extra widths " + str(EXT_BITS) + " for the gate-tier cases (same case_ids) are heavy-tier files la_logdet_enc<b>_heavy.txt.",
+           "columns (gate): case_id dims(n) A[n*n] (sign det lo256 hi256 | ERR Singular singular)",
+           "columns (heavy): case_id dims(n) A[n*n] (sign det lo256 hi256 | ERR Singular singular)"]
+    expect = lambda m, n: (n * n, {4})
+    exts = {f"enc{b}": (hdr[:3] + [f"enc{b}: the b = {b} ln|det| enclosure of every gate-tier logdet case (same case_ids, same order as la_logdet.txt); sign, det and the 256-bit pair are in la_logdet.txt.",
+                               f"columns (heavy): case_id dims(n) A[n*n] (lo{b} hi{b} | ERR Singular singular)"],
+                        ext[b], lambda m, n: (n * n, {2})) for b in EXT_BITS}
+    return hdr, rows, expect, exts
 
 def gen_cholesky():
     rows = []; ext = {b: [] for b in EXT_BITS}
@@ -540,17 +545,25 @@ def gen_eig():
            "canonical: real symmetric A only; eigenvalues listed ascending with algebraic multiplicity. charpoly = det(xI - A), monic, n+1 exact rational coefficients, highest degree first.",
            "exact form: each eigenvalue is the unique root of the charpoly in [lo, hi] at its ascending index (sympy CRootOf of the irreducible factor); token 'p/q' if the eigenvalue is rational, else 'alg'.",
            "enclosure: lo hi per eigenvalue; grid 2^e, e = floor(log2 |lambda|) - 255; from sympy exact rational root isolation/refinement (Poly.intervals/refine_root, exact QQ) then outward rounding; checked with exact Poly.count_roots(lo, hi) == 1 on the irreducible factor. Zero/dyadic rational eigenvalues have lo == hi.",
-           "scope: slice LA5a (symmetric). General nonsymmetric eigenvalues are LA5b, a separate later file; here a nonsymmetric A is refused.",
+           "scope: slice LA5a (symmetric). General nonsymmetric eigenvalues are LA5b, la_eig_general.txt in this slice (status: pending (needs complex Ball, L2-1); header only, zero rows); here a nonsymmetric A is refused.",
            "refusals: 'ERR NotSymmetric a'.",
            "columns: case_id dims(n) A[n*n] (charpoly[n+1] {exact lo hi}[n] | ERR NotSymmetric a)"]
     expect = lambda m, n: (n * n, {n + 1 + 3 * n})
     return hdr, rows, expect
 
-OPS = [("lu", gen_lu), ("cholesky", gen_cholesky), ("qr", gen_qr), ("solve", gen_solve), ("gls", gen_gls), ("logdet", gen_logdet), ("eig", gen_eig)]
+def gen_eig_general():
+    """LA5b stub: header only, zero rows, until zb has a complex Ball (L2-1)."""
+    hdr = ["op: eig_general",
+           "status: pending (needs complex Ball, L2-1). This file is a stub: header only, zero rows. Rows land once zb has complex Ball enclosures.",
+           "canonical (planned): general real (nonsymmetric) A; complex eigenvalues with algebraic multiplicity; charpoly = det(xI - A), monic, exact rational coefficients, highest degree first.",
+           "scope: slice LA5b (general). Symmetric A is covered by la_eig.txt (LA5a)."]
+    return hdr, [], lambda m, n: (n * n, set()), {}, "stub"
+
+OPS = [("lu", gen_lu), ("cholesky", gen_cholesky), ("qr", gen_qr), ("solve", gen_solve), ("gls", gen_gls), ("logdet", gen_logdet), ("eig", gen_eig), ("eig_general", gen_eig_general)]
 
 def file_bytes(name, tier, hdr, rows):
     h = [f"generator: {GEN}", f"sympy: {SYMPY_PIN}", f"mpmath: {MPMATH_PIN}", f"seed: {SEED} (python random.Random('{SEED}:{name}'))",
-         f"slice: {SLICE_ID[SLICE_OF[name]]} ({SLICE_OF[name]})", f"tier: {tier} (gate: all dims <= {GATE_MAX_DIM} and input integers <= {GATE_MAX_BITS} bits; heavy: the rest, checked by sha256 at merge points, file not committed)",
+         f"slice: {SLICE_ID_OP.get(name, SLICE_ID[SLICE_OF[name]])} ({SLICE_OF[name]})", f"tier: {tier} (gate: all dims <= {GATE_MAX_DIM} and input integers <= {GATE_MAX_BITS} bits; heavy: the rest, checked by sha256 at merge points, file not committed)",
          f"rows: {len(rows)}"] + [l for l in hdr if not l.startswith("columns (") or l.startswith(f"columns ({tier})")] + [
          "numbers: every exact entry is p/q in lowest terms, q > 0, arbitrary-size signed integers; dyadics are m*2^e with m odd (or 0*2^0); fields are single-space separated; no floats.",
          "case_id: <op>.<family>.<variant>, stable across regenerations; inputs are always listed before outputs; dims gives every matrix size, so a row's field count is fixed by dims; refusal rows end in 'ERR <variant> <detail>' (variant = zb BoundError variant)."]
@@ -571,12 +584,13 @@ def render(skip_heavy=False):
     out = {}
     for name, fn in OPS:
         rng = random.Random(f"{SEED}:{name}")   # per-op stream: ops are independent
-        hdr, rows, expect, *rest = fn(); exts = rest[0] if rest else {}
+        hdr, rows, expect, *rest = fn(); exts = rest[0] if rest else {}; stub = "stub" in rest
         for text, _ in rows: check_fields(text, expect)
         ids = [t.split(" ", 1)[0] for t, _ in rows]; assert len(ids) == len(set(ids)), "duplicate case_id"
         sl = out.setdefault(SLICE_OF[name], {"gate": {}, "heavy": {}})
         sl["gate"][f"la_{name}.txt"] = file_bytes(name, "gate", hdr, [t for t, h in rows if not h])
-        if not skip_heavy:
+        if stub: assert not rows, "stub file must have zero rows"
+        if not skip_heavy and not stub:
             sl["heavy"][f"la_{name}_heavy.txt"] = file_bytes(name, "heavy", hdr, [t for t, h in rows if h])
         gate_ids = [t.split(" ", 1)[0] for t, h in rows if not h]
         for tag, (ehdr, erows, eexp) in exts.items():

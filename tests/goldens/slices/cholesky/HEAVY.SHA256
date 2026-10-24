@@ -2,4 +2,5 @@
 # verified by scripts/gen_la_goldens.py --check, step 'heavy' at merge points). sha256sum format.
 182a518923cd8fe3fbfded054e07f38f82985bde7481ce3a22f727c26f9bf545  la_cholesky_enc4096_heavy.txt
 fe6b83c817939ea6a32cbc975de1bc8e936c02f74357afb8eb9df36a64bb0a0a  la_cholesky_heavy.txt
-9c8140f6bcd4f3dde050d99bd9fe542c44ea1064f25e5a26591902babaa8342b  la_logdet_heavy.txt
+db0ff61da8fd89a022d37ba30c2ea57202d94c9bab5fa8d2e32aa4ffde147ec6  la_logdet_enc4096_heavy.txt
+c2b593733c195d662373845b7fef7792e7632a22fc1b8453a4d1bef755df6e89  la_logdet_heavy.txt
