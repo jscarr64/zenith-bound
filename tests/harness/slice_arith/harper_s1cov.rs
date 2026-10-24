@@ -256,3 +256,64 @@ fn s1cov_compare_extremes_signed_zero_and_ties() -> Result<(), String> {
     want_cmp("MIN vs all", &pt(i64::MIN, P)?, &all, [U, U, U, U, U, U, T])?;
     Ok(())
 }
+
+fn tri_not(t: Tri) -> Tri {
+    match t {
+        Tri::True => Tri::False,
+        Tri::False => Tri::True,
+        Tri::Unknown => Tri::Unknown,
+    }
+}
+
+/// Duality over a pool with the extremes, signed zero, touching balls and all reals: `gt` is the swapped `lt`, `ge`
+/// the swapped `le`, `ne` the negated `eq`, `overlaps` is symmetric, and a decided `lt` implies `le`.
+#[test]
+fn s1cov_compare_duality_pool() -> Result<(), String> {
+    let m1 = min1()?;
+    let pool = [
+        pt(i64::MIN, P)?,
+        pt(m1, P)?,
+        pt(i64::MAX, P)?,
+        pt(0, P)?,
+        -pt(0, P)?,
+        ball(-num(0), mag(TOP, 1)?, P)?,
+        ball(num(i64::MIN), mag(TOP, 1)?, P)?,
+        ball(num(2), mag(TOP, 1)?, P)?,
+        pt(1, P)?,
+        ok("ar", Ball::all_reals(P))?,
+    ];
+    for (i, a) in pool.iter().enumerate() {
+        for (j, b) in pool.iter().enumerate() {
+            let w = format!("pool {} vs {}", i, j);
+            if a.gt(b) != b.lt(a) {
+                return Err(format!(
+                    "{}: gt {:?} != swapped lt {:?}",
+                    w,
+                    a.gt(b),
+                    b.lt(a)
+                ));
+            }
+            if a.ge(b) != b.le(a) {
+                return Err(format!(
+                    "{}: ge {:?} != swapped le {:?}",
+                    w,
+                    a.ge(b),
+                    b.le(a)
+                ));
+            }
+            if a.ne(b) != tri_not(a.eq(b)) {
+                return Err(format!("{}: ne {:?} vs eq {:?}", w, a.ne(b), a.eq(b)));
+            }
+            if a.overlaps(b) != b.overlaps(a) {
+                return Err(format!("{}: overlaps not symmetric", w));
+            }
+            if a.lt(b) == Tri::True && a.le(b) != Tri::True {
+                return Err(format!("{}: lt True but le {:?}", w, a.le(b)));
+            }
+            if a.eq(b) == Tri::True && a.overlaps(b) != Tri::True {
+                return Err(format!("{}: eq True but overlaps {:?}", w, a.overlaps(b)));
+            }
+        }
+    }
+    Ok(())
+}
