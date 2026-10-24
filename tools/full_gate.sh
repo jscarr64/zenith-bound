@@ -62,8 +62,12 @@ run() { name=$1; shift
   if [ "$name" = mutants ]; then   # the mutants step's timeout comes from the slice budgets; no silent fallback to STEP_TIMEOUT
     # the selftest-only MUTANT_TIMEOUT_S / MUTANT_BUDGET_S / MUTATE_SETUP_S / MUTATE_SH (and MUTATE_FLOOR_ZERO_OK) never reach the gate's
     # mutate_slice.sh: not here, not in the mutants step below (Spence, 1742-zb-fgself2-9ea44e6)
-    to=$(env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice.sh --step-timeout 2>&1 | tail -1)
-    if [[ ! $to =~ ^[0-9]+$ ]]; then echo "mutants: FAIL cannot compute the step timeout (tools/mutate_slice.sh --step-timeout: $to)" > "$T/$tag-$name.log"
+    # ALL of its output goes to the step log on failure (a `| tail -1` here lost the cause of 1706-zb-mslice-9ea44e6-selftests)
+    local out trc=0
+    out=$(env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice.sh --step-timeout 2>&1) || trc=$?
+    to=${out##*$'\n'}
+    if [ "$trc" != 0 ] || [[ ! $to =~ ^[0-9]+$ ]]; then
+      printf 'mutants: FAIL cannot compute the step timeout (tools/mutate_slice.sh --step-timeout exited %s), its output:\n%s\n' "$trc" "$out" > "$T/$tag-$name.log"
       echo "$name=2" >> "$T/$tag.rc"; gate_rc=1; return 0; fi
   fi
   runlog_step "${tf[@]}" "$name" -- timeout "$to" bash -c "$*" > "$T/$tag-$name.log" 2>&1; rc=$?

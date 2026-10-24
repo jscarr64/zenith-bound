@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- mutate_slice / full_gate hardening (Spence BLOCK of 9ea44e6, 1742-zb-fgself2/mutself2): the gate runs mutate_slice.sh (--step-timeout and
+  --all) under `env -u` MUTATE_FLOOR_ZERO_OK MUTANT_TIMEOUT_S MUTANT_BUDGET_S MUTATE_SETUP_S MUTATE_SH, so a leaked selftest knob cannot
+  change a real run. A result is only an UNINDENTED `KILLED|SURVIVED-EQUIVALENT|SURVIVED|INVALID <id>` line for the --only id (a forged
+  indented line is suite output; a result for another id fails). A runner SIGKILLed before its limit (exit 137) is `KILLED-OOM <id>` and
+  fails, not TIMEOUT. A --step-timeout failure writes its whole output to the step log (`| tail -1` lost the cause of the one-off
+  1706-zb-mslice-9ea44e6-selftests failure). full_gate_selftest has 111 cases (+19: leaks, duplicate/unknown/forged results, unreadable
+  floor/list, runner rc, OOM, --slices cause).
+
 - full_gate mutants step per slice (Spence-approved design, 2026-10-24): the step runs tools/mutate_slice.sh --all, which runs each slice
   (`mutate.sh --slices`: central + manifest.d) with `mutate.sh --slice` and checks the result lines itself instead of trusting the runner's
   exit code. It FAILS on an INVALID mutant, a SURVIVED mutant with no equivalent entry, a slice under its floor (floor.txt for central,
