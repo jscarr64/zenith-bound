@@ -1,0 +1,3 @@
+# range: 900-999
+# Slice S6 (src/matrix.rs) mutants, owned by S6 alone. Rows as in ../manifest.txt (fn_path<TAB>mutant_id<TAB>patch<TAB>suite);
+# ids NNN-<name> with NNN in 900..=999; patches go in tools/mutants/matrix/ and the patch column reads matrix/NNN-<name>.patch.

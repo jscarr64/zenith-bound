@@ -8,3 +8,27 @@ description = "Guaranteed-bounds (ball arithmetic) on zenith-float. Pre-release:
 publish = false
 
 [dependencies]
+# zenith-float Stage A interim pin (PLAN C1): fe5c15d, as a git rev (the /tmp/zf-pin-fe5c15d worktree was lost in a reboot, 2026-10-24).
+# ExactNum lives in zenith-float-num. No std feature: zb does not need it. No other dependency is allowed.
+zenith-float-num = { git = "https://github.com/jscarr64/zenith-float", rev = "fe5c15d843823a20b5da1d0a13f032a74bc65f77", default-features = false }
+
+# Applies to every target (lib, tests/, benches/, examples/): Jeff's rules hold in test code too.
+[lints.rust]
+unsafe_code = "forbid"
+unused = { level = "deny", priority = -1 }
+
+[lints.clippy]
+suspicious = { level = "deny", priority = -1 }
+float_arithmetic = "deny"
+float_cmp = "deny"
+cast_precision_loss = "deny"
+as_conversions = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+wildcard_enum_match_arm = "deny"
+match_wildcard_for_single_variants = "deny"

@@ -1,0 +1,3 @@
+# range: 300-399
+# Slice S2 (src/bridge.rs) mutants, owned by S2 alone. Rows as in ../manifest.txt (fn_path<TAB>mutant_id<TAB>patch<TAB>suite);
+# ids NNN-<name> with NNN in 300..=399; patches go in tools/mutants/bridge/ and the patch column reads bridge/NNN-<name>.patch.

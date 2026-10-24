@@ -1,0 +1,3 @@
+# range: 200-299
+# Slice S1 (src/arith.rs) mutants, owned by S1 alone. Rows as in ../manifest.txt (fn_path<TAB>mutant_id<TAB>patch<TAB>suite);
+# ids NNN-<name> with NNN in 200..=299; patches go in tools/mutants/arith/ and the patch column reads arith/NNN-<name>.patch.

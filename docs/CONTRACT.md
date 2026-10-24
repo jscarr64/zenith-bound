@@ -1,8 +1,10 @@
 # zenith-bound correctness contract
 
-**Status: draft, 2026-10-14.** This file exists before any `mag` code. The clauses below are normative; clauses 1 and 5 are LOCKED. The remaining clauses of `docs/PLAN.md` Part L (value model, invariant, precision, exponent range, rounding, the other radius rules, domains, exactness, correctness vs tightness, determinism) move in here before L0 code is written. If this file and the plan disagree, this file wins and the plan gets fixed. Every test cites a clause number.
+**Status: draft, 2026-10-16 (numbering and L0 clauses added; decisions of Paul, Rusty and Jeff recorded, including O1, O6, D14, D15, 10.2a to 10.2e and O13-C on 2026-10-16; clauses 1 and 5 unchanged and LOCKED).** This file exists before any `mag` code. The clauses below are normative; clauses 1 and 5 are LOCKED. The open items in the section "Open clauses" are **not normative** until Jeff or Rusty decides them, and no test may assert them (as of 2026-10-16 no open item remains except the decided-and-listed O18-C; O1, O6, D14, D15, Cassie's 10.2a to 10.2d and O13-C are DECIDED, see "Decisions recorded"). The section "Decisions recorded" lists the former open items O2 to O5, O7 to O10 and O11-W to O17-W that are now decided, with the clause that states each (O11-W to O17-W and the O2 detection rule: decided 2026-10-15 on Rusty's second L0 review, `zb-l0-review2`). If this file and `docs/PLAN.md` disagree, this file wins and the plan gets fixed. Every test cites a clause number (`CONTRACT n.m`) and names its oracle.
 
-Notation: `Mag` is `enum Mag { Finite { exp: i64, mant: u64 }, Infinity }`, an upper bound on a nonnegative real. "Rounded up/down" means toward +∞/−∞.
+**Numbering.** Clauses 1 to 5 keep the numbers they had on 2026-10-14, because 1 and 5 are LOCKED and `docs/PLAN.md`, the handoff and review notes cite "clause 1", "clause 4.3" and "clause 5". The remaining clauses of `docs/PLAN.md` Part L are numbered 6 and up, in Part L order. The table at the end maps every Part L clause, and the plan's older citations ("4a", "clauses 6–7", "clause 6 (division)"), to the clause numbers used here.
+
+Notation: `Mag` is an upper bound on a nonnegative real. Conceptually it is `Finite { exp: i64, mant: u64 }` or `Infinity`, but its fields are **private** (decided 2026-10-15, Rusty with Paul and Jeff): a `Mag` is a struct over a private enum and values are built only by `Mag::finite`, `Mag::zero` and `Mag::infinity` (clauses 2.1 and 15.4), so a non-canonical value cannot exist. `Finite { exp, mant }` in this file names that conceptual form. "Rounded up/down" means toward +∞/−∞. `Mag` methods take `&Mag`; `Mag` has no `Copy`, `Clone` or `Hash`, and its `PartialEq`, `Eq`, `PartialOrd` and `Ord` are written by hand and agree (clause 14.5).
 
 ## 1. The exponent convention — LOCKED (approved by Jeff, 2026-10-14)
 
@@ -25,13 +27,15 @@ This is zenith-float's `exponent()` convention (`3` is `e = 2`, `m = 0xC000…`)
 
 ## 2. Zero Mag
 
-2.1 A proven-zero radius is the canonical `Finite { exp: 0, mant: 0 }`. It is the only finite Mag with `mant < 2^63`, and every constructor and the decoder reject any other.
+2.1 A proven-zero radius is the canonical zero, `exp == 0` and `mant == 0`. It is the only finite `Mag` with `mant < 2^63`. The fields of `Mag` are private (see Notation), so no other value can be observed.
+- **Constructor (decided 2026-10-15 on Rusty's review; was O13-W).** `Mag::finite(mant, exp)` denotes `mant · 2^(exp − 64)` (clause 1.1). A mantissa with its top bit set is kept. A mantissa `0 < mant < 2^63` is **normalised**: shifted left by `leading_zeros(mant) = lz`, with `exp` replaced by `exp − lz`. This is exact: the value is preserved and nothing is rounded. If `exp − lz < i64::MIN` the value is below the smallest positive `Mag`, is not representable, and the constructor returns `BoundError::Representation`; it never rounds (clause 3.2 applies to operation results only). `mant == 0` with `exp == 0` is the canonical zero; `mant == 0` with `exp != 0` is **rejected** with `BoundError::Representation` (a proven zero is built with `Mag::zero()`). A rejection is a `BoundError`, never a panic. The decoder does not normalise: it rejects every non-canonical encoding (clause 13).
+- **Decoder.** The `zf-ball-enc` decoder does **not** normalise: it rejects every encoding whose mantissa is non-canonical (`0 < mant < 2^63`, or `mant == 0` with `exp != 0`), so that one value has one byte string (clause 13, `identical()`). Earlier text said every constructor and the decoder reject such input; that is superseded: decided, the in-memory constructor normalises (above) and the wire decoder stays strict.
 
-2.2 A radius is zero only when exactness is proven (exact inputs and an `Equal` ternary from the op).
+2.2 A radius is zero only when exactness is proven: the inputs are exact and the operation reports that its result is not inexact. zenith-float has no ternary result; its per-operation `inexact()` flag (a `bool`) is the available form, so "an `Equal` ternary" in `docs/PLAN.md` means `inexact() == false`.
 
-2.3 Every Mag operation early-returns on a zero operand, before any alignment, normalisation or `leading_zeros`: `add_up(0, b) = b`, `mul_up(0, finite) = 0`, `from_exact_num(0) = 0`, `sub_lower(0, b) = 0`, and comparisons with zero go by sign only.
+2.3 **Order of checks in every Mag operation:** (1) `Infinity` operands and a zero divisor, which have fixed results (clause 14.6); (2) a zero operand, which early-returns before any alignment, normalisation or `leading_zeros`: `add_up(0, b) = b` (built from `b`'s integer parts by `Mag::from_canonical`; see clause O18-C), `mul_up(0, finite) = 0`, `from_exact_num(0) = 0`, `sub_lower(0, b) = 0`, and comparisons with zero go by sign only; (3) the arithmetic. So `mul_up(0, Infinity) = Infinity` (clause 2.4) and `div_up(x, 0) = Infinity` for every `x`, including 0.
 
-2.4 `0 · Infinity = Infinity`.
+2.4 `0 · Infinity = Infinity` for the round-up operation `mul_up`. The round-down operation `mul_lower(0, Infinity)` is the canonical zero (clause 14.6).
 
 2.5 Zero (midpoint 0, radius 0, and both) is a member of every test set.
 
@@ -41,11 +45,13 @@ This is zenith-float's `exponent()` convention (`3` is `e = 2`, `m = 0xC000…`)
 
 3.2 **Underflow:** a result whose exponent would go below `i64::MIN` rounds **up** to the smallest positive Mag, `Finite { exp: i64::MIN, mant: 2^63 }`. It never becomes zero and never wraps. (A lower-bound helper such as `sub_lower` may return zero, because a smaller lower bound stays sound.)
 
-3.3 **Overflow:** a result whose exponent would go above `i64::MAX` becomes `Infinity`, never a saturated finite value. NaN or Inf inputs from zf map to `Infinity`.
+3.3 **Round-up overflow:** a round-up result whose exponent would go above `i64::MAX` becomes `Infinity`; a round-up result is **never a saturated finite value**, because a saturated finite value would not be an upper bound. NaN or Inf inputs from zf map to `Infinity` when an upper bound is built (`from_exact_num`).
+
+3.4 **Round-down overflow:** a round-down result whose exact value is above the largest `Mag` is the largest `Mag`, `Finite { exp: i64::MAX, mant: u64::MAX }`. `Infinity` is not a lower bound, so it is never returned. A zf NaN or Inf input to a lower-bound conversion (`from_exact_num_lower`) maps to the canonical zero, which is always a sound lower bound.
 
 ## 4. Division radius
 
-4.1 For `a = m_a ± r_a` and `b = m_b ± r_b`, the midpoint is `q = m_a / m_b`, rounded to `prec` under the caller's `rm`.
+4.1 For `a = m_a ± r_a` and `b = m_b ± r_b`, the midpoint is `q = m_a / m_b`, rounded to `prec` to nearest (`ToEven`) (O19, DECIDED 2026-10-23, Paul).
 
 4.2 If the divisor touches 0 (`|m_b| ≤ r_b`, decided by `Mag::cmp_exact_num` without converting `r_b` to a zf number), the result is `BoundError::Domain` under every `DomainPolicy`.
 
@@ -62,8 +68,234 @@ This is zenith-float's `exponent()` convention (`3` is `e = 2`, `m = 0xC000…`)
 
 ## 5. Precision rounding — LOCKED (approved by Jeff, 2026-10-14)
 
-5.1 A midpoint at precision `prec` is rounded to **exactly** `prec` bits (any `prec ≥ 1`, not only a multiple of 64), once, under the caller's `rm`.
+5.1 A midpoint at precision `prec` is rounded to **exactly** `prec` bits (any `prec ≥ 1`, not only a multiple of 64), once, to nearest (`ToEven`); Ball operations take no `rm` (O19, DECIDED 2026-10-23, Paul).
 
 5.2 Exact-bit rounding lives in **zenith-float** (PLAN C1 **P15**, tied to zf defect 6). zenith-bound **never** re-chops or re-rounds a zf result to a smaller precision, and has no chop fallback, because a second rounding of an already-rounded value is double rounding.
 
 5.3 If the zf 2.0.0 defect-6 fix delivers exact-bit rounding, P15 folds into 2.0.0; otherwise it stays in 2.1. Either way, L0 does not start until it is green on Pop.
+
+## 6. Value model (PLAN Part L 1)
+
+6.1 A `Ball` denotes the closed set `[mid − rad, mid + rad]` of reals. `rad = Infinity` denotes all reals; its canonical form has `mid = +0`.
+
+6.2 A NaN or infinite midpoint is never stored. An operation that would produce one returns `BoundError` (or, for an unbounded or overflowed result, the all-reals ball of clause 6.1 as `Ok`, clause 6.4), never a finite ball that excludes a possible value.
+
+6.3 **Signed zero.** A −0 midpoint (for example exact cancellation under `Down`) is normalised to +0 at the ball boundary, in every constructor and every op result, so `identical()` and the encoding see one zero.
+
+6.4 **Result shape (O1, DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended).** Every L0b, L1, L2 and L3 operation returns `Result<Ball, BoundError>` (or `Result<X, BoundError>` for a non-ball result). There is no `Enclosure` type and no `Indeterminate` variant. The three outcomes mean: `Ok(ball with rad = Infinity)`: the true result is mathematically unbounded or overflowed (O2), for example `Clip` over an unbounded image; this is a sound enclosure returned as `Ok`. `Err(BoundError::Resource)`: the engine gave up (budget, iteration or precision cap). `Err(Domain | InvalidArgument | Representation)`: the question itself is invalid. `Ball::is_informative(&self) -> bool` is false iff `rad = Infinity`; the user-facing layer (L4, Accumath) must check it and never print or use a midpoint of an `Infinity` ball. `floor`, `ceil` and `sgn` do not return a `Ball`: they return a small enum `Decided(value) | Undecided` (the names are the implementer's choice) inside `Result<_, BoundError>`. A test helper `is_refusal(&result)` is one function: refusal means `Err(..)` or an `Ok` ball with `rad = Infinity`, as each row states.
+
+6.5 **Ball canonical form (D15 a, b, e; DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended).** (a) `Ball` fields are **private**; construction goes through checked constructors. Every operation **output** has a `mid` of at most `prec` bits, with the rounding error absorbed in `rad` (this follows from clause 5 and PLAN C5.1). An exact constructor input wider than `prec` either keeps `rad = 0` exactly (the `mid` stays exact) or is rounded **with** `rad`; it is never silently truncated. (b) Comparisons and `Tri` ignore `prec`. `union` and `intersect` results use `prec` = the maximum of the two. `identical(&self, &Ball) -> bool` is structural and **includes** `prec`; it returns `bool`, not `Tri` (O20, DECIDED 2026-10-23, Paul). (e) `rad = 0` for an exact `sqrt`, `exp(0)` or `ln(1)` only when zenith-float's per-operation `inexact() == false` proves it (clause 2.2; zenith-float P9 and P15 are done).
+
+## 7. Invariant (PLAN Part L 2)
+
+7.1 For every guaranteed op `f` and inputs `x_i ∈ X_i`, `f(x_1, …) ∈ f_ball(X_1, …)`, or the op returns `BoundError`. Nothing else is allowed. (The all-reals ball satisfies the first alternative; clause 6.4.)
+
+## 8. Precision and exponent range (PLAN Part L 3 and 4; precision rounding itself is clause 5)
+
+8.1 `prec` is at least 1 and shapes only the midpoint. `prec` is `u32` at the `Ball` API (decision O17-W); a `prec` of 0 is rejected with `BoundError::InvalidArgument` before zenith-float is called, because zenith-float accepts `p = 0` and then returns an exact zero for a nonzero sum. A `Ball` stores the **requested** `prec` and never reads it back from zenith-float, which reports the 64-bit container as `precision()` and rounds exact bits at small `p`. The radius is always a `Mag` (64-bit mantissa, `i64` exponent). zenith-float's precision type is `usize`, so `prec: u32` becomes `usize` only through `usize::try_from` (a failure is `BoundError::Resource`), never `as`. Ball operations take `prec` but no `RoundingMode` (O19, DECIDED 2026-10-23, Paul); the `RoundingMode::None` rejection and the `prec`-to-`usize` rule apply at the zenith-float scalar level, inside zenith-bound, only.
+
+8.2 Radii: `Mag` exponents are `i64`; beyond that the radius is `Infinity` (clause 3).
+
+8.3 Midpoint exponents are zenith-float's `EXPONENT_MIN..=EXPONENT_MAX`. (The 32-bit-target sentence of PLAN Part L 4 is dropped, decision O3: zenith-float's `EXPONENT_MAX`/`EXPONENT_MIN` are `i32::MAX`/`i32::MIN` on every target, so no target refuses a midpoint on range grounds.)
+
+> TODO (S0, 2026-10-24): O21 moves zenith-float's `Exponent` to `i64` (±(2^62−1)), which supersedes the `i32` wording of 8.3 and of O3 below. This text stays as is until zb pins Rusty's pushed i64 zenith-float SHA (SP-i64); the 8.3/O3 rewrite lands with that pin, not before.
+
+## 9. Rounding and radius rules (PLAN Part L 5 and 6; division is clause 4)
+
+9.1 **Rounding.** The midpoint is rounded once to `prec` to nearest (`ToEven`) from an exact or fully accounted value (clause 5); there is no caller `rm` (O19, DECIDED 2026-10-23, Paul). The radius is rounded **up** at every step. No rounding error is ever dropped. Directed modes are used internally only (radius and endpoint bounds) and never change containment. `RoundingMode::None` truncates and is never used in a bound path.
+
+9.2 **Radius rules.** A radius is nonnegative. It is zero only when exactness is proven (clause 2.2). A zero radius early-returns through every Mag operation (clause 2.3).
+
+9.3 **Add:** `(m + n) ± (r + s + ε)`. **Mul:** `m·n ± (|m|·s + |n|·r + r·s + ε)`. Every term and every sum is evaluated with `add_up`/`mul_up`.
+
+9.4 **ε** is zero if rounding the midpoint was exact (`inexact() == false`), and otherwise depends on the rounding mode, with an **exhaustive `match` over `RoundingMode` and no wildcard arm** (decisions O4 and O5, Rusty, 2026-10-15). Since (O19, DECIDED 2026-10-23, Paul) a Ball midpoint is always rounded with `ToEven`, so its ε is the `half_ulp`; the full table stays normative for the internal `ulp`/`half_ulp` helpers and any internal directed rounding:
+- **Nearest modes** `{ToEven, ToOdd}`: ε is `half_ulp` (`2^(e − prec − 1)`). A half ulp is sound for the nearest family only.
+- **Directed modes** `{Up, Down, ToZero, FromZero}`: ε is the full `ulp_mag(e, prec)` (`2^(e − prec)`).
+- **`RoundingMode::None`**: rejected with a `BoundError` at the zenith-float scalar level (no Ball API takes a mode, O19); it truncates and is never used in a bound path (clause 9.1).
+- `e` (`pre_round_exp`) is zenith-float's `exponent()` of the **rounded result** (clause 1.1 convention); zenith-float's pre-round exponent (the former P7) is not required, because the ulp at the rounded exponent is at least the ulp at the pre-round exponent, so the bound stays sound. The subnormal clamp `max(e, MIN_NORMAL_EXPONENT)` lives in the L1 caller, not in `ulp_mag`/`half_ulp`. A **zero result** maps to `EXPONENT_MIN` (zenith-float's `exponent()` of zero is 0, which would make ε wrongly large). For a subnormal result `exponent()` reports `EXPONENT_MIN`.
+
+## 10. Domains and special values (PLAN Part L 7)
+
+10.1 There is one `DomainPolicy { Strict, Clip }`. Every op with a restricted domain (sqrt, the log family, asin/acos, acosh, atanh, `tan` (clause 10.2d), `pow` with a non-integer exponent, …) applies it the same way and takes it as an **explicit last parameter** (clause 15.1; O6, DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended). `Strict` exists as `impl Default for DomainPolicy` only; callers still pass the policy explicitly; there are no paired `foo()` / `foo_policy()` forms. `DomainPolicy` is `#[non_exhaustive]` (still exactly `Strict` and `Clip`; a later variant is not a breaking change). **Solver options (options unit, DECIDED 2026-10-23, Paul):** `SolveOpts { refine_steps: usize }` (default 2) and `EigOpts { max_sweeps: usize, cluster: bool }` (default 64, `true`) live in `policy` next to `DomainPolicy`; both are `#[non_exhaustive]` with `impl Default`, so callers build them from `Default::default()` and set fields, never with a struct literal.
+
+10.2 **`Strict`** returns `BoundError::Domain` if any point of the input ball lies outside the domain. **`Clip`** encloses `f` over the intersection of the ball with the domain, and returns `Domain` only if that intersection is empty or is a single pole.
+
+**10.2a to 10.2e (DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended; Cassie's text accepted with the fixes below; normative and testable).** They refine 10.2 and close O11-C, O12-C, O13-C and O14-C. Basis for every item: a ball is never silently wrong; "cannot tell" is either loud (an error) or provably sound (an all-reals ball).
+
+10.2a **Unbounded image (O11-C, decided).** If the intersection of the ball with the domain is nonempty and `f` is unbounded on it (`ln` or `log` over `(0, b]`, `atanh` toward ±1, `tan` across a pole), `Clip` returns `Ok` with `rad = Infinity` (the all-reals ball of clause 6.4 and O2), never a finite ball and never `Domain`.
+
+10.2b **Domain table (O12-C with 10.2c, decided).** Closed endpoints: `asin` and `acos` on `[-1, 1]`, `acosh` on `[1, inf)`, `sqrt` on `[0, inf)` (**fix: `sqrt` was listed as open; 0 is in `[0, inf)`**). Open endpoints: `atanh` on `(-1, 1)`, `log`/`ln` on `(0, inf)`. `tan` excludes `π/2 + k·π`. `pow` with a non-integer exponent needs `x > 0` in v1 (a conservative refusal: it refuses `pow(0, 2.5)` where the right answer is 0; a later refinement may let `Strict` accept `x ≥ 0` when the exponent ball is exactly positive). `Strict` returns `Domain` iff some point of the ball is outside the domain, so a ball reaching a closed endpoint (for example `|m| + r = 1` for `asin`) is inside it. For `sqrt` this means `Strict` returns `Domain` iff `m − r < 0`, decided exactly; at `m − r = 0` the result is a ball built from the endpoints (`[0, sqrt_up(m + r)]`), finite and sound; `rad = Infinity` is not used (D15 d; settles M9 and K16 of `docs/TEST_PLAN.md`). Note: `atanh(±1)` and `log 0` are real exclusions; `asin(±1)`, `acos(±1)` and `acosh(1)` are in the closed domain.
+
+10.2c **Exact inside-the-domain test (Rusty's condition, O12-C, decided).** Decide "inside the domain" with an **exact** comparison (`cmp_exact_num` style, as in clause 4.2), never with `add_up`, which would call an exact touch outside: for `asin`, `acos` and `atanh` `|m| + r ≤ 1` (closed) or `|m| + r < 1` (open) per endpoint type; for `acosh` `m − r ≥ 1` (**fix: the `|m| + r` formula does not apply to `acosh`**). **Requirement on L1 (not a change of the text above):** for monotone functions (`asin`, `acos`, `acosh`, `sqrt`, `atanh` in its interior, `ln`) an exact touch is evaluated from the endpoints, which gives a finite, informative, sound ball. `rad = Infinity` is used only where the image is truly unbounded (`atanh` toward ±1, `ln` toward 0, `tan` across a pole) or as a documented fallback when no proven one-sided bound exists.
+
+10.2d **`tan` (O14-C, decided).** `tan` joins the clause 10.1 list and takes a `DomainPolicy`. `Strict` returns `Domain` when the ball contains `π/2 + k·π`, decided with sound directed bounds of `π`, not one rounded `π`; "cannot exclude" counts as "contains". Where argument reduction cannot be done soundly (for example `|m| ≈ 1e600000000`) the result is `Domain` under `Strict` or the all-reals ball under `Clip`, never a guess. `Clip` returns `Ok` with `rad = Infinity`. The "single pole" `Domain` case of 10.2 never occurs for `tan`. Near the pole boundary either `Domain` or a sound ball is allowed. A sound ball must really contain the exact `tan`, checked at sample points against mpmath goldens. Tests accept both outcomes but never an unsound ball.
+
+10.2e **`0^0` (O13-C, DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended; zenith-float probe CONFIRMED by Rusty 2026-10-16).** `0^0 = 1` on the **integer-exponent path only**. `powi`, or a real-exponent `pow` whose exponent ball has `rad = 0` and value 0, returns exactly `1` with `rad = 0` for every base, including 0 and a base ball containing 0. `pow(x, 0)` for `x ≠ 0` is exact. For a real-exponent `pow` with a base ball containing 0: `Strict` returns `Domain`; `Clip` returns the all-reals ball (`rad = Infinity`) when the exponent can be negative, otherwise a hull that includes the **whole** limit range `[0, 1]` (the limit of `x^y` at `(0, 0)` depends on the path), never `1 ± 0`. Probe: zenith-float's `pow`, `powi` and `powsi` return exactly 1 for `0^0` and `(-0)^0` with `inexact() == false` in every rounding mode, on `wip/option-a` and 1.0.12 (Rusty). **Tests may assert the integer-exponent path `0^0 = 1`. No test may assert any zenith-float behaviour for the real-exponent, base-contains-0 case beyond this text** (zenith-float has sign and infinite-exponent special-value bugs, W6, being fixed on the float side; a `Ball` never feeds an `Inf` into zenith-float).
+
+10.3 Division by a ball touching 0 returns `Domain` under both policies (clause 4.2).
+
+10.4 **Underflow:** the radius absorbs the lost value and is never zero; `Mag` exponent underflow rounds up to the smallest positive `Mag` (clause 3.2). `0 · Infinity` in radius arithmetic is `Infinity` (clause 2.4). A round-up overflow never saturates (clause 3.3). **Midpoint overflow (decision O2, Rusty): one fixed behaviour, no caller parameter and no policy field.** A zenith-float result `r` of a midpoint operation at precision `prec` under `rm` has **overflowed** iff `r` is `Inf`, or `r` is `NaN` with `err() == ExponentOverflow(_)`, or (`r.inexact()` and `r.exponent() == EXPONENT_MAX`). The third form exists because zenith-float saturates to a finite `max_value(p)` flagged inexact when the rounding direction is toward zero (`ToZero` always; `Down` when the exact result is positive; `Up` when it is negative), and returns `±Inf` with the inexact flag not set for every other mode and direction. The test is conservative: an inexact result in the top binade is reported as overflow even if none happened (sound, costs tightness only). A `NaN` is mapped by its error kind: `ExponentOverflow` is the overflow behaviour, `DivisionByZero` is `Domain`, `InvalidArgument` is `InvalidArgument`, `MemoryAllocation` and `PrecisionRetryExhausted` are `Resource`. **On overflow the `L1` ball is the all-reals ball** (`mid = +0`, `rad = Infinity`, clause 6.1), **not** a `BoundError::Overflow`; there is no `Overflow` variant. O1 is decided as `Result<Ball, BoundError>` with "uninformative is `rad = Infinity`" (clause 6.4), so the all-reals ball is returned as `Ok`. Either way a ball with a NaN, Inf or saturated midpoint is never stored (clause 6.2). The domain policy is an explicit last parameter (clause 10.1, 15.1; O6 decided).
+
+## 11. Exactness (PLAN Part L 8)
+
+11.1 `from_integer` and `from_rational` are exact when the denominator is a power of 2 and the value fits `prec`; otherwise they return a correctly enclosed ball. `is_exact` is true only with proof.
+
+## 12. Correctness vs tightness (PLAN Part L 9)
+
+12.1 A correctness failure (a result that excludes a possible true value) is a P0 bug. A tightness miss is measured as an overestimation ratio against the oracle's radius and tracked; it is a performance bug. This clause sets no numeric tightness thresholds; each test states its own (D15, decided 2026-10-16).
+
+## 13. Determinism (PLAN Part L 10)
+
+13.1 The same `(op, inputs, prec, version)` gives the same bytes on every supported target, build profile and thread count.
+
+13.2 **Decoder rejects non-canonical input (D15 c, DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended).** The decoder rejects: a nonzero `mid` with `rad = Infinity`; a `Mag` mantissa without its top bit (when nonzero); trailing zero bytes; reserved tags. One value has exactly one encoding. Tests: `encode ∘ decode ∘ encode` is the identity for every constructor; a byte-mutation sweep (every single-byte mutation of a valid encoding either decodes to a value whose re-encoding is that same mutated byte string, or is rejected).
+
+## 14. Mag operations (L0; from PLAN C6 and `docs/PLAN.md` Part D, L0 file plan)
+
+All of this section is integer-only (`u64`/`u128`/`i64` and wider integers in tests). For a finite `Mag` `x`, `value(x)` is defined by clause 1.2, and the canonical zero by clause 2.1. "Exact" means the real number the operands denote.
+
+14.1 **Round-up operations** `add_up`, `mul_up`, `div_up`, `sqrt_up`: the result is the smallest representable `Mag` that is ≥ the exact result (rounding to 64 significant bits, toward +∞), subject to clauses 2 and 3. This is what clause 1.3 states for `mul_up`. Where the exact result is not a `Mag` value (it exceeds the exponent range), clause 3.3 applies. A round-up result is therefore never below the exact result and its predecessor `Mag` is below the exact result (that is the "within one Mag-ulp" tightness property).
+
+14.2 **Round-down operations** `sub_lower`, `mul_lower`, `div_lower`, `sqrt_lower`: the result is the largest representable `Mag` that is ≤ the exact result (rounding to 64 significant bits, toward −∞), **with one exception, stated as an iff: the result is the canonical zero if and only if the exact result is below the smallest positive `Mag`, `min_pos = Finite { exp: i64::MIN, mant: 2^63 }`** (this covers an exact zero, `sub_lower(a, b)` with `a ≤ b`, and an underflow; a lower bound of zero is always sound). An exact result above the largest `Mag` gives the largest `Mag` (clause 3.4). Round-up underflow is the opposite case: it gives `min_pos`, never zero (clause 3.2).
+
+14.3 **`add_up(a, b)`** (PLAN C6): align to the larger exponent; shifted-out bits go to a sticky bit; add with carry (a carry renormalises by one and its lost bit also goes to sticky); if sticky, add 1 at the last place and renormalise. If the exponent gap is ≥ 64 and the smaller operand is nonzero, the result is the larger operand plus one unit in its last place (which is the round-up result by 14.1).
+
+14.4 **`div_up`/`div_lower`** are computed on `u128 / u64` with a sticky remainder; **`sqrt_up`/`sqrt_lower`** by the integer square root of a `u128` with the exponent parity fixed first (PLAN L0 file plan). The results are those of 14.1 and 14.2.
+
+*Implementation note (not normative; it states one derivation that meets 14.1 and 14.2, checked against the independent integer oracle in `tests/model/direct.rs`).* **Division** of finite nonzero `a` by `b`: `n = ma << 64` (a `u128`), `q = n / mb ∈ [2^63, 2^65)`, sticky = `n % mb != 0`. If `q < 2^64` the result is `mant = q`, `exp = ea − eb`; otherwise `q` has 65 bits, so `mant = q >> 1` (the lost bit joins the sticky) and `exp = ea − eb + 1`. **Square root**: if `ea` is even, `N = ma << 64` and `exp = ea / 2`; if `ea` is odd, `N = ma << 63` and `exp = (ea + 1) / 2`; `r = isqrt(N)` has its top bit set, sticky = `r·r != N`. For a round-up result with sticky, add 1 to `r` (or to the quotient mantissa); a carry to `2^64` renormalises to `mant = 2^63` with `exp + 1`, and an exponent that leaves the `i64` range follows clauses 3.2 to 3.4. All exponent arithmetic is `checked_*` or done in a wider integer (clause 3.1).
+
+14.5 **Order (decided 2026-10-15, Rusty with Paul; was O8).** `Mag` implements `Ord` by hand: `cmp(&self, &Mag) -> Ordering` is the trait method, not an inherent `cmp` (an inherent `cmp` trips clippy's `should_implement_trait` and `#[allow]` is banned). `PartialEq`, `Eq` and `PartialOrd` are also written by hand and follow `Ord` (`eq` is `cmp == Equal`, `partial_cmp` is `Some(cmp)`); none is derived, because the derived order would place the canonical zero by its exponent field. The order compares denoted values: the canonical zero is the **least** element and all zeros are equal; two finite nonzero values compare by `(exp, mant)` lexicographically; `Infinity` is the **greatest** element and equal only to itself. There is no NaN, so the order is total and reflexive. Caveat: `Mag: Ord` is the order of bounds, not of numbers; a soundness decision must not rest on `==` between two `Infinity`s meaning "the same number".
+
+14.6 **Corner operands (decided 2026-10-15, Rusty; was O7).**
+- **Rule R-UP** (round-up operations; no finite value would be a sound upper bound): an `Infinity` operand of `add_up`, `mul_up`, `div_up` or `sqrt_up` gives `Infinity`, including `mul_up(0, Infinity)` (clause 2.4) and `div_up(Infinity, b)`. A zero divisor gives `Infinity`: `div_up(x, 0) = Infinity` for every `x`, and `div_up(0, 0) = Infinity`. `div_up(0, b)` for a finite nonzero `b` is zero (clause 2.3).
+- **Rule R-DOWN** (round-down operations; zero is always a sound lower bound): an `Infinity` operand of `sub_lower`, `mul_lower`, `div_lower` or `sqrt_lower` gives the canonical zero, including `mul_lower(0, Infinity)`; `div_lower(x, 0)` is the canonical zero.
+- **Overflow and underflow:** a round-up overflow is `Infinity` (clause 3.3); a round-down overflow is `Finite { exp: i64::MAX, mant: u64::MAX }` (clause 3.4); a round-up underflow is `min_pos` (clause 3.2); a round-down underflow is the canonical zero (clause 14.2).
+- **`Mag::sub_up` does not exist at L0** (decision O16-W, decided: none). Nothing in the L0 or L1 float path needs it: the abs hull math uses `add_up` and division uses `sub_lower` for the denominator (clause 4.3). If it is ever needed, `sub_up(a, b)` is the smallest `Mag ≥ max(a − b, 0)`, so it is zero for `a ≤ b`.
+
+14.7 **`ulp_mag(pre_round_exp, prec)`** is `2^(pre_round_exp − prec)`, i.e. `Finite { exp: pre_round_exp − prec + 1, mant: 2^63 }` (clause 1.2), with `pre_round_exp` in the `0.m·2^e` convention of clause 1.1. **`half_ulp(mid_exp, prec)`** is `2^(mid_exp − prec − 1)`, i.e. `Finite { exp: mid_exp − prec, mant: 2^63 }`. **`smaller_than_half_ulp(&Mag, mid_exp, prec)`** is the predicate of clause 1.4. **Out-of-range exponents.** `ulp_mag` and `half_ulp` are Mag *values*, so an exponent below `i64::MIN` follows clause 3.2 (round up to the smallest positive Mag, `Finite { exp: i64::MIN, mant: 2^63 }`) and one above `i64::MAX` follows clause 3.3 (`Infinity`). The *predicate* `smaller_than_half_ulp` is not a Mag value and clause 3.2 does not apply to it: it evaluates `exp ≤ mid_exp − prec − 1` in checked or wider (`i128`) arithmetic, never wrapping, and never rounds the threshold up to `i64::MIN`. When the threshold `mid_exp − prec − 1` is below `i64::MIN`, every nonzero Mag is at or above the smallest positive Mag, so the predicate is false for every nonzero Mag (rounding the threshold up to `i64::MIN` would wrongly make `Finite { exp: i64::MIN, .. }` "smaller"). For the canonical zero the predicate is true (value 0 is below any half ulp, whatever `mid_exp` is), and for `Infinity` it is false (decision of Paul and Rusty, 2026-10-15, part of O10; the predicate must never be used to drop a radius). Tests: `half_ulp` at `mid_exp` from `i64::MIN` to `i64::MIN + prec + 1`, and `smaller_than_half_ulp` near `i64::MIN` against the rational model, in `tests/mag/ulp.rs`. The subnormal clamp `eff_exp = max(pre_round_exp, MIN_NORMAL_EXPONENT)` of PLAN G3 belongs to the L1 caller (`mid_rounding_error`), not to `ulp_mag` (decision O5, clause 9.4). The signatures `ulp_mag(i64, u32) -> Mag`, `half_ulp(i64, u32) -> Mag` and `smaller_than_half_ulp(&self, i64, u32) -> bool` are decided (O10); `prec: u32` follows clause 8.1, and a zenith-float `i32` exponent widens with `i64::from`. `ulp_mag(e, 0)` and `half_ulp(e, 0)` are outside clause 8.1 (`prec ≥ 1`) but total: the formulas above hold for every `u32` `prec` including 0, with the out-of-range rules above (`ulp_mag(i64::MAX, 0)` is `Infinity`). `Ball` operations never pass `prec = 0` (clause 8.1, `InvalidArgument`); the two `prec = 0` tests pin the Mag formula only and do not mean zenith-float supports `p = 0`. The formulas are exact in `i128` for every `u32` `prec`, including `prec ≥ 2^31`, and `ulp_mag(i64::MAX, prec ≥ 1)` is the finite `Finite { exp: i64::MAX − prec + 1, mant: 2^63 }`, not `Infinity`.
+
+## 15. API shapes (PLAN C5, as far as they are settled)
+
+15.1 Ball operations take an explicit `prec: u32` and **no `RoundingMode`** (O19, DECIDED 2026-10-23, Paul): the midpoint rounds to nearest (`ToEven`) and the radius rounds outward and absorbs the error. They return `BoundResult<Ball>` (`= Result<Ball, BoundError>`, clause 6.4), except `neg`, which is exact and infallible. An operation with a restricted domain (clause 10.1, including `tan`) takes an explicit `DomainPolicy` as its last parameter (O6, decided; `Strict` is `Default::default()` only; no paired forms); an operation without one (add, sub, neg, abs, mul, mul_2exp, sqr, powi, hypot, and div/inv, whose divisor-touches-0 rule is the same under both policies, clause 10.3) does not. **Ownership (decision O9, Rusty): the first operand is taken by value and the second is borrowed**, matching zenith-float's Rule R shape `add(self, &Self, p, rm)` (zenith-bound passes `ToEven` internally); `Mag` methods take `&Mag` for every operand; `from_exact_num` reads the magnitude of a zenith-float number through `as_raw_parts()`. **`neg`, `abs`, `mul_2exp` (decision O14-W):** inherent methods on `Ball` taking `self` (nothing is cloned). `neg` is `impl core::ops::Neg for Ball` (an inherent `neg(self)` trips clippy's `should_implement_trait`), takes no `prec` (and, like every Ball op, no `rm`), and is exact; a −0 midpoint becomes +0 (clause 6.3). `abs(self, prec) -> BoundResult<Ball>` takes `prec`: for a ball straddling 0 the image is `[0, |m| + r]`, whose midpoint needs rounding, and the radius side uses `add_up`, not `sub_up`. `mul_2exp(self, k: i32, prec) -> BoundResult<Ball>` takes `prec` (`k: i32` is zenith-float's `Exponent`): it is exact unless the midpoint over- or underflows (clause 10.4), and its radius side is the total `Mag::mul_2exp_up(self, k: i32) -> Mag` with a checked exponent (overflow is `Infinity`, underflow is the smallest positive `Mag`, clauses 3.2 and 3.3). The `*_ref` forms of zenith-float are a last resort and are ratcheted.
+
+15.2 `Ball` has no `PartialEq`/`PartialOrd`, no `From<Ball> for ExactNum`, no `From<f64>`, and no `refine`. Equality of representations is `identical(&self, &Ball) -> bool`; value questions use the `Tri` comparisons, and `contains` and `overlaps` also return `Tri` (O20, DECIDED 2026-10-23, Paul). **`Tri` (decision O15-W)** has the variants `{True, False, Unknown}` and is exhaustive (not `#[non_exhaustive]`; API freeze F2): the three values are the complete set and callers may match without a wildcard. `True` or `False` is returned only when decided by **exact endpoint comparison** (D14, decided 2026-10-16, Paul under Jeff's delegation, Rusty recommended; Cassie's table is **normative**): `m1 − m2` is compared against `r1 + r2` with exact arithmetic or an exact comparison primitive (`Mag::cmp_exact_num` of clause 4.2 is the starting point; add an exact diff-compare if needed), never with `add_up` or another rounded sum; the same primitive serves clause 10.2c. Any doubt is `Unknown`. Exact equality is `True` only when both radii are proven zero (clause 2.2) and the midpoints compare equal. Any comparison with an `Infinity` radius is `Unknown`, even a ball against itself. Touching edges: `le` and `ge` with touching edges are `True`; `lt`, `gt` and `eq` with touching edges are `Unknown`; an exact point on a ball edge is `True` for `le`/`ge` (on the correct side) and `Unknown` for `lt`/`gt`/`eq`; a point in the interior is `Unknown`; exact 3 against exact 3 is `True` for `eq`; disjoint balls are `False` for `eq`. Comparisons ignore `prec` (clause 6.5). `lt`, `le`, `gt`, `ge`, `eq` and `ne` are defined from one primitive.
+
+15.3 `BoundResult<T>` is `Result<T, BoundError>` (O1, decided 2026-10-16; clause 6.4). There is no `Enclosure` type. "Valid but uninformative" is an `Ok` ball with `rad = Infinity` (`Ball::is_informative()` is false); overflow reporting (clause 10.4) uses the same all-reals ball.
+
+15.4 **`Mag` construction and access (decided 2026-10-15, Rusty with Paul and Jeff).** `Mag` is a struct with private fields (Notation), with `Mag::finite(mant: u64, exp: i64) -> Result<Mag, BoundError>` (clause 2.1: keeps a canonical mantissa, normalises `0 < mant < 2^63`, rejects `mant == 0` with `exp != 0` and an exponent below `i64::MIN`), `Mag::zero()`, `Mag::infinity()`, and read accessors `exp(&self) -> Option<i64>`, `mant(&self) -> Option<u64>` (`None` for `Infinity`), `is_zero(&self)`, `is_infinity(&self)`. Tests build values only through these constructors. The `Option` shape of the accessors is decided (O12-W): zero is `Some(0)` and `Some(0)`, `Infinity` is `None` for both. The `BoundError` variant set is decided (O11-W, Decisions table); the constructor's rejection is `BoundError::Representation`.
+
+15.5 **Allocation failure (API freeze F7, behaviour contract).** Storage that zenith-bound itself allocates in proportion to a caller's size (container storage: `BallArray::zeros` today, and every later container or LA op) is reserved with `try_reserve`/`try_reserve_exact`; when it cannot be allocated the op returns `Err(BoundError::Resource { .. })` and does not abort. A shape whose element count overflows `usize` is `InvalidArgument` instead. Out of scope: allocations inside zenith-float (one bignum's limbs) and the shrink in `Vec::into_boxed_slice` of a caller-supplied `Vec`; those follow Rust's global allocator (abort on OOM).
+
+15.6 **Container and linear-algebra op signatures (API freeze F8).** Every container or LA op that computes balls (elementwise ops, norms, products, solves, factorizations, eigen) takes an explicit `prec: Precision` and **no `RoundingMode`** (the clause 15.1 rule: midpoints round to nearest internally, radii outward), and returns `BoundResult<_>`. Iteration budgets come from the `SolveOpts`/`EigOpts` option structs; running out of budget is `NotConverged`. Pure accessors (`shape`, `rank`, `len`, `get`, `nrows`, `ncols`, `as_slice`) take no `prec` and return plain values or `Option`.
+
+## 16. Slice sections (S0, 2026-10-24)
+
+One section per parallel slice. Each section belongs to its slice alone: a slice writes its clauses only in its own section (numbered 16.<slice>.n, e.g. `16.S1.3`, `16.LA2.1`), so no two slices edit the same lines. Shared clauses 1 to 15 change only through Paul. Every section starts empty and is not normative until its slice fills it and the clauses are reviewed.
+
+### Slice S1 (`src/arith.rs`)
+
+_Empty (S0 stub). Owner: slice S1._
+
+### Slice S2 (`src/bridge.rs`)
+
+_Empty (S0 stub). Owner: slice S2._
+
+Scope moved in (2026-10-24): TEST_PLAN L0a-4, `Mag::cmp_exact_num` (clause 4.2) and `Mag::cmp_exact_diff` (the exact diff-compare of 15.2 and 10.2c), with the `from_exact_num(_lower)` / `to_exact_num` sets and P9. Clauses to be written by S2.
+
+### Slice S3 (`src/elementary.rs`)
+
+_Empty (S0 stub). Owner: slice S3._
+
+### Slice S4a (`src/hypergeom.rs`)
+
+_Empty (S0 stub). Owner: slice S4a._
+
+### Slice S4b (`src/carlson.rs`)
+
+_Empty (S0 stub). Owner: slice S4b._
+
+### Slice S4c (`src/zf_special.rs`)
+
+_Empty (S0 stub). Owner: slice S4c._
+
+### Slice S5 (`src/quadrature.rs`)
+
+_Empty (S0 stub). Owner: slice S5._
+
+### Slice S6 (`src/matrix.rs`)
+
+_Empty (S0 stub). Owner: slice S6._
+
+### Slice LA1 (`src/cholesky.rs`)
+
+_Empty (S0 stub). Owner: slice LA1._
+
+### Slice LA2 (`src/lu.rs`)
+
+_Empty (S0 stub). Owner: slice LA2._
+
+### Slice LA3 (`src/qr.rs`)
+
+_Empty (S0 stub). Owner: slice LA3._
+
+### Slice LA4 (`src/gls.rs`)
+
+_Empty (S0 stub). Owner: slice LA4._
+
+### Slice LA5 (`src/eigen.rs`)
+
+_Empty (S0 stub). Owner: slice LA5._
+
+## Decisions recorded (formerly open items; decided 2026-10-15 by Rusty with Paul, private fields also by Jeff via Paul; O2 detection rule and O11-W to O17-W on Rusty's second review; O1, O6, D14, D15, 10.2a to 10.2e and O13-C decided 2026-10-16 by Paul under Jeff's delegation, Rusty recommended)
+
+| Item | Decision | Stated in |
+|---|---|---|
+| O1 Result shape | DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended: option 2. `Result<Ball, BoundError>`; `rad = Infinity` is all reals and is returned as `Ok`; no `Enclosure`/`Indeterminate`; `Ball::is_informative()`; `floor`/`ceil`/`sgn` return `Decided(value) \| Undecided` inside `Result`. | 6.4, 15.3 |
+| O2 Overflow reporting | One fixed behaviour; no parameter and no policy field. A zenith-float midpoint result has **overflowed** iff it is `Inf`, or `NaN` with `err() == ExponentOverflow(_)`, or `inexact()` with `exponent() == EXPONENT_MAX` (zenith-float saturates to a finite inexact `max_value` for the toward-zero directions; the test is conservative). Other `NaN` kinds are mapped by kind (`DivisionByZero` to `Domain`, `InvalidArgument` to `InvalidArgument`, `MemoryAllocation` and `PrecisionRetryExhausted` to `Resource`). On overflow the L1 ball is the all-reals ball (`mid = +0`, `rad = Infinity`), not a `BoundError::Overflow`. Requires O1 = `Result<Ball, BoundError>`, which is decided (clause 6.4). | 10.4, 6.1, 6.2 |
+| O3 32-bit targets | The sentence of PLAN Part L 4 is dropped; `EXPONENT_MAX/MIN` are `i32::MAX/MIN` on every target. | 8.3 |
+| O4 Half vs full ulp | Half ulp for the nearest family `{ToEven, ToOdd}` only, full ulp for the directed family `{Up, Down, ToZero, FromZero}`; exhaustive `match`, no wildcard; `RoundingMode::None` rejected. | 9.4 |
+| O5 `pre_round_exp` | `exponent()` of the rounded result; no P7; subnormal clamp in the L1 caller; zero result maps to `EXPONENT_MIN`. | 9.4, 14.7 |
+| O6 Domain policy | DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended: `DomainPolicy { Strict, Clip }` is an explicit **last** argument on every restricted-domain op, `tan` included; `Strict` only as `Default::default()`; no paired `foo()`/`foo_policy()` forms; `add sub neg abs mul mul_2exp sqr powi hypot div inv` take no policy; `div`/`inv` with a divisor touching 0 are `Domain` under every policy. | 10.1, 15.1 |
+| O7 Mag corner operands | R-UP, R-DOWN, round-down overflow = largest `Mag`, round-up underflow = `min_pos`. There is no `sub_up` at L0 (O16-W). | 2.3, 2.4, 3.2 to 3.4, 14.2, 14.6 |
+| O8 `Infinity` ordering | `Ord` by hand; zero least, `Infinity` greatest; `Eq` follows `Ord`. | 14.5 |
+| O9 Ownership | First operand by value, second borrowed; `Mag` methods take `&Mag`; `from_exact_num` reads the magnitude through `as_raw_parts()`. | 15.1 |
+| O10 `smaller_than_half_ulp` corners and signatures | Zero true, `Infinity` false, `i128` evaluation; signatures as the tests use; `Ord` for `cmp`. | 14.5, 14.7 |
+| Private fields | `Mag` is a struct over a private enum with checked constructors. | Notation, 2.1, 15.4 |
+| O11-W `BoundError` variants | **Revised 2026-10-23 (Paul, rulings a/b):** struct variants carrying `{ op, detail }`: `Representation`, `InvalidArgument`, `Domain`, `Resource`, `NotPositiveDefinite` (certified not SPD, e.g. a Cholesky pivot ball with upper bound ≤ 0), `Singular` (certified singular), `NotConverged` (an iteration ran out of its budget, e.g. `EigOpts::max_sweeps`; Paul 2026-10-23: never a silently loose answer). "Cannot certify at this precision" is `Resource`. The enum is `#[non_exhaustive]` (supersedes the earlier "no `#[non_exhaustive]`"). No `Overflow` (O2), no `Underflow`, no `Indeterminate` (O1). Derive `Debug`, `PartialEq`, `Eq` (no `Clone`); implement `core::fmt::Display` and `core::error::Error`. | 8.1, 10.4, 15.4 |
+| O21 Exponent width | **Decided 2026-10-23 (Jeff):** zenith-float's `Exponent` becomes `i64` in 2.0 (Rusty owns the zf change). EXPONENT_MIN/MAX = ±(2^62−1) (MPFR's range, not full i64); MIN_NORMAL_EXPONENT = EXPONENT_MIN, subnormal floor 2^(EXPONENT_MIN−p); MAX_PRECISION = min(2^60, usize::MAX/4)−1; overflow/underflow semantics unchanged. `Mag` (full i64) stays wider, so the Mag⇄ExactNum bridge still returns `Representation` for an exact conversion outside ±(2^62−1) or below 2^(EXPONENT_MIN−p) (an upward radius bound above the range is `Infinity`, O2); only the threshold moves from i32, once zb pins Rusty's SHA (SP-i64). zb stays on `fe5c15d` until then. zb signatures never expose zf's `Exponent`; exponents in zb API are `i64`. | 15.4 |
+| O12-W Accessor shape | Keep the `Option` shape: `exp()` and `mant()` return `Some(0)` and `Some(0)` for zero and `None` for `Infinity`. | 15.4 |
+| O13-W Constructor | Normalise losslessly; `Err(Representation)` only if `exp − lz < i64::MIN`; `mant == 0` with `exp != 0` stays rejected; the decoder stays strict. Decided: normalise. | 2.1, 15.4 |
+| O14-W `neg`, `abs`, `mul_2exp` | Inherent methods on `Ball` taking `self`. `neg` is `impl core::ops::Neg for Ball`, takes neither `prec` nor `rm` (−0 becomes +0). `abs(self, prec) -> BoundResult<Ball>` uses `add_up`. `mul_2exp(self, k: i32, prec) -> BoundResult<Ball>` (no `rm`, O19) with a total `Mag::mul_2exp_up(self, k) -> Mag`. | 15.1 |
+| O15-W `Tri` | `{True, False, Unknown}`; `True`/`False` only when decided by sound bounds; exact equality `True` only with both radii proven zero; an `Infinity` radius is always `Unknown`; the comparisons derive from one primitive. Refined by D14 below. | 15.2 |
+| O16-W `Mag::sub_up` | Decided: none at L0. If ever needed, the smallest `Mag ≥ max(a − b, 0)`. | 14.6 |
+| D14 `Tri` table and domain corners | DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended: Cassie's `Tri` table is normative; `True`/`False` only by exact endpoint comparison (never `add_up`), any doubt `Unknown`; `Infinity` radius `Unknown` even against itself; touching edges: `le`/`ge` `True`, `lt`/`gt`/`eq` `Unknown`; comparisons ignore `prec`. K11 resolved: `asin`/`acos` at ±1 and `acosh` at 1 are inside the domain; `Clip` over `(0, b]` is `Ok` with `rad = Infinity`; `tan` across a pole under `Strict` is `Domain`. | 15.2, 10.2a to 10.2e |
+| O19 Ball rounding mode | DECIDED 2026-10-23, Paul: Ball operations take no `RoundingMode`. The midpoint rounds to nearest (`ToEven`, ε = `half_ulp`), the radius rounds outward and absorbs the error; `prec: u32` stays; `RoundingMode::None` is rejected at the zenith-float scalar level only. Supersedes every `rm` parameter of a Ball op elsewhere in this file, PLAN and TEST_PLAN. | 4.1, 5.1, 8.1, 9.1, 9.4, 13.1, 15.1 |
+| O20 `identical` return type | DECIDED 2026-10-23, Paul: `identical(&self, &Ball) -> bool`; `contains` and `overlaps` return `Tri`. | 6.5, 15.2 |
+| D15 Ball canonical form | DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended: (a) private `Ball` fields, checked constructors, output `mid` of at most `prec` bits with rounding in `rad`, never silent truncation; (b) comparisons and `Tri` ignore `prec`, `union`/`intersect` use the max `prec`, `identical()` includes `prec` and returns `bool` (O20); (c) the decoder rejects nonzero `mid` with `rad = Infinity`, a `Mag` mantissa without its top bit, trailing zero bytes, reserved tags; (d) `sqrt` of a ball touching 0 is a closed endpoint, not `Domain` (`Strict` `Domain` iff `m − r < 0` exactly; endpoint evaluation; finite ball); (e) `rad = 0` for exact `sqrt`, `exp(0)`, `ln(1)` only when zenith-float `inexact() == false`; 12.1 sets no numeric thresholds. | 6.5, 13.2, 10.2b, 12.1 |
+| 10.2a to 10.2d (Cassie; O11-C, O12-C, O14-C) | DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended: accepted as normative with Rusty's fixes: `sqrt` is a closed endpoint; `acosh` test is `m − r ≥ 1`; L1 uses endpoint evaluation at an exact touch for monotone functions and `rad = Infinity` only for truly unbounded images; `tan` takes a `DomainPolicy` and uses sound directed bounds of π (cannot exclude means contains); `pow` with a non-integer exponent needs `x > 0` in v1. | 10.2a to 10.2d |
+| O13-C `0^0` | DECIDED 2026-10-16, Paul under Jeff's delegation, Rusty recommended; zenith-float probe CONFIRMED by Rusty (`pow`, `powi`, `powsi` return exactly 1 for `0^0` and `(-0)^0`, `inexact() == false`, every mode, on `wip/option-a` and 1.0.12): `0^0 = 1` on the integer-exponent path only; real-exponent `pow` with a base ball containing 0: `Strict` `Domain`, `Clip` all-reals if the exponent can be negative, else a hull containing `[0, 1]`. Tests may assert the integer-exponent path; nothing is asserted for zenith-float's real-exponent base-contains-0 behaviour (W6). | 10.2e |
+| O17-W `Ball.prec` | `u32` at the `Ball` API (`usize::try_from` failure is `Resource`); a `Ball` stores the requested `prec` and never reads it from zenith-float; `prec == 0` is rejected with `InvalidArgument`. | 8.1, 14.7 |
+
+## Open clauses (none remain; O18-C is listed here with its decision)
+
+As of 2026-10-16 every former open item (O1, O6, O11-C to O14-C) is decided and lives in the Decisions table. Nothing in this section is open. `O11-C` to `O14-C` were Cassie's items (the `-C` suffix avoided a clash with the worker's O11).
+
+- **O18-C Operand-valued results and the zero-copy rule (DECIDED: Jeff, via Paul, 2026-10-16; raised by Rusty's review of L0a).** `add_up(0, b) = b`, `add_up(a, 0) = a` and `sub_lower(a, 0) = a` (clause 2.3) return a value equal to an operand, while `Mag` has no `Clone` or `Copy` and every `Mag` method takes `&Mag` (clause 15.1, O9). **Decision:** a `Mag` may be rebuilt from its two scalar integers with `Mag::from_canonical(exp, mant)`, where `(exp, mant)` come from the private `Mag::nonzero()`, while all methods keep their `&Mag` signatures. No `Mag -> Mag` copy function exists (the former `Mag::replicate` is removed). The by-value alternative (`Mag::add_up(self, other: Mag)`, `Mag::sub_lower(self, other: &Mag)`, which would have amended O9 and 15.1) is dropped; the branch `spence/zb-l0a-mag-green2-byvalue` stays unmerged. The independent oracle in `tests/model/direct.rs` follows the same rule (its former field-wise `dup` helper is removed; the zero-operand results are rebuilt from the integer parts with `MagV::Finite { exp: i64::try_from(e).ok()?, mant: u64::try_from(m).ok()? }`). `tools/rules_scan.sh` enforces the decision with two ratcheted counts that may only go down and have no allowlist: `hidden_copy_count` (copy-shaped functions in `src/`, `tests/`, `benches/` and `examples/`, baseline 0) and `sanctioned_rebuild_count` (`Mag::from_canonical(..)` call sites in `src/` fed by a part of another value, baseline 2: `add_up` and `sub_lower`). A third rebuild fails the gate until Jeff approves a baseline raise.
+
+## Concordance with PLAN Part L numbering
+
+| PLAN Part L | Topic | Clause here |
+|---|---|---|
+| 1 | Value model | 6 |
+| 2 | Invariant | 7 |
+| 3 | Precision model | 8.1 and 5 (LOCKED) |
+| 4a, "clause 4a" | Exponent convention | **1** (LOCKED) |
+| 4 | Exponent range | 8.2, 8.3 |
+| 5 | Rounding | 9.1 and 5 |
+| 6 | Radius rules | 9.2 to 9.4, and 4 for division |
+| 6–7 in older plan text ("clauses 6–7", C6 zero/underflow) | Zero Mag, underflow | 2, 3 |
+| "clause 6 (division)" | Division radius | 4 |
+| 7 | Domains | 10 |
+| 8 | Exactness | 11 |
+| 9 | Correctness vs tightness | 12 |
+| 10 | Determinism | 13 |

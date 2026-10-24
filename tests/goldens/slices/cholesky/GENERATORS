@@ -1,0 +1,2 @@
+# Slice LA1 golden generators, one per line: `scripts/<gen>.py` (writes with --check DIR, like the central GENERATORS list in tools/goldens_regen.sh).
+# Exact golds: Cassie (owns the zb LA exact golds, 2026-10-24).
