@@ -3,8 +3,17 @@
 
 Pinned oracle: sympy 1.14.0, mpmath 1.3.0 (run with ~/.local/oracle-venv).
 Usage:
-    gen_la_goldens.py            write tests/goldens/la_*.txt and SHA256SUMS
-    gen_la_goldens.py --check    regenerate in memory and diff against committed files
+    gen_la_goldens.py                 write the gate files tests/goldens/slices/<slice>/la_<op>.txt, each slice's
+                                      SHA256SUMS (gate files) and HEAVY.SHA256 (sha256 of the uncommitted heavy file)
+    gen_la_goldens.py --heavy DIR     also write the heavy files la_<op>_heavy.txt into DIR (never committed)
+    gen_la_goldens.py --check [DIR]   regenerate; byte-compare every gate file with the committed one (copies go to DIR
+                                      if given, per the goldlib --check DIR convention) and compare the sha256 of every
+                                      regenerated heavy file with HEAVY.SHA256. --skip-heavy limits it to the gate files.
+
+Slices (S0, tests/goldens/slices/<slice>/): LA1 cholesky, LA2 lu (+ solve, logdet), LA3 qr, LA4 gls, LA5a eigen (symmetric).
+Gate = every case with all dims <= 12 and every input integer < 2^(10^4+64) in size; heavy = the rest
+(n = 16..32, 2^+-10^6 scales). case_ids are fixed strings; the random streams are drawn in the same order for
+gate and heavy, so splitting never changes a row. The generator is a pure exact oracle and never calls zenith-bound.
 
 All arithmetic is exact (fractions.Fraction / sympy QQ / Python ints). Irrational
 outputs are emitted as rigorous dyadic enclosures computed by exact integer square
@@ -29,7 +38,48 @@ SEED = 20261024
 BITS = 256          # default enclosure width (relative)
 LOG_BITS = (256, 4096)
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-OUT = os.path.join(ROOT, "tests", "goldens")
+SLICES = os.path.join(ROOT, "tests", "goldens", "slices")
+SLICE_OF = {"cholesky": "cholesky", "lu": "lu", "solve": "lu", "logdet": "lu", "qr": "qr", "gls": "gls", "eig": "eigen"}
+SLICE_ID = {"cholesky": "LA1", "lu": "LA2", "qr": "LA3", "gls": "LA4", "eigen": "LA5a"}
+GATE_MAX_DIM = 12
+GATE_EXTRA_BITS = ()   # extra Cholesky/QR enclosure widths on the gate tier only
+GATE_MAX_BITS = 10 ** 4 + 64
+
+def is_heavy(*mats):
+    for M in mats:
+        if not M: continue
+        if isinstance(M[0], list):
+            if len(M) > GATE_MAX_DIM or len(M[0]) > GATE_MAX_DIM: return True
+            vals = flat(M)
+        else:
+            if len(M) > GATE_MAX_DIM: return True
+            vals = M
+        if any(F(v).numerator.bit_length() > GATE_MAX_BITS or F(v).denominator.bit_length() > GATE_MAX_BITS for v in vals): return True
+    return False
+
+def err(variant, detail):
+    """Refusal tail: ERR <zb BoundError variant> <detail> (Spence/Harper 2026-10-24)."""
+    assert variant in ("NotPositiveDefinite", "Singular", "DimensionMismatch", "NotSymmetric")
+    return ["ERR", variant, detail]
+
+def ldl_err(kind, who):
+    return err("NotSymmetric", who) if kind == "not_symmetric" else err("NotPositiveDefinite", who)
+
+def parse_dims(t):
+    if "x" in t:
+        m, n = t.split("x"); return int(m), int(n)
+    return int(t), int(t)
+
+def check_fields(text, expect):
+    """Assert a row's field count against its dims. expect(m, n, outs_tail) -> (n_inputs, allowed output counts)."""
+    f = text.split(" ")
+    assert all(f), "empty field / double space"
+    m, n = parse_dims(f[1])
+    nin, nouts = expect(m, n)
+    tail = len(f) - 2 - nin
+    ok = (f[2 + nin] == "ERR" and tail == 3) or (tail in nouts and "ERR" not in f)
+    assert ok, (f[0], len(f), nin, nouts)
+
 
 # ---------------------------------------------------------------- formatting
 def q(x):
@@ -308,64 +358,74 @@ def spd_corpus():
 def dims_sq(A): return str(len(A))
 def dims_mn(A): return f"{len(A)}x{len(A[0])}"
 
-def row(cid, dims, A, outs): return " ".join([cid, dims] + [q(x) for x in flat(A)] + outs)
+def row(cid, dims, A, outs, heavy=None):
+    return (" ".join([cid, dims] + [q(x) for x in flat(A)] + outs), is_heavy(A) if heavy is None else heavy)
 
 def gen_lu():
     rows = []
-    for cid, A in square_corpus("lu"):
+    for cid, A in square_corpus("lu") + [("refuse.rect_2x3", [[F(1), F(2), F(3)], [F(4), F(5), F(6)]]), ("refuse.rect_3x1", [[F(1)], [F(0)], [F(-2)]])]:
+        if len(A) != len(A[0]):
+            rows.append(row("lu." + cid, dims_mn(A), A, err("DimensionMismatch", "rectangular"))); continue
         perm, L, U = lu_pp(A)
         rows.append(row("lu." + cid, dims_sq(A), A, [str(p) for p in perm] + [q(x) for x in flat(L)] + [q(x) for x in flat(U)]))
     hdr = ["op: lu",
            "canonical: PA = LU, partial pivoting. At step k pivot row p = argmax_{i>=k} |U[i][k]|, ties -> smallest i; rows k,p of U and of L[:, :k] swapped. If the pivot column is all zero, no swap and no elimination (L column k stays e_k). L unit lower triangular, U upper triangular (zero/singular rows allowed). Exact rationals.",
            "perm: n integers, 0-based; perm[i] = index of the row of A placed at row i of PA",
-           "columns: case_id dims(n) A[n*n] perm[n] L[n*n] U[n*n]"]
-    return hdr, rows
+           "refusals: non-square A -> 'ERR DimensionMismatch rectangular' (rectangular LU is out of scope); singular A is NOT refused (U has zero pivots).",
+           "columns: case_id dims(n | mxn) A[m*n] (perm[n] L[n*n] U[n*n] | ERR DimensionMismatch rectangular)"]
+    expect = lambda m, n: (m * n, {n + 2 * n * n})
+    return hdr, rows, expect
 
 def gen_solve():
     rows = []
     for cid, A in square_corpus("solve"):
         n = len(A); b = [F(1)] * n if cid.startswith("hilbert") else [F(i + 1, 2) - 1 for i in range(n)]
         x = solve(A, b)
-        outs = ["ERR", "singular"] if x is None else [q(v) for v in x]
-        rows.append(" ".join(["solve." + cid, str(n)] + [q(v) for v in flat(A)] + [q(v) for v in b] + outs))
+        outs = err("Singular", "singular") if x is None else [q(v) for v in x]
+        rows.append((" ".join(["solve." + cid, str(n)] + [q(v) for v in flat(A)] + [q(v) for v in b] + outs), is_heavy(A, b)))
     hdr = ["op: solve",
-           "canonical: unique x with A x = b, exact rationals. b = ones for Hilbert cases, b[i] = (i+1)/2 - 1 otherwise. Any singular A (det = 0) -> refusal row 'ERR singular'.",
-           "columns: case_id dims(n) A[n*n] b[n] (x[n] | ERR singular)"]
-    return hdr, rows
+           "canonical: unique x with A x = b, exact rationals. b = ones for Hilbert cases, b[i] = (i+1)/2 - 1 otherwise. Any singular A (det = 0) -> refusal 'ERR Singular singular'.",
+           "columns: case_id dims(n) A[n*n] b[n] (x[n] | ERR Singular singular)"]
+    expect = lambda m, n: (n * n + n, {n})
+    return hdr, rows, expect
 
 def gen_logdet():
     rows = []
     for cid, A in square_corpus("logdet"):
         d = det(A)
-        if d == 0: outs = ["ERR", "singular"]
+        if d == 0: outs = err("Singular", "singular")
         else:
             outs = [str(1 if d > 0 else -1), q(d)]
             for b in LOG_BITS: outs.append(pair(*enclose_log(d, b)))
         rows.append(row("logdet." + cid, dims_sq(A), A, outs))
     hdr = ["op: logdet",
-           "canonical: sign = sign(det A) in {1,-1}; det = exact rational determinant; logabsdet = ln|det A| (irrational unless det = +-1). det = 0 -> refusal row 'ERR singular'.",
+           "canonical: sign = sign(det A) in {1,-1}; det = exact rational determinant; logabsdet = ln|det A| (irrational unless det = +-1). det = 0 -> refusal 'ERR Singular singular'.",
            "exact form: ln(det) with det the exact rational in the row (sympy: log(Rational(det))).",
            "enclosure: lo_256 hi_256 lo_4096 hi_4096; each pair encloses ln|det|; grid 2^e with e = floor(log2 max(|lo_raw|,|hi_raw|)) - bits + 1; computed with mpmath.iv.log at bits+64 and checked to contain an independent mpmath.iv enclosure at 2*bits+64.",
-           "columns: case_id dims(n) A[n*n] (sign det lo256 hi256 lo4096 hi4096 | ERR singular)"]
-    return hdr, rows
+           "columns: case_id dims(n) A[n*n] (sign det lo256 hi256 lo4096 hi4096 | ERR Singular singular)"]
+    expect = lambda m, n: (n * n, {6})
+    return hdr, rows, expect
 
 def gen_cholesky():
     rows = []
     for cid, A in spd_corpus():
-        r = ldl(A); n = len(A)
-        if isinstance(r, str): outs = ["ERR", r]
+        r = ldl(A); n = len(A); heavy = is_heavy(A)
+        if isinstance(r, str): outs = ldl_err(r, "a")
         else:
             L, D = r; outs = [q(x) for x in flat(L)] + [q(x) for x in D]
-            for i in range(n):
-                for j in range(n):
-                    outs.append(pair(*enclose_csqrt(L[i][j], D[j])) if j <= i else "0*2^0 0*2^0")
-        rows.append(row("cholesky." + cid, dims_sq(A), A, outs))
+            for b in ((BITS,) if heavy else (BITS,) + GATE_EXTRA_BITS):
+                for i in range(n):
+                    for j in range(n):
+                        outs.append(pair(*enclose_csqrt(L[i][j], D[j], b)) if j <= i else "0*2^0 0*2^0")
+        rows.append(row("cholesky." + cid, dims_sq(A), A, outs, heavy))
     hdr = ["op: cholesky",
            "canonical: A = G G^T with G lower triangular and diag(G) > 0 (unique for SPD A). Exact rational companion: A = L D L^T, L unit lower triangular, D diagonal > 0, computed without pivoting; G[i][j] = L[i][j]*sqrt(D[j]) (this is the exact algebraic form).",
-           "refusals: 'ERR not_symmetric' if A != A^T; 'ERR not_spd' if some pivot D[j] <= 0 (indefinite, negative, singular PSD, zero).",
-           "enclosure: G[n*n] as lo hi pairs, row-major, upper triangle emitted as exact 0*2^0 0*2^0; grid 2^e with e = floor(log2(G^2))//2 - 255, lo/hi from exact integer isqrt; lo == hi iff exactly representable.",
-           "columns: case_id dims(n) A[n*n] (L[n*n] D[n] G_lohi[2*n*n] | ERR kind)"]
-    return hdr, rows
+           "refusals: 'ERR NotSymmetric a' if A != A^T; 'ERR NotPositiveDefinite a' if some pivot D[j] <= 0 (indefinite, negative, singular PSD, zero).",
+           "enclosure: G[n*n] as lo hi pairs, row-major, upper triangle emitted as exact 0*2^0 0*2^0; at bits b the grid is 2^e with e = floor(log2(G^2))//2 - b + 1, lo/hi from exact integer isqrt; lo == hi iff exactly representable. Gate file: b in " + str((BITS,) + GATE_EXTRA_BITS) + " (one block per b, in order); heavy file: b = 256 only.",
+           "columns (gate): case_id dims(n) A[n*n] (L[n*n] D[n] " + " ".join(f"G_lohi{b}[2*n*n]" for b in (BITS,) + GATE_EXTRA_BITS) + " | ERR variant detail)",
+           "columns (heavy): case_id dims(n) A[n*n] (L[n*n] D[n] G_lohi256[2*n*n] | ERR variant detail)"]
+    expect = lambda m, n: (n * n, {n * n + n + 2 * n * n, n * n + n + 4 * n * n})
+    return hdr, rows, expect
 
 def gen_qr():
     rows = []
@@ -382,23 +442,26 @@ def gen_qr():
           ("refuse.dupcol_4x2", [[F(i), F(i)] for i in range(1, 5)]), ("refuse.wide2x3", [[F(1), F(0), F(0)], [F(0), F(1), F(0)]])]
     for cid, A in C:
         m, n = len(A), len(A[0])
-        g = None if m < n else gram_schmidt(A)
-        if g is None: outs = ["ERR", "wide" if m < n else "rank_deficient"]
+        g = None if m < n else gram_schmidt(A); heavy = is_heavy(A)
+        if g is None: outs = err("DimensionMismatch", "wide") if m < n else err("Singular", "rank_deficient")
         else:
             Qt, Rt, d = g
             outs = [q(x) for x in flat(Qt)] + [q(x) for x in flat(Rt)] + [q(x) for x in d]
-            for i in range(m):
-                for j in range(n): outs.append(pair(*enclose_csqrt(Qt[i][j] / d[j], d[j])))
-            for i in range(n):
-                for j in range(n): outs.append(pair(*enclose_csqrt(Rt[i][j], d[i])))
-        rows.append(row("qr." + cid, dims_mn(A), A, outs))
+            for b in ((BITS,) if heavy else (BITS,) + GATE_EXTRA_BITS):
+                for i in range(m):
+                    for j in range(n): outs.append(pair(*enclose_csqrt(Qt[i][j] / d[j], d[j], b)))
+                for i in range(n):
+                    for j in range(n): outs.append(pair(*enclose_csqrt(Rt[i][j], d[i], b)))
+        rows.append(row("qr." + cid, dims_mn(A), A, outs, heavy))
     hdr = ["op: qr",
            "canonical: thin QR, A (m x n, m >= n, full column rank) = Q R, Q m x n with Q^T Q = I, R n x n upper triangular with diag(R) > 0 (unique).",
            "exact rational companion (exact algebraic form): A = Qt Rt with Qt orthogonal columns (Qt^T Qt = diag(d)), Rt unit upper triangular, d[j] = ||Qt[:,j]||^2; Q[i][j] = Qt[i][j]/sqrt(d[j]), R[i][j] = Rt[i][j]*sqrt(d[i]).",
-           "refusals: 'ERR rank_deficient' if some d[j] = 0; 'ERR wide' if m < n.",
-           "enclosure: Q (m*n) then R (n*n) as lo hi pairs, row-major; grid 2^e with e = floor(log2(x^2))//2 - 255, exact integer isqrt.",
-           "columns: case_id dims(mxn) A[m*n] (Qt[m*n] Rt[n*n] d[n] Q_lohi[2*m*n] R_lohi[2*n*n] | ERR kind)"]
-    return hdr, rows
+           "refusals: 'ERR Singular rank_deficient' if some d[j] = 0; 'ERR DimensionMismatch wide' if m < n.",
+           "enclosure: per bit width b, Q (m*n) then R (n*n) as lo hi pairs, row-major; grid 2^e with e = floor(log2(x^2))//2 - b + 1, exact integer isqrt. Gate file: b in " + str((BITS,) + GATE_EXTRA_BITS) + " (one Q,R block per b, in order); heavy file: b = 256 only.",
+           "columns (gate): case_id dims(mxn) A[m*n] (Qt[m*n] Rt[n*n] d[n] " + " ".join(f"Q_lohi{b}[2*m*n] R_lohi{b}[2*n*n]" for b in (BITS,) + GATE_EXTRA_BITS) + " | ERR variant detail)",
+           "columns (heavy): case_id dims(mxn) A[m*n] (Qt[m*n] Rt[n*n] d[n] Q_lohi256[2*m*n] R_lohi256[2*n*n] | ERR variant detail)"]
+    expect = lambda m, n: (m * n, {m * n + n * n + n + k * (m * n + n * n) for k in (2, 4)})
+    return hdr, rows, expect
 
 def gen_gls():
     rows = []
@@ -422,12 +485,12 @@ def gen_gls():
     for cid, Xm, S, y in C:
         m, p = len(Xm), len(Xm[0])
         r = ldl(S)
-        if isinstance(r, str): outs = ["ERR", "sigma_" + r]
+        if isinstance(r, str): outs = ldl_err(r, "sigma")
         else:
             SiX = tr([solve(S, col) for col in tr(Xm)])
             Siy = solve(S, y)
             Mx = mm(tr(Xm), SiX)
-            if det(Mx) == 0: outs = ["ERR", "rank_deficient"]
+            if det(Mx) == 0: outs = err("Singular", "rank_deficient")
             else:
                 beta = solve(Mx, [sum((Xm[i][k] * Siy[i] for i in range(m)), F(0)) for k in range(p)])
                 cov = tr([solve(Mx, [F(int(i == j)) for i in range(p)]) for j in range(p)])
@@ -437,12 +500,13 @@ def gen_gls():
                 # normal equations check
                 assert all(sum((Xm[i][k] * rs[i] for i in range(m)), F(0)) == 0 for k in range(p))
                 outs = [q(v) for v in beta] + [q(v) for v in flat(cov)] + [q(rss)]
-        rows.append(" ".join(["gls." + cid, f"{m}x{p}"] + [q(v) for v in flat(Xm)] + [q(v) for v in flat(S)] + [q(v) for v in y] + outs))
+        rows.append((" ".join(["gls." + cid, f"{m}x{p}"] + [q(v) for v in flat(Xm)] + [q(v) for v in flat(S)] + [q(v) for v in y] + outs), is_heavy(Xm, S, y)))
     hdr = ["op: gls",
            "canonical: generalized least squares, beta = (X^T S^-1 X)^-1 X^T S^-1 y; cov = (X^T S^-1 X)^-1; rss = r^T S^-1 r with r = y - X beta. All exact rationals. Checked: X^T S^-1 r = 0.",
-           "refusals: 'ERR sigma_not_spd' / 'ERR sigma_not_symmetric' (S fails LDL^T, see la_cholesky); 'ERR rank_deficient' if X^T S^-1 X singular.",
-           "columns: case_id dims(mxp) X[m*p] S[m*m] y[m] (beta[p] cov[p*p] rss | ERR kind)"]
-    return hdr, rows
+           "refusals: 'ERR NotPositiveDefinite sigma' / 'ERR NotSymmetric sigma' (the covariance S fails LDL^T, see la_cholesky); 'ERR Singular rank_deficient' if X^T S^-1 X is singular.",
+           "columns: case_id dims(mxp) X[m*p] S[m*m] y[m] (beta[p] cov[p*p] rss | ERR variant detail)"]
+    expect = lambda m, n: (m * n + m * m + m, {n + n * n + 1})
+    return hdr, rows, expect
 
 def gen_eig():
     rows = []
@@ -457,7 +521,7 @@ def gen_eig():
     C += [("refuse.nonsym2", [[F(0), F(1)], [F(-1), F(0)]])]
     for cid, A in C:
         n = len(A)
-        if not issym(A): outs = ["ERR", "not_symmetric"]
+        if not issym(A): outs = err("NotSymmetric", "a")
         else:
             coeffs, ev = eig_exact(A)
             outs = [q(c) for c in coeffs] + [f"{e[1]} {pair(e[2], e[3])}" for e in ev]
@@ -466,43 +530,92 @@ def gen_eig():
            "canonical: real symmetric A only; eigenvalues listed ascending with algebraic multiplicity. charpoly = det(xI - A), monic, n+1 exact rational coefficients, highest degree first.",
            "exact form: each eigenvalue is the unique root of the charpoly in [lo, hi] at its ascending index (sympy CRootOf of the irreducible factor); token 'p/q' if the eigenvalue is rational, else 'alg'.",
            "enclosure: lo hi per eigenvalue; grid 2^e, e = floor(log2 |lambda|) - 255; from sympy exact rational root isolation/refinement (Poly.intervals/refine_root, exact QQ) then outward rounding; checked with exact Poly.count_roots(lo, hi) == 1 on the irreducible factor. Zero/dyadic rational eigenvalues have lo == hi.",
-           "refusals: 'ERR not_symmetric'.",
-           "columns: case_id dims(n) A[n*n] (charpoly[n+1] {exact lo hi}[n] | ERR not_symmetric)"]
-    return hdr, rows
+           "scope: slice LA5a (symmetric). General nonsymmetric eigenvalues are LA5b, a separate later file; here a nonsymmetric A is refused.",
+           "refusals: 'ERR NotSymmetric a'.",
+           "columns: case_id dims(n) A[n*n] (charpoly[n+1] {exact lo hi}[n] | ERR NotSymmetric a)"]
+    expect = lambda m, n: (n * n, {n + 1 + 3 * n})
+    return hdr, rows, expect
 
 OPS = [("lu", gen_lu), ("cholesky", gen_cholesky), ("qr", gen_qr), ("solve", gen_solve), ("gls", gen_gls), ("logdet", gen_logdet), ("eig", gen_eig)]
 
-def render():
+def file_bytes(name, tier, hdr, rows):
+    h = [f"generator: {GEN}", f"sympy: {SYMPY_PIN}", f"mpmath: {MPMATH_PIN}", f"seed: {SEED} (python random.Random('{SEED}:{name}'))",
+         f"slice: {SLICE_ID[SLICE_OF[name]]} ({SLICE_OF[name]})", f"tier: {tier} (gate: all dims <= {GATE_MAX_DIM} and input integers <= {GATE_MAX_BITS} bits; heavy: the rest, checked by sha256 at merge points, file not committed)",
+         f"rows: {len(rows)}"] + [l for l in hdr if not l.startswith("columns (") or l.startswith(f"columns ({tier})")] + [
+         "numbers: every exact entry is p/q in lowest terms, q > 0, arbitrary-size signed integers; dyadics are m*2^e with m odd (or 0*2^0); fields are single-space separated; no floats.",
+         "case_id: <op>.<family>.<variant>, stable across regenerations; inputs are always listed before outputs; dims gives every matrix size, so a row's field count is fixed by dims; refusal rows end in 'ERR <variant> <detail>' (variant = zb BoundError variant)."]
+    return ("".join(f"# {l}\n" for l in h) + "".join(r + "\n" for r in rows)).encode("utf-8")
+
+def sums_header(slice_dir):
+    p = os.path.join(slice_dir, "SHA256SUMS")
+    if os.path.exists(p):
+        return "".join(l for l in open(p, encoding="utf-8") if l.startswith("#"))
+    return ""
+
+HEAVY_HDR = ("# sha256 of heavy-tier LA golds (not committed; rebuilt deterministically by scripts/gen_la_goldens.py --heavy DIR,\n"
+             "# verified by scripts/gen_la_goldens.py --check, step 'heavy' at merge points). sha256sum format.\n")
+
+def render(skip_heavy=False):
+    """Returns {slice: {"gate": {fname: bytes}, "heavy": {fname: bytes}}}."""
     global rng
-    files = {}
+    out = {}
     for name, fn in OPS:
         rng = random.Random(f"{SEED}:{name}")   # per-op stream: ops are independent
-        hdr, rows = fn()
-        h = [f"generator: {GEN}", f"sympy: {SYMPY_PIN}", f"mpmath: {MPMATH_PIN}", f"seed: {SEED} (python random.Random('{SEED}:{name}'))", f"rows: {len(rows)}"] + hdr + [
-             "numbers: every exact entry is p/q in lowest terms, q > 0, arbitrary-size signed integers; dyadics are m*2^e with m odd (or 0*2^0); fields are single-space separated; no floats.",
-             "case_id: <op>.<family>.<variant>; inputs are always listed before outputs; refusal rows end in 'ERR <kind>'."]
-        files[f"la_{name}.txt"] = ("".join(f"# {l}\n" for l in h) + "".join(r + "\n" for r in rows)).encode("utf-8")
-    sums = "".join(f"{hashlib.sha256(files[k]).hexdigest()}  {k}\n" for k in sorted(files))
-    files["SHA256SUMS"] = sums.encode()
-    return files
+        hdr, rows, expect = fn()
+        for text, _ in rows: check_fields(text, expect)
+        ids = [t.split(" ", 1)[0] for t, _ in rows]; assert len(ids) == len(set(ids)), "duplicate case_id"
+        sl = out.setdefault(SLICE_OF[name], {"gate": {}, "heavy": {}})
+        sl["gate"][f"la_{name}.txt"] = file_bytes(name, "gate", hdr, [t for t, h in rows if not h])
+        if not skip_heavy:
+            sl["heavy"][f"la_{name}_heavy.txt"] = file_bytes(name, "heavy", hdr, [t for t, h in rows if h])
+    return out
+
+def sha(b): return hashlib.sha256(b).hexdigest()
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--check", action="store_true"); a = ap.parse_args()
-    files = render()
-    if a.check:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--check", nargs="?", const="", default=None, metavar="DIR")
+    ap.add_argument("--heavy", metavar="DIR"); ap.add_argument("--skip-heavy", action="store_true")
+    a = ap.parse_args()
+    out = render(skip_heavy=a.skip_heavy and a.check is not None)
+    if a.check is not None:
         bad = 0
-        for k, v in files.items():
-            p = os.path.join(OUT, k)
-            cur = open(p, "rb").read() if os.path.exists(p) else b""
-            if cur != v:
-                bad += 1; print(f"MISMATCH {k}")
-                if len(v) < 2_000_000:
-                    sys.stdout.writelines(list(difflib.unified_diff(cur.decode(errors="replace").splitlines(True), v.decode().splitlines(True), k, k + " (regen)"))[:40])
-        print("check:", "OK" if not bad else f"FAIL ({bad} files)"); sys.exit(1 if bad else 0)
-    os.makedirs(OUT, exist_ok=True)
-    for k, v in files.items():
-        with open(os.path.join(OUT, k), "wb") as f: f.write(v)
-        print(f"wrote {k} ({len(v)} bytes)")
+        for sl, t in sorted(out.items()):
+            d = os.path.join(SLICES, sl)
+            for k, v in sorted(t["gate"].items()):
+                if a.check:
+                    os.makedirs(os.path.join(a.check, sl), exist_ok=True)
+                    open(os.path.join(a.check, sl, k), "wb").write(v)
+                p = os.path.join(d, k); cur = open(p, "rb").read() if os.path.exists(p) else None
+                if cur == v: print(f"check: OK {sl}/{k}")
+                else:
+                    bad += 1
+                    if cur is None: print(f"check: MISSING committed {sl}/{k}")
+                    else:
+                        a_l, b_l = cur.split(b"\n"), v.split(b"\n")
+                        n = next((i for i in range(min(len(a_l), len(b_l))) if a_l[i] != b_l[i]), min(len(a_l), len(b_l)))
+                        print(f"check: DIFF {sl}/{k} line {n + 1}")
+            sums = {l.split()[1]: l.split()[0] for l in open(os.path.join(d, "SHA256SUMS")) if l.strip() and not l.startswith("#")}
+            for k, v in t["gate"].items():
+                if sums.get(k) != sha(v): bad += 1; print(f"check: SHA256SUMS mismatch {sl}/{k}")
+            if t["heavy"]:
+                hp = os.path.join(d, "HEAVY.SHA256")
+                hs = {l.split()[1]: l.split()[0] for l in open(hp) if l.strip() and not l.startswith("#")} if os.path.exists(hp) else {}
+                for k, v in sorted(t["heavy"].items()):
+                    if hs.get(k) == sha(v): print(f"check: OK heavy {sl}/{k} {sha(v)[:16]}")
+                    else: bad += 1; print(f"check: HEAVY sha256 mismatch {sl}/{k}")
+        print("check:", "OK" if not bad else f"FAIL ({bad})"); sys.exit(1 if bad else 0)
+    for sl, t in sorted(out.items()):
+        d = os.path.join(SLICES, sl); os.makedirs(d, exist_ok=True)
+        for k, v in t["gate"].items():
+            open(os.path.join(d, k), "wb").write(v); print(f"wrote {sl}/{k} ({len(v)} bytes)")
+        hdr = sums_header(d)
+        open(os.path.join(d, "SHA256SUMS"), "w", encoding="utf-8", newline="\n").write(hdr + "".join(f"{sha(t['gate'][k])}  {k}\n" for k in sorted(t["gate"])))
+        open(os.path.join(d, "HEAVY.SHA256"), "w", encoding="utf-8", newline="\n").write(HEAVY_HDR + "".join(f"{sha(t['heavy'][k])}  {k}\n" for k in sorted(t["heavy"])))
+        if a.heavy:
+            os.makedirs(os.path.join(a.heavy, sl), exist_ok=True)
+            for k, v in t["heavy"].items():
+                open(os.path.join(a.heavy, sl, k), "wb").write(v); print(f"wrote heavy {a.heavy}/{sl}/{k} ({len(v)} bytes)")
 
 if __name__ == "__main__":
     main()
