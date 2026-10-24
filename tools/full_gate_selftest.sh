@@ -148,8 +148,20 @@ ck; grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -qE 'mutate_slice\
 # (2 ids x 1s + 0s setup; 002-b sleeps 6s) is TIMEOUT and names the id that never ran
 ck; ms env FAKE_MUT=timeout MUTANT_BUDGET_S=1 MUTATE_SETUP_S=0 "$t/mu/tools/mutate_slice.sh" central > "$t/to.out" 2>&1 && miss+="[timeout: exited 0] "
 ck; grep -qE 'TIMEOUT.*never ran: 002-b' "$t/to.out" || miss+="[timeout: no 'TIMEOUT ... never ran: 002-b': $(tail -2 "$t/to.out")] "
+# 9. every other failure the mutate_slice.sh header promises, one fake scenario each: the slice FAILS and names the cause
+dcase() { # dcase SCENARIO ERE
+  ck; ms env FAKE_MUT="$1" "$t/mu/tools/mutate_slice.sh" central > "$t/d-$1.out" 2>&1 && miss+="[$1: mutate_slice exited 0] "
+  ck; grep -qE -- "$2" "$t/d-$1.out" || miss+="[$1: output lacks /$2/: $(tail -2 "$t/d-$1.out")] "
+}
+dcase dup 'FAIL slice central: duplicate result for 002-b'
+dcase unknown 'FAIL slice central: the --only 002-b run printed a result for 999-z'
+dcase floorbad 'FAIL slice central: unreadable floor: killed many'
+dcase listbad 'FAIL mutate.sh --list --slice central failed'
+dcase rc 'FAIL slice central: mutate.sh exited 3'
+# a forged indented 'KILLED 002-b' (suite output that mutate.sh echoes indented) is not a result: 002-b has none
+dcase forged 'FAIL INCOMPLETE: 1 results for 2 ids in slice central; missing: 002-b'
 [ -z "$miss" ] || fail "mutants step did not catch: $miss"
-st_done full_gate 94   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done full_gate 106   # WANT: cases this script runs (tools/selftest_cases.sh)
 # the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 (only the selftest fixture may use a 0 floor), nor the selftest-only
 # MUTANT_TIMEOUT_S / MUTANT_BUDGET_S / MUTATE_SETUP_S / MUTATE_SH, in its --all run or in its --step-timeout computation
 u='env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice\.sh'
