@@ -54,6 +54,28 @@ fn model_rejects_every_perturbed_l0a1_row() -> Result<(), String> {
     Ok(())
 }
 
+/// Every op named in COVERS has golden rows here, so l0a1_rows_match_the_library really runs it (an op whose rows vanished from the
+/// regenerated file would otherwise still read as covered).
+#[test]
+fn l0a1_rows_exercise_every_covered_op() -> Result<(), String> {
+    let all = rows(ROWS)?;
+    for op in [
+        "add_up",
+        "sub_lower",
+        "mul_up",
+        "mul_lower",
+        "div_up",
+        "div_lower",
+        "sqrt_up",
+        "sqrt_lower",
+    ] {
+        if !all.iter().any(|r| r.op == op) {
+            return Err(format!("mag_ops_l0a1.txt has no {} row", op));
+        }
+    }
+    Ok(())
+}
+
 const NB3: [i64; 4] = [i64::MIN + 2, i64::MIN + 3, i64::MAX - 3, i64::MAX - 2];
 
 /// The coverage the L0a-1 remainder asks for; returns the first missing item.
