@@ -159,7 +159,7 @@ cat > "$sh/cargo" <<SHIM
 l=nolock; [ -f Cargo.lock ] && cmp -s Cargo.lock "$r/Cargo.lock" && l=samelock
 printf '%s|%s\n' "\$l" "\$*" >> "$t/shim.log"
 case " \$* " in *" --no-run "*) ;; *" test "*) if [ "\${SHIM_NETFAIL:-}" = 1 ]; then echo "error: failed to get \\\`x\\\` as a dependency: Could not resolve host: index.crates.io"; exit 101; fi ;; esac
-exec "$realcargo" "\$@"
+"$realcargo" "\$@"
 SHIM
 chmod +x "$sh/cargo"; setm m.killed; : > "$t/shim.log"
 out="$(PATH="$sh:$PATH" run)" || fail "lock/offline: killable mutant not accepted: $out"
