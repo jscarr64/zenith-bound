@@ -25,7 +25,8 @@ fn num(v: i64) -> ExactNum {
 
 /// `0.mant * 2^exp` exactly, at `prec` bits (at least 64).
 fn parts(mant: u64, exp: i64, prec: usize) -> Result<ExactNum, String> {
-    ExactNum::from_mag_parts(mant, exp, prec).map_err(|e| format!("from_mag_parts({:#x}, {}): {:?}", mant, exp, e))
+    ExactNum::from_mag_parts(mant, exp, prec)
+        .map_err(|e| format!("from_mag_parts({:#x}, {}): {:?}", mant, exp, e))
 }
 
 /// `2^k` exactly.
@@ -57,13 +58,33 @@ fn inf() -> ExactNum {
 
 #[test]
 fn cmp_exact_num_zero_and_infinity() -> Result<(), String> {
-    want("0 vs 0", Mag::zero().cmp_exact_num(&num(0)), Ordering::Equal)?;
+    want(
+        "0 vs 0",
+        Mag::zero().cmp_exact_num(&num(0)),
+        Ordering::Equal,
+    )?;
     want("0 vs 1", Mag::zero().cmp_exact_num(&num(1)), Ordering::Less)?;
-    want("0 vs -1", Mag::zero().cmp_exact_num(&num(-1)), Ordering::Less)?;
-    want("1 vs 0", mag(TOP, 1)?.cmp_exact_num(&num(0)), Ordering::Greater)?;
+    want(
+        "0 vs -1",
+        Mag::zero().cmp_exact_num(&num(-1)),
+        Ordering::Less,
+    )?;
+    want(
+        "1 vs 0",
+        mag(TOP, 1)?.cmp_exact_num(&num(0)),
+        Ordering::Greater,
+    )?;
     // Infinity is above every finite |x|.
-    want("inf vs 0", Mag::infinity().cmp_exact_num(&num(0)), Ordering::Greater)?;
-    want("inf vs 2^1000", Mag::infinity().cmp_exact_num(&pow2(1000)?), Ordering::Greater)?;
+    want(
+        "inf vs 0",
+        Mag::infinity().cmp_exact_num(&num(0)),
+        Ordering::Greater,
+    )?;
+    want(
+        "inf vs 2^1000",
+        Mag::infinity().cmp_exact_num(&pow2(1000)?),
+        Ordering::Greater,
+    )?;
     // NaN and ±Inf have no finite magnitude: undecided.
     for (w, x) in [("nan", nan()), ("inf", inf())] {
         if Mag::zero().cmp_exact_num(&x).is_some() || mag(TOP, 1)?.cmp_exact_num(&x).is_some() {
@@ -75,20 +96,56 @@ fn cmp_exact_num_zero_and_infinity() -> Result<(), String> {
 
 #[test]
 fn cmp_exact_num_ties_and_sticky() -> Result<(), String> {
-    want("1 vs 1", mag(TOP, 1)?.cmp_exact_num(&num(1)), Ordering::Equal)?;
-    want("1 vs -1", mag(TOP, 1)?.cmp_exact_num(&num(-1)), Ordering::Equal)?;
-    want("3 vs 3", mag(0xC000_0000_0000_0000, 2)?.cmp_exact_num(&num(-3)), Ordering::Equal)?;
+    want(
+        "1 vs 1",
+        mag(TOP, 1)?.cmp_exact_num(&num(1)),
+        Ordering::Equal,
+    )?;
+    want(
+        "1 vs -1",
+        mag(TOP, 1)?.cmp_exact_num(&num(-1)),
+        Ordering::Equal,
+    )?;
+    want(
+        "3 vs 3",
+        mag(0xC000_0000_0000_0000, 2)?.cmp_exact_num(&num(-3)),
+        Ordering::Equal,
+    )?;
     // x = 1 + 2^-100: same top 64 bits as 1, then a sticky bit; just above Mag 1, below Mag 1 + 2^-63.
     let x = num(1).add_full_prec(&pow2(-100)?);
-    want("1 vs 1+2^-100", mag(TOP, 1)?.cmp_exact_num(&x), Ordering::Less)?;
-    want("1+2^-63 vs 1+2^-100", mag(TOP | 1, 1)?.cmp_exact_num(&x), Ordering::Greater)?;
+    want(
+        "1 vs 1+2^-100",
+        mag(TOP, 1)?.cmp_exact_num(&x),
+        Ordering::Less,
+    )?;
+    want(
+        "1+2^-63 vs 1+2^-100",
+        mag(TOP | 1, 1)?.cmp_exact_num(&x),
+        Ordering::Greater,
+    )?;
     // x = 1 - 2^-100 has top bits all ones below exponent 0: Mag(u64::MAX, 0) = 1 - 2^-64 is below it.
     let y = num(1).sub_full_prec(&pow2(-100)?);
-    want("1-2^-64 vs 1-2^-100", mag(u64::MAX, 0)?.cmp_exact_num(&y), Ordering::Less)?;
-    want("1 vs 1-2^-100", mag(TOP, 1)?.cmp_exact_num(&y), Ordering::Greater)?;
+    want(
+        "1-2^-64 vs 1-2^-100",
+        mag(u64::MAX, 0)?.cmp_exact_num(&y),
+        Ordering::Less,
+    )?;
+    want(
+        "1 vs 1-2^-100",
+        mag(TOP, 1)?.cmp_exact_num(&y),
+        Ordering::Greater,
+    )?;
     // Exponent decides before the mantissa.
-    want("2 vs 3", mag(TOP, 2)?.cmp_exact_num(&num(3)), Ordering::Less)?;
-    want("4 vs 3", mag(TOP, 3)?.cmp_exact_num(&num(3)), Ordering::Greater)?;
+    want(
+        "2 vs 3",
+        mag(TOP, 2)?.cmp_exact_num(&num(3)),
+        Ordering::Less,
+    )?;
+    want(
+        "4 vs 3",
+        mag(TOP, 3)?.cmp_exact_num(&num(3)),
+        Ordering::Greater,
+    )?;
     Ok(())
 }
 
@@ -99,18 +156,44 @@ fn cmp_exact_num_radius_outside_the_zf_range() -> Result<(), String> {
     let lo = i64::from(EXPONENT_MIN);
     let big_x = parts(u64::MAX, hi, 64)?; // just below 2^EXPONENT_MAX
     let tiny_x = parts(TOP, lo, 64)?; // 2^(EXPONENT_MIN - 1)
-    for e in [hi.checked_add(1).ok_or("e")?, hi.checked_add(1000).ok_or("e")?, 1i64 << 40, (1i64 << 62) - 1] {
+    for e in [
+        hi.checked_add(1).ok_or("e")?,
+        hi.checked_add(1000).ok_or("e")?,
+        1i64 << 40,
+        (1i64 << 62) - 1,
+    ] {
         let m = mag(TOP, e)?;
         if m.to_exact_num().is_ok() && e > hi {
             return Err(format!("exp {}: expected outside the zf range", e));
         }
-        want(&format!("2^{} vs big", e), m.cmp_exact_num(&big_x), Ordering::Greater)?;
-        want(&format!("2^{} vs -big", e), m.cmp_exact_num(&neg(&big_x)), Ordering::Greater)?;
+        want(
+            &format!("2^{} vs big", e),
+            m.cmp_exact_num(&big_x),
+            Ordering::Greater,
+        )?;
+        want(
+            &format!("2^{} vs -big", e),
+            m.cmp_exact_num(&neg(&big_x)),
+            Ordering::Greater,
+        )?;
     }
-    for e in [lo.checked_sub(1).ok_or("e")?, lo.checked_sub(1000).ok_or("e")?, -(1i64 << 40), 1 - (1i64 << 62)] {
+    for e in [
+        lo.checked_sub(1).ok_or("e")?,
+        lo.checked_sub(1000).ok_or("e")?,
+        -(1i64 << 40),
+        1 - (1i64 << 62),
+    ] {
         let m = mag(u64::MAX, e)?;
-        want(&format!("~2^{} vs tiny", e), m.cmp_exact_num(&tiny_x), Ordering::Less)?;
-        want(&format!("~2^{} vs 0", e), m.cmp_exact_num(&num(0)), Ordering::Greater)?;
+        want(
+            &format!("~2^{} vs tiny", e),
+            m.cmp_exact_num(&tiny_x),
+            Ordering::Less,
+        )?;
+        want(
+            &format!("~2^{} vs 0", e),
+            m.cmp_exact_num(&num(0)),
+            Ordering::Greater,
+        )?;
     }
     Ok(())
 }
@@ -129,7 +212,9 @@ fn rand_num(rng: &mut SplitMix64, e: i64, extra: i64) -> Result<ExactNum, String
 
 /// Oracle: `m` (in the zf range) against `|x|` by zenith-float's exact `abs_cmp`.
 fn oracle_num(m: &Mag, x: &ExactNum) -> Result<Ordering, String> {
-    let r = m.to_exact_num().map_err(|e| format!("oracle to_exact_num: {:?}", e))?;
+    let r = m
+        .to_exact_num()
+        .map_err(|e| format!("oracle to_exact_num: {:?}", e))?;
     let c = r.abs_cmp(x).ok_or("abs_cmp None")?;
     Ok(c.cmp(&0))
 }
@@ -138,7 +223,10 @@ fn oracle_num(m: &Mag, x: &ExactNum) -> Result<Ordering, String> {
 fn cmp_exact_num_matches_the_exact_oracle() -> Result<(), String> {
     let mut rng = SplitMix64::new(0x5200_0001);
     for case in 0..4000 {
-        let e = i64::try_from(rng.below(4001)).map_err(|_| "e")?.checked_sub(2000).ok_or("e")?;
+        let e = i64::try_from(rng.below(4001))
+            .map_err(|_| "e")?
+            .checked_sub(2000)
+            .ok_or("e")?;
         let x = rand_num(&mut rng, e, 70)?;
         // The radius: near |x| (same exponent, mantissa equal / ±1 / random), or one exponent away.
         let (xm, _, xe) = x.top_u64_mantissa_and_sticky().ok_or("x parts")?;
@@ -153,7 +241,11 @@ fn cmp_exact_num_matches_the_exact_oracle() -> Result<(), String> {
         };
         let m = mag(mm, me)?;
         let w = oracle_num(&m, &x)?;
-        want(&format!("case {} pick {} m {:?} x {:?}", case, pick, m, x), m.cmp_exact_num(&x), w)?;
+        want(
+            &format!("case {} pick {} m {:?} x {:?}", case, pick, m, x),
+            m.cmp_exact_num(&x),
+            w,
+        )?;
     }
     Ok(())
 }
@@ -164,26 +256,82 @@ fn cmp_exact_num_matches_the_exact_oracle() -> Result<(), String> {
 fn cmp_exact_diff_rows() -> Result<(), String> {
     let two = mag(TOP, 2)?;
     // |3 - 1| = 2.
-    want("2 vs |3-1|", two.cmp_exact_diff(&num(3), &num(1)), Ordering::Equal)?;
-    want("2 vs |1-3|", two.cmp_exact_diff(&num(1), &num(3)), Ordering::Equal)?;
-    want("2+ vs |3-1|", mag(TOP | 1, 2)?.cmp_exact_diff(&num(3), &num(1)), Ordering::Greater)?;
-    want("2- vs |3-1|", mag(u64::MAX, 1)?.cmp_exact_diff(&num(3), &num(1)), Ordering::Less)?;
+    want(
+        "2 vs |3-1|",
+        two.cmp_exact_diff(&num(3), &num(1)),
+        Ordering::Equal,
+    )?;
+    want(
+        "2 vs |1-3|",
+        two.cmp_exact_diff(&num(1), &num(3)),
+        Ordering::Equal,
+    )?;
+    want(
+        "2+ vs |3-1|",
+        mag(TOP | 1, 2)?.cmp_exact_diff(&num(3), &num(1)),
+        Ordering::Greater,
+    )?;
+    want(
+        "2- vs |3-1|",
+        mag(u64::MAX, 1)?.cmp_exact_diff(&num(3), &num(1)),
+        Ordering::Less,
+    )?;
     // |1 - (-1)| = 2, |-1 - 1| = 2.
-    want("2 vs |1+1|", two.cmp_exact_diff(&num(1), &num(-1)), Ordering::Equal)?;
-    want("2 vs |-1-1|", two.cmp_exact_diff(&num(-1), &num(1)), Ordering::Equal)?;
+    want(
+        "2 vs |1+1|",
+        two.cmp_exact_diff(&num(1), &num(-1)),
+        Ordering::Equal,
+    )?;
+    want(
+        "2 vs |-1-1|",
+        two.cmp_exact_diff(&num(-1), &num(1)),
+        Ordering::Equal,
+    )?;
     // Gap of one binade with cancellation: |2 - (2 - 2^-50)| = 2^-50, far below 1/4.
     let near2 = num(2).sub_full_prec(&pow2(-50)?);
-    want("1/4 vs |2-(2-2^-50)|", mag(TOP, -1)?.cmp_exact_diff(&num(2), &near2), Ordering::Greater)?;
-    want("2^-50 vs |2-(2-2^-50)|", mag(TOP, -49)?.cmp_exact_diff(&near2, &num(2)), Ordering::Equal)?;
+    want(
+        "1/4 vs |2-(2-2^-50)|",
+        mag(TOP, -1)?.cmp_exact_diff(&num(2), &near2),
+        Ordering::Greater,
+    )?;
+    want(
+        "2^-50 vs |2-(2-2^-50)|",
+        mag(TOP, -49)?.cmp_exact_diff(&near2, &num(2)),
+        Ordering::Equal,
+    )?;
     // a == b.
-    want("0 vs |5-5|", Mag::zero().cmp_exact_diff(&num(5), &num(5)), Ordering::Equal)?;
-    want("2 vs |5-5|", two.cmp_exact_diff(&num(5), &num(5)), Ordering::Greater)?;
+    want(
+        "0 vs |5-5|",
+        Mag::zero().cmp_exact_diff(&num(5), &num(5)),
+        Ordering::Equal,
+    )?;
+    want(
+        "2 vs |5-5|",
+        two.cmp_exact_diff(&num(5), &num(5)),
+        Ordering::Greater,
+    )?;
     // A zero operand.
-    want("2 vs |0-2|", two.cmp_exact_diff(&num(0), &num(-2)), Ordering::Equal)?;
-    want("2 vs |3-0|", two.cmp_exact_diff(&num(3), &num(0)), Ordering::Less)?;
-    want("0 vs |0-0|", Mag::zero().cmp_exact_diff(&num(0), &num(0)), Ordering::Equal)?;
+    want(
+        "2 vs |0-2|",
+        two.cmp_exact_diff(&num(0), &num(-2)),
+        Ordering::Equal,
+    )?;
+    want(
+        "2 vs |3-0|",
+        two.cmp_exact_diff(&num(3), &num(0)),
+        Ordering::Less,
+    )?;
+    want(
+        "0 vs |0-0|",
+        Mag::zero().cmp_exact_diff(&num(0), &num(0)),
+        Ordering::Equal,
+    )?;
     // Infinity radius; NaN / Inf operands.
-    want("inf vs |3-1|", Mag::infinity().cmp_exact_diff(&num(3), &num(1)), Ordering::Greater)?;
+    want(
+        "inf vs |3-1|",
+        Mag::infinity().cmp_exact_diff(&num(3), &num(1)),
+        Ordering::Greater,
+    )?;
     for (w, a, b) in [("nan a", nan(), num(1)), ("inf b", num(1), inf())] {
         if two.cmp_exact_diff(&a, &b).is_some() {
             return Err(format!("{}: want None", w));
@@ -198,38 +346,106 @@ fn cmp_exact_diff_huge_exponent_gap() -> Result<(), String> {
     let a = pow2(1000)?;
     let b = pow2(-1000)?;
     let m = mag(TOP, 1001)?; // 2^1000
-    want("2^1000 vs |a-b|", m.cmp_exact_diff(&a, &b), Ordering::Greater)?;
-    want("2^1000 vs |b-a|", m.cmp_exact_diff(&b, &a), Ordering::Greater)?;
-    want("2^1000 vs |a+b|", m.cmp_exact_diff(&a, &neg(&b)), Ordering::Less)?;
-    want("2^1000 vs |-a-b|", m.cmp_exact_diff(&neg(&a), &b), Ordering::Less)?;
+    want(
+        "2^1000 vs |a-b|",
+        m.cmp_exact_diff(&a, &b),
+        Ordering::Greater,
+    )?;
+    want(
+        "2^1000 vs |b-a|",
+        m.cmp_exact_diff(&b, &a),
+        Ordering::Greater,
+    )?;
+    want(
+        "2^1000 vs |a+b|",
+        m.cmp_exact_diff(&a, &neg(&b)),
+        Ordering::Less,
+    )?;
+    want(
+        "2^1000 vs |-a-b|",
+        m.cmp_exact_diff(&neg(&a), &b),
+        Ordering::Less,
+    )?;
     let under = mag(u64::MAX, 1000)?; // 2^1000 (1 - 2^-64)
-    want("2^1000- vs |a-b|", under.cmp_exact_diff(&a, &b), Ordering::Less)?;
+    want(
+        "2^1000- vs |a-b|",
+        under.cmp_exact_diff(&a, &b),
+        Ordering::Less,
+    )?;
     // Deep bits decide: a = 2^1000 + 2^-500 (1501 bits), b = 2^-500, so |a - b| = 2^1000 exactly.
     let deep = a.add_full_prec(&pow2(-500)?);
     let b2 = pow2(-500)?;
-    want("2^1000 vs |deep-b2|", m.cmp_exact_diff(&deep, &b2), Ordering::Equal)?;
-    want("2^1000 vs |deep+b2|", m.cmp_exact_diff(&deep, &neg(&b2)), Ordering::Less)?;
+    want(
+        "2^1000 vs |deep-b2|",
+        m.cmp_exact_diff(&deep, &b2),
+        Ordering::Equal,
+    )?;
+    want(
+        "2^1000 vs |deep+b2|",
+        m.cmp_exact_diff(&deep, &neg(&b2)),
+        Ordering::Less,
+    )?;
     // a = 2^1000 + 2^-500, b = 2^-400: |a - b| = 2^1000 - 2^-400 + 2^-500 < 2^1000.
-    want("2^1000 vs |deep-2^-400|", m.cmp_exact_diff(&deep, &pow2(-400)?), Ordering::Greater)?;
+    want(
+        "2^1000 vs |deep-2^-400|",
+        m.cmp_exact_diff(&deep, &pow2(-400)?),
+        Ordering::Greater,
+    )?;
     // a = 2^1000 + 2^-500, b = 2^-600: |a - b| > 2^1000.
-    want("2^1000 vs |deep-2^-600|", m.cmp_exact_diff(&deep, &pow2(-600)?), Ordering::Less)?;
+    want(
+        "2^1000 vs |deep-2^-600|",
+        m.cmp_exact_diff(&deep, &pow2(-600)?),
+        Ordering::Less,
+    )?;
     // Zero radius against a wide-gap difference (never zero).
-    want("0 vs |a-b|", Mag::zero().cmp_exact_diff(&a, &b), Ordering::Less)?;
+    want(
+        "0 vs |a-b|",
+        Mag::zero().cmp_exact_diff(&a, &b),
+        Ordering::Less,
+    )?;
     // |big| just under 2^1000 plus a same-sign small term crosses 2^1000: a = 2^1000 - 2^700, b = -2^800.
     let under_big = a.sub_full_prec(&pow2(700)?);
-    want("2^1000 vs |(2^1000-2^700)+2^800|", m.cmp_exact_diff(&under_big, &neg(&pow2(800)?)), Ordering::Less)?;
-    want("2^1000 vs |(2^1000-2^700)-2^800|", m.cmp_exact_diff(&under_big, &pow2(800)?), Ordering::Greater)?;
+    want(
+        "2^1000 vs |(2^1000-2^700)+2^800|",
+        m.cmp_exact_diff(&under_big, &neg(&pow2(800)?)),
+        Ordering::Less,
+    )?;
+    want(
+        "2^1000 vs |(2^1000-2^700)-2^800|",
+        m.cmp_exact_diff(&under_big, &pow2(800)?),
+        Ordering::Greater,
+    )?;
     // The whole zf range apart: decided without an exact subtraction across ~2^32 bits.
     let hi = i64::from(EXPONENT_MAX);
     let lo = i64::from(EXPONENT_MIN);
     let big = parts(TOP, hi, 64)?; // 2^(EXPONENT_MAX - 1)
     let tiny = parts(TOP, lo, 64)?;
-    want("2^(max-1) vs |big-tiny|", mag(TOP, hi)?.cmp_exact_diff(&big, &tiny), Ordering::Greater)?;
-    want("2^(max-1) vs |big+tiny|", mag(TOP, hi)?.cmp_exact_diff(&big, &neg(&tiny)), Ordering::Less)?;
+    want(
+        "2^(max-1) vs |big-tiny|",
+        mag(TOP, hi)?.cmp_exact_diff(&big, &tiny),
+        Ordering::Greater,
+    )?;
+    want(
+        "2^(max-1) vs |big+tiny|",
+        mag(TOP, hi)?.cmp_exact_diff(&big, &neg(&tiny)),
+        Ordering::Less,
+    )?;
     // Radius exponents outside the zf range.
-    want("2^(max+5) vs |big-tiny|", mag(TOP, hi.checked_add(5).ok_or("e")?)?.cmp_exact_diff(&big, &tiny), Ordering::Greater)?;
-    want("2^(min-5) vs |tiny-0|", mag(TOP, lo.checked_sub(5).ok_or("e")?)?.cmp_exact_diff(&tiny, &num(0)), Ordering::Less)?;
-    want("2^(min-5) vs |tiny-2tiny|", mag(TOP, lo.checked_sub(5).ok_or("e")?)?.cmp_exact_diff(&tiny, &tiny.add_full_prec(&tiny)), Ordering::Less)?;
+    want(
+        "2^(max+5) vs |big-tiny|",
+        mag(TOP, hi.checked_add(5).ok_or("e")?)?.cmp_exact_diff(&big, &tiny),
+        Ordering::Greater,
+    )?;
+    want(
+        "2^(min-5) vs |tiny-0|",
+        mag(TOP, lo.checked_sub(5).ok_or("e")?)?.cmp_exact_diff(&tiny, &num(0)),
+        Ordering::Less,
+    )?;
+    want(
+        "2^(min-5) vs |tiny-2tiny|",
+        mag(TOP, lo.checked_sub(5).ok_or("e")?)?.cmp_exact_diff(&tiny, &tiny.add_full_prec(&tiny)),
+        Ordering::Less,
+    )?;
     Ok(())
 }
 
@@ -237,12 +453,24 @@ fn cmp_exact_diff_huge_exponent_gap() -> Result<(), String> {
 fn cmp_exact_diff_matches_the_exact_oracle() -> Result<(), String> {
     let mut rng = SplitMix64::new(0x5200_0002);
     for case in 0..4000 {
-        let ea = i64::try_from(rng.below(2001)).map_err(|_| "e")?.checked_sub(1000).ok_or("e")?;
+        let ea = i64::try_from(rng.below(2001))
+            .map_err(|_| "e")?
+            .checked_sub(1000)
+            .ok_or("e")?;
         // Gaps from 0 to 600: both the exact path and the large-gap path.
         let gap = i64::try_from(rng.below(601)).map_err(|_| "g")?;
-        let eb = if rng.below(2) == 0 { ea.checked_sub(gap) } else { ea.checked_add(gap) }.ok_or("eb")?;
+        let eb = if rng.below(2) == 0 {
+            ea.checked_sub(gap)
+        } else {
+            ea.checked_add(gap)
+        }
+        .ok_or("eb")?;
         let a = rand_num(&mut rng, ea, 90)?;
-        let b = if rng.below(8) == 0 { a.add_full_prec(&num(0)) } else { rand_num(&mut rng, eb, 90)? };
+        let b = if rng.below(8) == 0 {
+            a.add_full_prec(&num(0))
+        } else {
+            rand_num(&mut rng, eb, 90)?
+        };
         let d = a.sub_full_prec(&b);
         let m = match d.top_u64_mantissa_and_sticky() {
             None => mag(rng.next_u64() | TOP, ea)?,
@@ -255,7 +483,11 @@ fn cmp_exact_diff_matches_the_exact_oracle() -> Result<(), String> {
             },
         };
         let w = oracle_num(&m, &d)?;
-        want(&format!("case {} gap {} m {:?}", case, gap, m), m.cmp_exact_diff(&a, &b), w)?;
+        want(
+            &format!("case {} gap {} m {:?}", case, gap, m),
+            m.cmp_exact_diff(&a, &b),
+            w,
+        )?;
     }
     Ok(())
 }
@@ -280,9 +512,16 @@ fn bridge_export_round_trip_pending_r14() -> Result<(), String> {
 fn from_to_exact_num_sets_and_p9() -> Result<(), String> {
     // Carry at all ones: 1 - 2^-100 rounds up to exactly 1 = Mag(TOP, 1), down to Mag(u64::MAX, 0).
     let y = num(1).sub_full_prec(&pow2(-100)?);
-    want("up(1-2^-100) == 1", Mag::from_exact_num(&y).cmp_exact_num(&num(1)), Ordering::Equal)?;
+    want(
+        "up(1-2^-100) == 1",
+        Mag::from_exact_num(&y).cmp_exact_num(&num(1)),
+        Ordering::Equal,
+    )?;
     if Mag::from_exact_num_lower(&y) != mag(u64::MAX, 0)? {
-        return Err(format!("lower(1-2^-100) = {:?}", Mag::from_exact_num_lower(&y)));
+        return Err(format!(
+            "lower(1-2^-100) = {:?}",
+            Mag::from_exact_num_lower(&y)
+        ));
     }
     // A radius beyond zf's i32 exponent is an error, never a wrap.
     let hi = i64::from(EXPONENT_MAX);
@@ -294,16 +533,28 @@ fn from_to_exact_num_sets_and_p9() -> Result<(), String> {
     // P9: from_exact_num(x) >= |x| >= from_exact_num_lower(x), and the round trip contains the original.
     let mut rng = SplitMix64::new(0x5200_0009);
     for case in 0..3000 {
-        let e = i64::try_from(rng.below(4001)).map_err(|_| "e")?.checked_sub(2000).ok_or("e")?;
+        let e = i64::try_from(rng.below(4001))
+            .map_err(|_| "e")?
+            .checked_sub(2000)
+            .ok_or("e")?;
         let x = rand_num(&mut rng, e, 80)?;
         let up = Mag::from_exact_num(&x);
         let down = Mag::from_exact_num_lower(&x);
         let c_up = up.cmp_exact_num(&x);
         let c_down = down.cmp_exact_num(&x);
-        if c_up == Some(Ordering::Less) || c_up.is_none() || c_down == Some(Ordering::Greater) || c_down.is_none() {
-            return Err(format!("case {}: up {:?} down {:?} for {:?}", case, c_up, c_down, x));
+        if c_up == Some(Ordering::Less)
+            || c_up.is_none()
+            || c_down == Some(Ordering::Greater)
+            || c_down.is_none()
+        {
+            return Err(format!(
+                "case {}: up {:?} down {:?} for {:?}",
+                case, c_up, c_down, x
+            ));
         }
-        let back = up.to_exact_num().map_err(|e| format!("case {}: {:?}", case, e))?;
+        let back = up
+            .to_exact_num()
+            .map_err(|e| format!("case {}: {:?}", case, e))?;
         if back.abs_cmp(&x).ok_or("abs_cmp")? < 0 {
             return Err(format!("case {}: round trip lost containment", case));
         }

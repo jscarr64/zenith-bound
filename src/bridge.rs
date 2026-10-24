@@ -1,5 +1,5 @@
 //! Slice S2: The `Mag` to `ExactNum` bridge: exact comparisons of a `Mag` radius against zenith-float values that never
-//! build the radius as an `ExactNum` unless it lies within a factor 4 of the value (CONTRACT 4.2, 10.2c, 15.2, 16.S2),
+//! build the radius as an `ExactNum` unless it lies within a factor 2 of the value (CONTRACT 4.2, 10.2c, 15.2, 16.S2),
 //! and (pending zenith-float R14, 16.S2.6) the remaining conversions.
 //!
 //! Owner: slice S2 (Spence). Only that slice edits this file.
@@ -11,7 +11,8 @@ use zenith_float_num::ExactNum;
 use crate::mag::Mag;
 
 /// Operands whose exponents differ by at most this are subtracted exactly; wider gaps are decided by exponents first
-/// (16.S2.3). Any value of at least 2 is correct; it only trades exact-subtraction cost for case analysis.
+/// (16.S2.3). Any value of at least 66 is correct (the wide-gap cutoffs need `|small| < 2^(e - 65)`); it only trades
+/// exact-subtraction cost for case analysis.
 const EXACT_GAP: i64 = 128;
 
 /// The sign of `x` as an ordering against zero (`Less` negative, `Equal` zero, `Greater` positive).
@@ -27,7 +28,11 @@ fn sign(x: &ExactNum) -> Ordering {
 
 /// `s` if `keep`, otherwise its opposite.
 fn signed(s: Ordering, keep: bool) -> Ordering {
-    if keep { s } else { s.reverse() }
+    if keep {
+        s
+    } else {
+        s.reverse()
+    }
 }
 
 fn not_finite(x: &ExactNum) -> bool {
@@ -53,19 +58,27 @@ impl Mag {
             return Some(Ordering::Greater);
         }
         if x.is_zero() {
-            return Some(if self.is_zero() { Ordering::Equal } else { Ordering::Greater });
+            return Some(if self.is_zero() {
+                Ordering::Equal
+            } else {
+                Ordering::Greater
+            });
         }
         let (me, mm) = match (self.exp(), self.mant()) {
             (Some(e), Some(m)) => (e, m),
             (None, _) | (_, None) => return Some(Ordering::Less),
         };
         let (xm, sticky, xe) = x.top_u64_mantissa_and_sticky()?;
-        let tail = if sticky { Ordering::Less } else { Ordering::Equal };
+        let tail = if sticky {
+            Ordering::Less
+        } else {
+            Ordering::Equal
+        };
         Some(me.cmp(&xe).then(mm.cmp(&xm)).then(tail))
     }
 
     /// `self` against `|a - b|`, decided exactly (16.S2.2). Operands within [`EXACT_GAP`] binades are subtracted
-    /// exactly; otherwise the exponents decide unless the radius is within a factor 4 of the larger operand, and then
+    /// exactly; otherwise the exponents decide unless the radius is within a factor 2 of the larger operand, and then
     /// only the exact `|big| - self` and one short exact sum are formed (16.S2.3). `None` when an operand is NaN or
     /// infinite, or when zenith-float reports an exact operation inexact.
     pub fn cmp_exact_diff(&self, a: &ExactNum, b: &ExactNum) -> Option<Ordering> {
@@ -80,7 +93,11 @@ impl Mag {
             (None, _) => return self.cmp_exact_num(b),
             (_, None) => return self.cmp_exact_num(a),
         };
-        let gap = if ea >= eb { ea.checked_sub(eb)? } else { eb.checked_sub(ea)? };
+        let gap = if ea >= eb {
+            ea.checked_sub(eb)?
+        } else {
+            eb.checked_sub(ea)?
+        };
         if gap <= EXACT_GAP {
             let d = a.sub_full_prec(b);
             if d.inexact() {
@@ -96,12 +113,13 @@ impl Mag {
         let (big, small) = if a_big { (a, b) } else { (b, a) };
         let e = exp_of(big)?;
         let es = exp_of(small)?;
-        // |a - b| lies in (2^(e-2), 2^(e+1)) since |small| < 2^es <= 2^(e - EXACT_GAP).
+        // |a - b| lies in (2^(e-1) - 2^(e-65), 2^e + 2^(e-65)) since |small| < 2^es <= 2^(e - EXACT_GAP); a radius below
+        // 2^(e-1) has mant <= u64::MAX so it is at most 2^(e-1) - 2^(e-65).
         let me = match self.exp() {
             Some(me) => me,
             None => return Some(Ordering::Less),
         };
-        if me <= e.checked_sub(2)? {
+        if me <= e.checked_sub(1)? {
             return Some(Ordering::Less);
         }
         if me >= e.checked_add(2)? {
@@ -112,13 +130,21 @@ impl Mag {
         let big_neg = big.is_negative();
         let tb_pos = big_neg != a_big;
         // u = tb - sb m, kept as u = (u_pos ? +1 : -1) * ur with ur formed from big and m.
-        let (ur, u_keep) = if big_neg { (big.add_full_prec(&m), a_big) } else { (big.sub_full_prec(&m), a_big) };
+        let (ur, u_keep) = if big_neg {
+            (big.add_full_prec(&m), a_big)
+        } else {
+            (big.sub_full_prec(&m), a_big)
+        };
         if ur.inexact() {
             return None;
         }
         // Sign of ts: small enters with + when it is a, with - when it is b.
         let ts_pos = small.is_negative() == a_big;
-        let ts_sign = if ts_pos { Ordering::Greater } else { Ordering::Less };
+        let ts_sign = if ts_pos {
+            Ordering::Greater
+        } else {
+            Ordering::Less
+        };
         // y = u + ts; sign(|a - b| - self) = sb * sign(y).
         let y_sign = match exp_of(&ur) {
             None => ts_sign,
@@ -132,7 +158,11 @@ impl Mag {
                     // y = fu ur + fs small with fu = u_keep, fs = (sign of small as ±) == ts_pos.
                     let small_pos = !small.is_negative();
                     let fs_plus = small_pos == ts_pos;
-                    let z = if u_keep == fs_plus { ur.add_full_prec(small) } else { ur.sub_full_prec(small) };
+                    let z = if u_keep == fs_plus {
+                        ur.add_full_prec(small)
+                    } else {
+                        ur.sub_full_prec(small)
+                    };
                     if z.inexact() {
                         return None;
                     }

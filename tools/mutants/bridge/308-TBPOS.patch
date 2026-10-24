@@ -1,8 +1,50 @@
 diff --git a/src/bridge.rs b/src/bridge.rs
-index 9bc9acc..fa31dae 100644
+index 9bc9acc..b2bb6bb 100644
 --- a/src/bridge.rs
 +++ b/src/bridge.rs
-@@ -110,7 +110,7 @@ impl Mag {
+@@ -1,5 +1,5 @@
+ //! Slice S2: The `Mag` to `ExactNum` bridge: exact comparisons of a `Mag` radius against zenith-float values that never
+-//! build the radius as an `ExactNum` unless it lies within a factor 4 of the value (CONTRACT 4.2, 10.2c, 15.2, 16.S2),
++//! build the radius as an `ExactNum` unless it lies within a factor 2 of the value (CONTRACT 4.2, 10.2c, 15.2, 16.S2),
+ //! and (pending zenith-float R14, 16.S2.6) the remaining conversions.
+ //!
+ //! Owner: slice S2 (Spence). Only that slice edits this file.
+@@ -11,7 +11,8 @@ use zenith_float_num::ExactNum;
+ use crate::mag::Mag;
+ 
+ /// Operands whose exponents differ by at most this are subtracted exactly; wider gaps are decided by exponents first
+-/// (16.S2.3). Any value of at least 2 is correct; it only trades exact-subtraction cost for case analysis.
++/// (16.S2.3). Any value of at least 66 is correct (the wide-gap cutoffs need `|small| < 2^(e - 65)`); it only trades
++/// exact-subtraction cost for case analysis.
+ const EXACT_GAP: i64 = 128;
+ 
+ /// The sign of `x` as an ordering against zero (`Less` negative, `Equal` zero, `Greater` positive).
+@@ -65,7 +66,7 @@ impl Mag {
+     }
+ 
+     /// `self` against `|a - b|`, decided exactly (16.S2.2). Operands within [`EXACT_GAP`] binades are subtracted
+-    /// exactly; otherwise the exponents decide unless the radius is within a factor 4 of the larger operand, and then
++    /// exactly; otherwise the exponents decide unless the radius is within a factor 2 of the larger operand, and then
+     /// only the exact `|big| - self` and one short exact sum are formed (16.S2.3). `None` when an operand is NaN or
+     /// infinite, or when zenith-float reports an exact operation inexact.
+     pub fn cmp_exact_diff(&self, a: &ExactNum, b: &ExactNum) -> Option<Ordering> {
+@@ -96,12 +97,13 @@ impl Mag {
+         let (big, small) = if a_big { (a, b) } else { (b, a) };
+         let e = exp_of(big)?;
+         let es = exp_of(small)?;
+-        // |a - b| lies in (2^(e-2), 2^(e+1)) since |small| < 2^es <= 2^(e - EXACT_GAP).
++        // |a - b| lies in (2^(e-1) - 2^(e-65), 2^e + 2^(e-65)) since |small| < 2^es <= 2^(e - EXACT_GAP); a radius below
++        // 2^(e-1) has mant <= u64::MAX so it is at most 2^(e-1) - 2^(e-65).
+         let me = match self.exp() {
+             Some(me) => me,
+             None => return Some(Ordering::Less),
+         };
+-        if me <= e.checked_sub(2)? {
++        if me <= e.checked_sub(1)? {
+             return Some(Ordering::Less);
+         }
+         if me >= e.checked_add(2)? {
+@@ -110,7 +112,7 @@ impl Mag {
          let m = self.to_exact_num().ok()?;
          // a - b = tb + ts with tb = ±big, ts = ±small; |a - b| = sb (a - b) where sb is the sign of tb.
          let big_neg = big.is_negative();
