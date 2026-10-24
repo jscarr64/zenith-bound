@@ -737,7 +737,7 @@ _Audit 2026-10-23 (Harper, at 2d12c51): a box is ticked only where the named too
 - [ ] L0a-1 extend `gen_goldens.py`: round-down-overflow rows, widened operand set, sqrt parity grid; regenerate, review diff **Status: landed on the branch at `09edb9e` per its message (widened operands, round-down-overflow rows, `Fraction` self-check, mpmath assert); re-run and verify at apply time before checking off. Remaining: gaps and `i64` ±3 neighbours, the `sqrt` odd/even check.**
 - [ ] L0a-2 8.1 rows not yet covered (canonical form, constructor rejection, shifts 0/63/64/more, carry at `i64::MAX`, sqrt of 1 / all-ones / powers of two, `Ord` transitivity); `Mag::finite` normalise/reject rows (landed as `tests/mag/construct.rs` at `078533b`, to be verified) `[Cas-1]`  (differential tests landed at `ba7c7dd` per its message; remaining rows not yet checked)
 - [ ] L0a-3 W1 translation sets for `mul_up`, `div_up`, `sqrt_up`, `*_lower`; monotonicity of `add_up`/`mul_up`/`div_up` over the Mag grid `[Cas-4]`
-- [ ] L0a-4 `from_exact_num(+_lower)`, `to_exact_num`, `cmp_exact_num`, `cmp_exact_diff` sets and P9
+- [ ] L0a-4 `from_exact_num(+_lower)`, `to_exact_num`, `cmp_exact_num`, `cmp_exact_diff` sets and P9 **(moved to slice S2, the Mag/ExactNum bridge, 2026-10-24: CONTRACT 16 Slice S2, tests/harness/slice_bridge.rs)**
 - [ ] L0a-5 wide-range fuzz target `tests/fuzz_mag.rs`, gate and deep counts  (landed in part as `tests/mag/props_ops.rs` and `props_ord.rs` at `ba7c7dd` per its message, 3,000 default cases, wider via `ZB_PROP_CASES`; not run by me, gate and deep counts not yet set)
 - [ ] L0a-6 trap regressions (golden runner second operand, round-down overflow rows)
 - [ ] L0a-7 mutants (catalog Mag part), self-tests for each checker

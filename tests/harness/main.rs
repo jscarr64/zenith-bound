@@ -25,3 +25,18 @@ mod seeds_selftest;
 mod shrink_selftest;
 mod tightness_selftest;
 mod w1_translation;
+
+// Per-slice harness files (S0, 2026-10-24): each belongs to its slice alone; this list is final.
+mod slice_arith;
+mod slice_bridge;
+mod slice_carlson;
+mod slice_cholesky;
+mod slice_eigen;
+mod slice_elementary;
+mod slice_gls;
+mod slice_hypergeom;
+mod slice_lu;
+mod slice_matrix;
+mod slice_qr;
+mod slice_quadrature;
+mod slice_zf_special;

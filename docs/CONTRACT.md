@@ -200,6 +200,8 @@ _Empty (S0 stub). Owner: slice S1._
 
 _Empty (S0 stub). Owner: slice S2._
 
+Scope moved in (2026-10-24): TEST_PLAN L0a-4, `Mag::cmp_exact_num` (clause 4.2) and `Mag::cmp_exact_diff` (the exact diff-compare of 15.2 and 10.2c), with the `from_exact_num(_lower)` / `to_exact_num` sets and P9. Clauses to be written by S2.
+
 ### Slice S3 (`src/elementary.rs`)
 
 _Empty (S0 stub). Owner: slice S3._
