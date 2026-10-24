@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Exact linear-algebra reference goldens for zenith-bound (zenith-float 2.0).
 
-Pinned oracle: sympy 1.14.0, mpmath 1.3.0 (run with ~/.local/oracle-venv).
+Pinned oracle: sympy 1.14.0, mpmath 1.3.0. Run it with ~/.local/oracle-venv/bin/python
+(the env python3 in the shebang is only a fallback; the version check below rejects other pins).
 Usage:
     gen_la_goldens.py                 write the gate files tests/goldens/slices/<slice>/la_<op>.txt, each slice's
                                       SHA256SUMS (gate files) and HEAVY.SHA256 (sha256 of the uncommitted heavy file)
@@ -29,8 +30,9 @@ SYMPY_PIN = "1.14.0"
 MPMATH_PIN = "1.3.0"
 import sympy, mpmath
 from mpmath import iv
-assert sympy.__version__ == SYMPY_PIN, f"sympy {sympy.__version__} != pinned {SYMPY_PIN}"
-assert mpmath.__version__ == MPMATH_PIN, f"mpmath {mpmath.__version__} != pinned {MPMATH_PIN}"
+if sympy.__version__ != SYMPY_PIN or mpmath.__version__ != MPMATH_PIN:
+    raise SystemExit(f"gen_la_goldens.py: oracle pin mismatch: sympy {sympy.__version__} (need {SYMPY_PIN}), "
+                     f"mpmath {mpmath.__version__} (need {MPMATH_PIN}); run with ~/.local/oracle-venv/bin/python")
 sys.set_int_max_str_digits(0)
 
 GEN = "scripts/gen_la_goldens.py"
