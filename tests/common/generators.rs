@@ -9,8 +9,8 @@
 //! patterns; draw_partner gaps 0,1,2,62..66,127..129,200) are a subset of what is built here; they can move onto this module because
 //! `draw_exponent` covers the same classes (edge ticks, band around 0, uniform) and the gap rule covers the same gap values at p = 64, 65, 66.
 //!
-//! Exponents come out as raw `i64`. For zenith-float mid exponents (`i32`) the raw value may be `EXPONENT_MIN - 1` or `EXPONENT_MAX + 1`
-//! (outside the type) on purpose; convert with `exponent_to_i32` (a `try_from`) so the test sees the error instead of a wrap.
+//! Exponents come out as raw `i64`. zenith-float 2.0 mid exponents are `i64` too (Jeff, 2026-10-23 12:36 PM CT), so MID and MAG share the
+//! whole `i64` range; the one-tick-outside values of a narrower domain cannot exist there and are left out (`edge_values`, `gap_pair`).
 //!
 //! Plan steps that need real balls or chains (shrinking radii to 0 then 1 ulp, deleting chain steps) are TODO for later items (L0b, chains);
 //! this module only describes the radius classes.
@@ -24,9 +24,10 @@ pub const MAX_PREC: u32 = 4096;
 /// The top bit of a `Mag` mantissa.
 pub const TOP: u64 = 1 << 63;
 
-/// zenith-float `Exponent` range as raw `i64` values (zf `Exponent = i32`, full range on 64-bit targets, PLAN K5).
-pub const ZF_EXPONENT_MIN: i64 = -2_147_483_648;
-pub const ZF_EXPONENT_MAX: i64 = 2_147_483_647;
+/// zenith-float 2.0 `Exponent` range (`Exponent = i64`, Jeff 2026-10-23 12:36 PM CT; zf 1.x was `i32`). zb tests the 2.0 range so
+/// cosmology-scale exponents and far more headroom are covered.
+pub const ZF_EXPONENT_MIN: i64 = i64::MIN;
+pub const ZF_EXPONENT_MAX: i64 = i64::MAX;
 /// PLACEHOLDER for zf's `MIN_NORMAL_EXPONENT` until the zf pin exists (`seeds::ZF_PIN`): `EXPONENT_MIN + 4096`, the lowest exponent at
 /// which a 4096-bit precision still fits above `EXPONENT_MIN`. Replace with zf's constant (it changes the edge table, so bump the generator version).
 pub const ZF_MIN_NORMAL_EXPONENT: i64 = ZF_EXPONENT_MIN + 4096;
@@ -93,11 +94,6 @@ impl ExpDomain {
         }
         out
     }
-}
-
-/// Converts a raw mid exponent to zf's `i32`, returning an error (never wrapping) outside the type.
-pub fn exponent_to_i32(raw: i64) -> Result<i32, String> {
-    i32::try_from(raw).map_err(|_| format!("exponent {} does not fit i32", raw))
 }
 
 /// The bands of an exponent draw (TEST_PLAN section 7).

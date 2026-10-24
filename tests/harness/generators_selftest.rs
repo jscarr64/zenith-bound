@@ -1,16 +1,16 @@
-//! COVERS: common::BallDesc::encode, common::ExpBand::Edge, common::ExpBand::Gap, common::ExpBand::Near0, common::ExpBand::PowerOfTwo, common::ExpBand::Uniform, common::ExpBand::from_index, common::ExpBand::index, common::ExpDomain::edge_values, common::ExpDomain::in_raw_range, common::GapClass::One, common::GapClass::P, common::GapClass::PGuard, common::GapClass::PGuardMinus1, common::GapClass::PGuardPlus1, common::GapClass::PMinus1, common::GapClass::PPlus1, common::GapClass::Random, common::GapClass::Two, common::GapClass::Zero, common::GapClass::from_index, common::GapClass::index, common::GapClass::magnitude, common::MantPattern::Aaab, common::MantPattern::AllOnes, common::MantPattern::Alt5555, common::MantPattern::C000, common::MantPattern::MaxMinus1, common::MantPattern::SingleBit, common::MantPattern::TieAtP, common::MantPattern::TieMinus1, common::MantPattern::TiePlus1, common::MantPattern::Top, common::MantPattern::TopPlus1, common::MantPattern::Uniform, common::MantPattern::from_index, common::MantPattern::index, common::ModeOrNone::None, common::ModeOrNone::Valid, common::ModeOrNone::all_with_none, common::ModeOrNone::is_valid, common::ModeOrNone::name, common::PrecSource::Fast, common::PrecSource::Operand, common::PrecSource::Schedule, common::PrecSource::Uniform, common::RadiusClass::HalfUlp, common::RadiusClass::Huge, common::RadiusClass::Infinity, common::RadiusClass::OneUlp, common::RadiusClass::RandomMag, common::RadiusClass::Zero, common::RadiusClass::from_index, common::RadiusClass::index, common::RadiusClass::tag, common::RoundingMode::Down, common::RoundingMode::FromZero, common::RoundingMode::ToEven, common::RoundingMode::ToOdd, common::RoundingMode::ToZero, common::RoundingMode::Up, common::RoundingMode::all, common::RoundingMode::index, common::RoundingMode::name, common::RoundingMode::parse, common::Sign::Minus, common::Sign::Plus, common::Sign::symbol, common::generators::check_exp_mix, common::generators::check_mant_mix, common::generators::draw_ball, common::generators::draw_exponent, common::generators::draw_exponent_pair, common::generators::draw_exponent_with, common::generators::draw_gap, common::generators::draw_mantissa, common::generators::draw_mantissa_with, common::generators::draw_mode, common::generators::draw_precision, common::generators::exponent_to_i32, common::generators::gap_pair, common::generators::tie_mantissa, common::generators::uniform_in
+//! COVERS: common::BallDesc::encode, common::ExpBand::Edge, common::ExpBand::Gap, common::ExpBand::Near0, common::ExpBand::PowerOfTwo, common::ExpBand::Uniform, common::ExpBand::from_index, common::ExpBand::index, common::ExpDomain::edge_values, common::ExpDomain::in_raw_range, common::GapClass::One, common::GapClass::P, common::GapClass::PGuard, common::GapClass::PGuardMinus1, common::GapClass::PGuardPlus1, common::GapClass::PMinus1, common::GapClass::PPlus1, common::GapClass::Random, common::GapClass::Two, common::GapClass::Zero, common::GapClass::from_index, common::GapClass::index, common::GapClass::magnitude, common::MantPattern::Aaab, common::MantPattern::AllOnes, common::MantPattern::Alt5555, common::MantPattern::C000, common::MantPattern::MaxMinus1, common::MantPattern::SingleBit, common::MantPattern::TieAtP, common::MantPattern::TieMinus1, common::MantPattern::TiePlus1, common::MantPattern::Top, common::MantPattern::TopPlus1, common::MantPattern::Uniform, common::MantPattern::from_index, common::MantPattern::index, common::ModeOrNone::None, common::ModeOrNone::Valid, common::ModeOrNone::all_with_none, common::ModeOrNone::is_valid, common::ModeOrNone::name, common::PrecSource::Fast, common::PrecSource::Operand, common::PrecSource::Schedule, common::PrecSource::Uniform, common::RadiusClass::HalfUlp, common::RadiusClass::Huge, common::RadiusClass::Infinity, common::RadiusClass::OneUlp, common::RadiusClass::RandomMag, common::RadiusClass::Zero, common::RadiusClass::from_index, common::RadiusClass::index, common::RadiusClass::tag, common::RoundingMode::Down, common::RoundingMode::FromZero, common::RoundingMode::ToEven, common::RoundingMode::ToOdd, common::RoundingMode::ToZero, common::RoundingMode::Up, common::RoundingMode::all, common::RoundingMode::index, common::RoundingMode::name, common::RoundingMode::parse, common::Sign::Minus, common::Sign::Plus, common::Sign::symbol, common::generators::check_exp_mix, common::generators::check_mant_mix, common::generators::draw_ball, common::generators::draw_exponent, common::generators::draw_exponent_pair, common::generators::draw_exponent_with, common::generators::draw_gap, common::generators::draw_mantissa, common::generators::draw_mantissa_with, common::generators::draw_mode, common::generators::draw_precision, common::generators::gap_pair, common::generators::tie_mantissa, common::generators::uniform_in
 //! Self-tests of tests/common/generators.rs. Oracle: the plan (TEST_PLAN section 7, 9), hand-derived expectations, and pinned counts/digests
-//! for the fixed seed `seed_for("common", CASE_CLASS_GATE)` at GENERATOR_VERSION 1 (a drift detector, produced by this generator; the band
+//! for the fixed seed `seed_for("common", CASE_CLASS_GATE)` at GENERATOR_VERSION 2 (a drift detector, produced by this generator; the band
 //! counts were also recomputed independently by scripts/goldlib.py, see the comment at EXP_BAND_COUNTS).
 
 use crate::common::expect_eq;
 use crate::common::generators::{
     check_exp_mix, check_mant_mix, draw_ball, draw_exponent, draw_exponent_pair,
     draw_exponent_with, draw_gap, draw_mantissa, draw_mantissa_with, draw_mode, draw_precision,
-    exponent_to_i32, gap_pair, tie_mantissa, uniform_in, BallDesc, ExpBand, ExpDomain, GapClass,
-    MantPattern, ModeOrNone, PrecSource, RadiusClass, RoundingMode, Sign, EXP_MIX,
-    EXP_MIX_SPEC_PERCENT, GUARD, MANT_MIX, MAX_PREC, PS, PS_FAST, RADIUS_MIX, TOP, ZF_EXPONENT_MAX,
-    ZF_EXPONENT_MIN, ZF_MIN_NORMAL_EXPONENT,
+    gap_pair, tie_mantissa, uniform_in, BallDesc, ExpBand, ExpDomain, GapClass, MantPattern,
+    ModeOrNone, PrecSource, RadiusClass, RoundingMode, Sign, EXP_MIX, EXP_MIX_SPEC_PERCENT, GUARD,
+    MANT_MIX, MAX_PREC, PS, PS_FAST, RADIUS_MIX, TOP, ZF_EXPONENT_MAX, ZF_EXPONENT_MIN,
+    ZF_MIN_NORMAL_EXPONENT,
 };
 use crate::common::rng::SplitMix64;
 use crate::common::seeds::{seed_for, CASE_CLASS_GATE, GENERATOR_VERSION};
@@ -59,7 +59,7 @@ fn exponent_run(
     Ok((counts, digest))
 }
 
-// Pinned for GENERATOR_VERSION 1, seed_for("common", CASE_CLASS_GATE), 10,000 draws, MAG domain, anchor 0, prec 53.
+// Pinned for GENERATOR_VERSION 2 (unchanged from 1: MAG draws did not move), seed_for("common", CASE_CLASS_GATE), 10,000 draws, MAG domain, anchor 0, prec 53.
 // The digests are pinned from this generator (drift detectors only). The counts were recomputed independently in Python (scripts/goldlib.py splitmix64 + the band rule `below(100)` against the cumulative
 // 30/50/80/90/100 thresholds, with the fixed consumption per band: Edge 1, Near0 1, Uniform 1, PowerOfTwo 3, Gap 3 extra outputs).
 const EXP_BAND_COUNTS: [usize; 5] = [2976, 2040, 3008, 994, 982];
@@ -89,8 +89,9 @@ fn schedules_constants_and_zf_range_are_as_documented() -> Result<(), String> {
     expect_eq("MAX_PREC", &MAX_PREC, &4096)?;
     expect_eq("GUARD", &GUARD, &64)?;
     expect_eq("TOP", &TOP, &(1u64 << 63))?;
-    expect_eq("ZF_EXPONENT_MIN", &ZF_EXPONENT_MIN, &i64::from(i32::MIN))?;
-    expect_eq("ZF_EXPONENT_MAX", &ZF_EXPONENT_MAX, &i64::from(i32::MAX))?;
+    // zenith-float 2.0 moves `Exponent` from i32 to i64 (Jeff, 2026-10-23 12:36 PM CT): mid exponents span the whole i64 range
+    expect_eq("ZF_EXPONENT_MIN", &ZF_EXPONENT_MIN, &i64::MIN)?;
+    expect_eq("ZF_EXPONENT_MAX", &ZF_EXPONENT_MAX, &i64::MAX)?;
     expect_eq(
         "ZF_MIN_NORMAL_EXPONENT",
         &ZF_MIN_NORMAL_EXPONENT,
@@ -102,22 +103,6 @@ fn schedules_constants_and_zf_range_are_as_documented() -> Result<(), String> {
         &100,
     )?;
     expect_eq("RADIUS_MIX total", &RADIUS_MIX.iter().sum::<u64>(), &100)
-}
-
-#[test]
-fn exponent_to_i32_rejects_raw_values_outside_the_type() -> Result<(), String> {
-    expect_eq("min", &exponent_to_i32(ZF_EXPONENT_MIN), &Ok(i32::MIN))?;
-    expect_eq("max", &exponent_to_i32(ZF_EXPONENT_MAX), &Ok(i32::MAX))?;
-    if exponent_to_i32(ZF_EXPONENT_MIN - 1).is_ok() {
-        return Err(String::from("EXPONENT_MIN - 1 converted"));
-    }
-    if exponent_to_i32(ZF_EXPONENT_MAX + 1).is_ok() {
-        return Err(String::from("EXPONENT_MAX + 1 converted"));
-    }
-    if exponent_to_i32(i64::MIN).is_ok() || exponent_to_i32(i64::MAX).is_ok() {
-        return Err(String::from("an i64 extreme converted to i32"));
-    }
-    Ok(())
 }
 
 #[test]
@@ -197,7 +182,7 @@ fn exponent_band_counts_are_pinned_for_the_fixed_seed() -> Result<(), String> {
     expect_eq(
         "GENERATOR_VERSION (re-pin the counts below when it changes)",
         &GENERATOR_VERSION,
-        &1,
+        &2,
     )?;
     let (counts, digest) = exponent_run(&EXP_MIX, &ExpDomain::MAG, N)?;
     expect_eq(
@@ -289,12 +274,12 @@ fn edge_tables_hold_the_extremes_the_subnormal_boundary_and_the_raw_off_by_ones(
         }
     }
     let mid = ExpDomain::MID.edge_values();
-    expect_eq("MID edge length", &mid.len(), &13)?;
+    expect_eq("MID edge length", &mid.len(), &11)?;
     for v in [
-        ZF_EXPONENT_MIN - 1,
-        ZF_EXPONENT_MIN,
-        ZF_EXPONENT_MAX,
-        ZF_EXPONENT_MAX + 1,
+        i64::MIN,
+        i64::MIN + 3,
+        i64::MAX,
+        i64::MAX - 3,
         ZF_MIN_NORMAL_EXPONENT - 1,
         ZF_MIN_NORMAL_EXPONENT,
         ZF_MIN_NORMAL_EXPONENT + 1,
@@ -303,13 +288,9 @@ fn edge_tables_hold_the_extremes_the_subnormal_boundary_and_the_raw_off_by_ones(
             return Err(format!("MID edge table lacks {}", v));
         }
     }
-    // the raw values outside i32 are rejected by exponent_to_i32, those inside convert
-    let outside = mid.iter().filter(|v| exponent_to_i32(**v).is_err()).count();
-    expect_eq("MID edge values outside i32", &outside, &2)?;
-    if !ExpDomain::MID.in_raw_range(ZF_EXPONENT_MIN - 1)
-        || ExpDomain::MID.in_raw_range(ZF_EXPONENT_MIN - 2)
-    {
-        return Err(String::from("in_raw_range allows exactly one tick outside"));
+    // i64 mid exponents: the raw range is the whole i64 range, nothing outside it is representable
+    if !ExpDomain::MID.in_raw_range(i64::MIN) || !ExpDomain::MID.in_raw_range(i64::MAX) {
+        return Err(String::from("MID raw range excludes an i64 extreme"));
     }
     if !ExpDomain::MAG.in_raw_range(i64::MIN) || !ExpDomain::MAG.in_raw_range(i64::MAX) {
         return Err(String::from("MAG raw range excludes an i64 extreme"));
@@ -387,14 +368,11 @@ fn gap_pair_reports_overflow_as_an_error() -> Result<(), String> {
             ));
         }
     }
-    // MID allows exactly one raw tick outside i32
-    expect_eq(
-        "max + 1 is allowed raw",
-        &gap_pair(ZF_EXPONENT_MAX, 1, &ExpDomain::MID),
-        &Ok((ZF_EXPONENT_MAX, ZF_EXPONENT_MAX + 1)),
-    )?;
-    if gap_pair(ZF_EXPONENT_MAX, 2, &ExpDomain::MID).is_ok() {
-        return Err(String::from("MID gap two ticks outside was accepted"));
+    // MID is i64 now: a gap past either i64 extreme is an error, never a wrap
+    if gap_pair(ZF_EXPONENT_MAX, 1, &ExpDomain::MID).is_ok()
+        || gap_pair(ZF_EXPONENT_MIN, -1, &ExpDomain::MID).is_ok()
+    {
+        return Err(String::from("MID gap past an i64 extreme was accepted"));
     }
     Ok(())
 }
@@ -793,7 +771,7 @@ fn ball_descriptors_cover_signs_zeros_radius_classes_and_independent_exponents(
     )
 }
 
-const BALL_DIGEST: u64 = 13_175_083_107_131_357_837;
+const BALL_DIGEST: u64 = 4_712_628_999_623_607_558;
 
 #[test]
 fn rounding_modes_are_six_named_distinct_and_none_is_separate() -> Result<(), String> {
