@@ -19,8 +19,13 @@ STDOUT_GENERATORS="scripts/gen_review_goldens.py:mag_ops_review.txt"
 slices_only=0; [ "${1:-}" = --slices-only ] && slices_only=1
 cd "$root" || exit 2
 tmp=$(mktemp -d "$(zb_scratch)"/zb-goldens-regen.XXXXXX) || { echo "goldens-regen: mktemp failed"; exit 2; }; runlog_on_exit "rm -rf \"$tmp\""
+# Pop direct-run guard (~/pop-logs/bin/popguard.sh, 11:49 2026-10-24: a bare 58 GB generator run global-OOMed Pop): before the
+# first generator, refuse (exit 3) outside a popslot/poprun memory scope. Hosts without popguard.sh (CI) run unguarded.
+POPGUARD=${POPGUARD:-$HOME/pop-logs/bin/popguard.sh}; pg_ok=0
+pg_require() { [ "$pg_ok" = 1 ] && return 0; if [ -x "$POPGUARD" ]; then "$POPGUARD" goldens_regen || exit 3; fi; pg_ok=1; }
 rc=0
 if [ "$slices_only" = 0 ]; then
+pg_require
 runlog_step goldlib-selftest -- "$PY" scripts/goldlib.py --selftest || rc=1
 for g in $GENERATORS; do
   runlog_step "$(basename "$g" .py)" -- "$PY" "$g" --check "$tmp/$(basename "$g" .py)" || { echo "goldens-regen: $g FAILED"; rc=1; }
@@ -37,6 +42,7 @@ for d in tests/goldens/slices/*/; do
   s=$(basename "$d")
   [ -f "$d/SHA256SUMS" ] && [ -f "$d/GENERATORS" ] || { echo "goldens-regen: slice $s lacks SHA256SUMS or GENERATORS"; rc=1; continue; }
   for g in $(grep -v -E '^[[:space:]]*(#|$)' "$d/GENERATORS"); do
+    pg_require
     runlog_step "$s-$(basename "$g" .py)" -- "$PY" "$g" --check "$tmp/slice-$s-$(basename "$g" .py)" || { echo "goldens-regen: $g FAILED"; rc=1; }
   done
   entries=$(grep -v -E '^[[:space:]]*(#|$)' "$d/SHA256SUMS")
