@@ -89,6 +89,9 @@ ir=$(awk '/^inrange\(\) \{/{f=1;s=NR} f{print} f&&(/^\}$/||(NR==s&&/; \}$/)){exi
 ck; [ -n "$ir" ] || fail "inrange() not found in mutate.sh"
 r=$(bash -c 'eval "$1"; ranges="200 299 s1.txt"$'"'"'\n'"'"'; o=$(inrange 5); echo "rc=$? o=[$o]"; o=$(inrange 250); echo "rc=$? o=[$o]"' _ "$ir" 2>&1)
 ck; [ "$r" = "rc=0 o=[]"$'\n'"rc=0 o=[s1.txt]" ] || fail "inrange: a miss must be rc 0 with empty output, a hit rc 0 + file; got: $r"
+# inrange forces base 10 itself (Spence nit on b5ac93f): a leading-zero id is decimal, never octal (0213 is 213, not 139; 0219 is no error)
+r=$(bash -c 'eval "$1"; ranges="200 299 s1.txt"$'"'"'\n'"'"'; o=$(inrange 0213); echo "rc=$? o=[$o]"; o=$(inrange 0219); echo "rc=$? o=[$o]"; o=$(inrange 0139); echo "rc=$? o=[$o]"' _ "$ir" 2>&1)
+ck; [ "$r" = "rc=0 o=[s1.txt]"$'\n'"rc=0 o=[s1.txt]"$'\n'"rc=0 o=[]" ] || fail "inrange: leading-zero ids must be base 10 (0213, 0219 in 200-299; 0139 not); got: $r"
 r=$(bash -c 'eval "$1"; ranges="x 299 s1.txt"$'"'"'\n'"'"'; o=$(inrange 5); echo "rc=$?"' _ "$ir" 2>&1)
 ck; grep -q '^rc=0$' <<< "$r" && fail "inrange: a malformed range row returned rc 0 (a real failure went quiet): $r"
 ck; grep -q 'inrange' <<< "$r" || fail "inrange: a malformed range row gave no message: $r"
@@ -97,4 +100,4 @@ reset
 printf 'killed\tx\n' > "$m/floor.d/s2.txt"
 ck; out=$(mu --floor) && fail "non-integer floor share passed: $out"
 echo "mutate_include selftest: ok"
-st_done mutate_include 35   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done mutate_include 36   # WANT: cases this script runs (tools/selftest_cases.sh)
