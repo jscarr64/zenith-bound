@@ -39,10 +39,10 @@ BITS = 256          # default enclosure width (relative)
 LOG_BITS = (256, 4096)
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 SLICES = os.path.join(ROOT, "tests", "goldens", "slices")
-SLICE_OF = {"cholesky": "cholesky", "lu": "lu", "solve": "lu", "logdet": "lu", "qr": "qr", "gls": "gls", "eig": "eigen"}
+SLICE_OF = {"cholesky": "cholesky", "lu": "lu", "solve": "lu", "logdet": "cholesky", "qr": "qr", "gls": "gls", "eig": "eigen"}
 SLICE_ID = {"cholesky": "LA1", "lu": "LA2", "qr": "LA3", "gls": "LA4", "eigen": "LA5a"}
 GATE_MAX_DIM = 12
-GATE_EXTRA_BITS = (4096,) # extra Cholesky/QR enclosure widths on the gate tier only
+EXT_BITS = (4096,)        # extra Cholesky/QR enclosure widths for gate-tier cases, emitted on the heavy tier (la_<op>_enc<b>_heavy.txt)
 GATE_MAX_BITS = 10 ** 4 + 64
 
 def is_heavy(*mats):
@@ -407,28 +407,32 @@ def gen_logdet():
     return hdr, rows, expect
 
 def gen_cholesky():
-    rows = []
+    rows = []; ext = {b: [] for b in EXT_BITS}
     for cid, A in spd_corpus():
         r = ldl(A); n = len(A); heavy = is_heavy(A)
         if isinstance(r, str): outs = ldl_err(r, "a")
         else:
             L, D = r; outs = [q(x) for x in flat(L)] + [q(x) for x in D]
-            for b in ((BITS,) if heavy else (BITS,) + GATE_EXTRA_BITS):
-                for i in range(n):
-                    for j in range(n):
-                        outs.append(pair(*enclose_csqrt(L[i][j], D[j], b)) if j <= i else "0*2^0 0*2^0")
+            def gblock(b): return [pair(*enclose_csqrt(L[i][j], D[j], b)) if j <= i else "0*2^0 0*2^0" for i in range(n) for j in range(n)]
+            outs += gblock(BITS)
         rows.append(row("cholesky." + cid, dims_sq(A), A, outs, heavy))
+        if not heavy:
+            for b in EXT_BITS:
+                ext[b].append(row("cholesky." + cid, dims_sq(A), A, ldl_err(r, "a") if isinstance(r, str) else gblock(b), True)[0])
     hdr = ["op: cholesky",
            "canonical: A = G G^T with G lower triangular and diag(G) > 0 (unique for SPD A). Exact rational companion: A = L D L^T, L unit lower triangular, D diagonal > 0, computed without pivoting; G[i][j] = L[i][j]*sqrt(D[j]) (this is the exact algebraic form).",
            "refusals: 'ERR NotSymmetric a' if A != A^T; 'ERR NotPositiveDefinite a' if some pivot D[j] <= 0 (indefinite, negative, singular PSD, zero).",
-           "enclosure: G[n*n] as lo hi pairs, row-major, upper triangle emitted as exact 0*2^0 0*2^0; at bits b the grid is 2^e with e = floor(log2(G^2))//2 - b + 1, lo/hi from exact integer isqrt; lo == hi iff exactly representable. Gate file: b in " + str((BITS,) + GATE_EXTRA_BITS) + " (one block per b, in order); heavy file: b = 256 only.",
-           "columns (gate): case_id dims(n) A[n*n] (L[n*n] D[n] " + " ".join(f"G_lohi{b}[2*n*n]" for b in (BITS,) + GATE_EXTRA_BITS) + " | ERR variant detail)",
+           "enclosure: G[n*n] as lo hi pairs, row-major, upper triangle emitted as exact 0*2^0 0*2^0; at bits b the grid is 2^e with e = floor(log2(G^2))//2 - b + 1, lo/hi from exact integer isqrt; lo == hi iff exactly representable. Gate and heavy files: b = 256 for every row. Extra widths " + str(EXT_BITS) + " for the gate-tier cases (same case_ids) are heavy-tier files la_cholesky_enc<b>_heavy.txt.",
+           "columns (gate): case_id dims(n) A[n*n] (L[n*n] D[n] G_lohi256[2*n*n] | ERR variant detail)",
            "columns (heavy): case_id dims(n) A[n*n] (L[n*n] D[n] G_lohi256[2*n*n] | ERR variant detail)"]
-    expect = lambda m, n: (n * n, {n * n + n + 2 * n * n, n * n + n + 4 * n * n})
-    return hdr, rows, expect
+    expect = lambda m, n: (n * n, {n * n + n + 2 * n * n})
+    exts = {f"enc{b}": (hdr[:3] + [f"enc{b}: the b = {b} G enclosure block of every gate-tier cholesky case (same case_ids, same order as la_cholesky.txt); L, D and the 256-bit block are in la_cholesky.txt.",
+                               f"columns (heavy): case_id dims(n) A[n*n] (G_lohi{b}[2*n*n] | ERR variant detail)"],
+                        ext[b], lambda m, n: (n * n, {2 * n * n})) for b in EXT_BITS}
+    return hdr, rows, expect, exts
 
 def gen_qr():
-    rows = []
+    rows = []; ext = {b: [] for b in EXT_BITS}
     C = [("onebyone.pos", [[F(3)]]), ("onebyone.neg", [[F(-2, 3)]]), ("basic.2", [[F(3), F(1)], [F(4), F(2)]]),
          ("pythag.3", [[F(2), F(1), F(0)], [F(1), F(2), F(1)], [F(2), F(2), F(3)]]),
          ("tall.3x2", [[F(1), F(1)], [F(1), F(2)], [F(1), F(3)]]), ("tall.6x3", rmat(6, 3)), ("tall.20x8", rmat(20, 8, rational=False)),
@@ -447,21 +451,25 @@ def gen_qr():
         else:
             Qt, Rt, d = g
             outs = [q(x) for x in flat(Qt)] + [q(x) for x in flat(Rt)] + [q(x) for x in d]
-            for b in ((BITS,) if heavy else (BITS,) + GATE_EXTRA_BITS):
-                for i in range(m):
-                    for j in range(n): outs.append(pair(*enclose_csqrt(Qt[i][j] / d[j], d[j], b)))
-                for i in range(n):
-                    for j in range(n): outs.append(pair(*enclose_csqrt(Rt[i][j], d[i], b)))
+            def qrblock(b): return ([pair(*enclose_csqrt(Qt[i][j] / d[j], d[j], b)) for i in range(m) for j in range(n)] +
+                                    [pair(*enclose_csqrt(Rt[i][j], d[i], b)) for i in range(n) for j in range(n)])
+            outs += qrblock(BITS)
         rows.append(row("qr." + cid, dims_mn(A), A, outs, heavy))
+        if not heavy:
+            for b in EXT_BITS:
+                ext[b].append(row("qr." + cid, dims_mn(A), A, outs[-3:] if g is None else qrblock(b), True)[0])
     hdr = ["op: qr",
            "canonical: thin QR, A (m x n, m >= n, full column rank) = Q R, Q m x n with Q^T Q = I, R n x n upper triangular with diag(R) > 0 (unique).",
            "exact rational companion (exact algebraic form): A = Qt Rt with Qt orthogonal columns (Qt^T Qt = diag(d)), Rt unit upper triangular, d[j] = ||Qt[:,j]||^2; Q[i][j] = Qt[i][j]/sqrt(d[j]), R[i][j] = Rt[i][j]*sqrt(d[i]).",
            "refusals: 'ERR Singular rank_deficient' if some d[j] = 0; 'ERR DimensionMismatch wide' if m < n.",
-           "enclosure: per bit width b, Q (m*n) then R (n*n) as lo hi pairs, row-major; grid 2^e with e = floor(log2(x^2))//2 - b + 1, exact integer isqrt. Gate file: b in " + str((BITS,) + GATE_EXTRA_BITS) + " (one Q,R block per b, in order); heavy file: b = 256 only.",
-           "columns (gate): case_id dims(mxn) A[m*n] (Qt[m*n] Rt[n*n] d[n] " + " ".join(f"Q_lohi{b}[2*m*n] R_lohi{b}[2*n*n]" for b in (BITS,) + GATE_EXTRA_BITS) + " | ERR variant detail)",
+           "enclosure: per bit width b, Q (m*n) then R (n*n) as lo hi pairs, row-major; grid 2^e with e = floor(log2(x^2))//2 - b + 1, exact integer isqrt. Gate and heavy files: b = 256 for every row. Extra widths " + str(EXT_BITS) + " for the gate-tier cases (same case_ids) are heavy-tier files la_qr_enc<b>_heavy.txt.",
+           "columns (gate): case_id dims(mxn) A[m*n] (Qt[m*n] Rt[n*n] d[n] Q_lohi256[2*m*n] R_lohi256[2*n*n] | ERR variant detail)",
            "columns (heavy): case_id dims(mxn) A[m*n] (Qt[m*n] Rt[n*n] d[n] Q_lohi256[2*m*n] R_lohi256[2*n*n] | ERR variant detail)"]
-    expect = lambda m, n: (m * n, {m * n + n * n + n + k * (m * n + n * n) for k in (2, 4)})
-    return hdr, rows, expect
+    expect = lambda m, n: (m * n, {m * n + n * n + n + 2 * (m * n + n * n)})
+    exts = {f"enc{b}": (hdr[:4] + [f"enc{b}: the b = {b} Q,R enclosure block of every gate-tier qr case (same case_ids, same order as la_qr.txt); Qt, Rt, d and the 256-bit block are in la_qr.txt.",
+                               f"columns (heavy): case_id dims(mxn) A[m*n] (Q_lohi{b}[2*m*n] R_lohi{b}[2*n*n] | ERR variant detail)"],
+                        ext[b], lambda m, n: (m * n, {2 * (m * n + n * n)})) for b in EXT_BITS}
+    return hdr, rows, expect, exts
 
 def gen_gls():
     rows = []
@@ -561,13 +569,18 @@ def render(skip_heavy=False):
     out = {}
     for name, fn in OPS:
         rng = random.Random(f"{SEED}:{name}")   # per-op stream: ops are independent
-        hdr, rows, expect = fn()
+        hdr, rows, expect, *rest = fn(); exts = rest[0] if rest else {}
         for text, _ in rows: check_fields(text, expect)
         ids = [t.split(" ", 1)[0] for t, _ in rows]; assert len(ids) == len(set(ids)), "duplicate case_id"
         sl = out.setdefault(SLICE_OF[name], {"gate": {}, "heavy": {}})
         sl["gate"][f"la_{name}.txt"] = file_bytes(name, "gate", hdr, [t for t, h in rows if not h])
         if not skip_heavy:
             sl["heavy"][f"la_{name}_heavy.txt"] = file_bytes(name, "heavy", hdr, [t for t, h in rows if h])
+        gate_ids = [t.split(" ", 1)[0] for t, h in rows if not h]
+        for tag, (ehdr, erows, eexp) in exts.items():
+            for text in erows: check_fields(text, eexp)
+            assert [t.split(" ", 1)[0] for t in erows] == gate_ids, "ext case_ids must equal the gate case_ids"
+            if not skip_heavy: sl["heavy"][f"la_{name}_{tag}_heavy.txt"] = file_bytes(name, "heavy", ehdr, erows)
     return out
 
 def sha(b): return hashlib.sha256(b).hexdigest()

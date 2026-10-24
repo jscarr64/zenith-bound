@@ -1,3 +1,5 @@
 # sha256 of heavy-tier LA golds (not committed; rebuilt deterministically by scripts/gen_la_goldens.py --heavy DIR,
 # verified by scripts/gen_la_goldens.py --check, step 'heavy' at merge points). sha256sum format.
-12ddfff0bcc0c17e9ea7715974e32b799dcb123a7ec3a67f6b497be309633d7b  la_cholesky_heavy.txt
+182a518923cd8fe3fbfded054e07f38f82985bde7481ce3a22f727c26f9bf545  la_cholesky_enc4096_heavy.txt
+fe6b83c817939ea6a32cbc975de1bc8e936c02f74357afb8eb9df36a64bb0a0a  la_cholesky_heavy.txt
+9c8140f6bcd4f3dde050d99bd9fe542c44ea1064f25e5a26591902babaa8342b  la_logdet_heavy.txt
