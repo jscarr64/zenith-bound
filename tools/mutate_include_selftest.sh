@@ -73,7 +73,28 @@ ck; out=$(mu --list) && fail "overlapping ranges passed: $out"
 printf '# range: 400-499\nsrc/b.rs:g%s201-B%ss1/201-B.patch%ssuite\n' "$tab" "$tab" "$tab" > "$m/manifest.d/s3.txt"
 ck; out=$(mu --list) && fail "id duplicated across include files passed: $out"
 rm "$m/manifest.d/s3.txt"
+# Spence (2026-10-24, 1422-zb-s2-const-steps: 368 `ERR rc=1 line=92 owner=$(inrange ...)`): an id outside every slice range is the
+# normal case and must not trip the poplog ERR trap; a real inrange failure (malformed range row) must still be loud and stop the run.
+pl() { local n=$1; shift   # mutate.sh with its own real run log (ERR trap on); prints output, rc, then the log path
+  ( unset POPLOG_FILE POPLOG_PID POPLOG_STATE_DIR POPLOG_PROGRESS_FILE POPLOG_RUNNING RUNLOG_INNER RUNLOG_ACTIVE RUNLOG_PLAIN
+    MUTATE_MANIFEST="$m/manifest.txt" POPLOG_ROOT="$t/pl-$n" RUNLOG_AGENT=selftest "$here/mutate.sh" "$@" 2>&1; echo "rc=$?" )
+  find "$t/pl-$n" -name '*-mutate.log' | head -1; }
+reset; printf 'src/a.rs:f%s002-A%s001-A.patch%ssuite\nsrc/a.rs:f%s950-A%s001-A.patch%ssuite\n' "$tab" "$tab" "$tab" "$tab" "$tab" "$tab" >> "$m/manifest.txt"
+printf '201-B\tunobservable by construction\n' > "$m/equivalent.d/s1.txt"
+out=$(pl quiet --list); lg=$(tail -1 <<< "$out")
+ck; grep -q '^rc=0$' <<< "$out" && [ -f "$lg" ] || fail "err-quiet: --list with out-of-range central ids failed or wrote no run log: $out"
+ck; grep -q ' ERR ' "$lg" && fail "err-quiet: out-of-range ids (no owning slice) logged ERR trap lines: $(grep -c ' ERR ' "$lg") e.g. $(grep -m1 ' ERR ' "$lg")"
+# inrange contract, on the function itself (ranges are validated before it runs, so a malformed row is an internal error)
+ir=$(awk '/^inrange\(\) \{/{f=1} f{print} f&&/^\}$|; \}$/{exit}' "$here/mutate.sh")
+ck; [ -n "$ir" ] || fail "inrange() not found in mutate.sh"
+r=$(bash -c 'eval "$1"; ranges="200 299 s1.txt"$'"'"'\n'"'"'; o=$(inrange 5); echo "rc=$? o=[$o]"; o=$(inrange 250); echo "rc=$? o=[$o]"' _ "$ir" 2>&1)
+ck; [ "$r" = "rc=0 o=[]"$'\n'"rc=0 o=[s1.txt]" ] || fail "inrange: a miss must be rc 0 with empty output, a hit rc 0 + file; got: $r"
+r=$(bash -c 'eval "$1"; ranges="x 299 s1.txt"$'"'"'\n'"'"'; o=$(inrange 5); echo "rc=$?"' _ "$ir" 2>&1)
+ck; grep -q '^rc=0$' <<< "$r" && fail "inrange: a malformed range row returned rc 0 (a real failure went quiet): $r"
+ck; grep -q 'inrange' <<< "$r" || fail "inrange: a malformed range row gave no message: $r"
+ck; grep -nE 'inrange .*\|\| *true' "$here/mutate.sh" && fail "a call site masks inrange's rc with || true (a real failure would be silent)"
+reset
 printf 'killed\tx\n' > "$m/floor.d/s2.txt"
 ck; out=$(mu --floor) && fail "non-integer floor share passed: $out"
 echo "mutate_include selftest: ok"
-st_done mutate_include 28   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done mutate_include 35   # WANT: cases this script runs (tools/selftest_cases.sh)
