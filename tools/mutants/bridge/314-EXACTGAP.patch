@@ -1,5 +1,5 @@
 diff --git a/src/bridge.rs b/src/bridge.rs
-index 04017bc..5d41f1c 100644
+index 0ce786b..1b5436f 100644
 --- a/src/bridge.rs
 +++ b/src/bridge.rs
 @@ -13,7 +13,7 @@ use crate::mag::Mag;

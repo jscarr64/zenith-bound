@@ -1,5 +1,5 @@
 diff --git a/src/bridge.rs b/src/bridge.rs
-index 04017bc..8d738b6 100644
+index 0ce786b..5dee681 100644
 --- a/src/bridge.rs
 +++ b/src/bridge.rs
 @@ -59,7 +59,7 @@ impl Mag {
