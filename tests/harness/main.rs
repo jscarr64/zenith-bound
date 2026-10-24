@@ -14,6 +14,7 @@ mod fuzz_mag_props_selftest;
 mod generators_selftest;
 mod goldens_selftest;
 mod grid_digests;
+mod mag_carry;
 mod modular_selftest;
 mod points_selftest;
 mod replay_selftest;
