@@ -199,7 +199,7 @@ pub fn uniform_in(rng: &mut SplitMix64, min: i64, max: i64) -> Result<i64, Strin
 /// linear (uniform over the range, as `uniform_in`) or log-scale: a bit length `0..=63` uniform, then a magnitude uniform within that
 /// length and a random sign, so every scale from 1 to `2^62` (cosmology's `2^±405` included) is drawn about as often as any other. A
 /// log-scale value outside the range falls back to the linear one.
-pub fn wide_uniform_in(rng: &mut SplitMix64, min: i64, max: i64) -> Result<i64, String> {
+fn wide_uniform_in(rng: &mut SplitMix64, min: i64, max: i64) -> Result<i64, String> {
     if min > max {
         return Err(format!("empty range {}..={}", min, max));
     }
@@ -658,10 +658,10 @@ pub fn draw_precision(rng: &mut SplitMix64, source: &PrecSource) -> Result<u32, 
             if x >> 61 == 0 {
                 let n = u128::try_from(PREC_EDGES.len()).map_err(|_| String::from("edges"))?;
                 let i = usize::try_from((low * n) >> 56).map_err(|_| String::from("edge index"))?;
-                return PREC_EDGES
-                    .get(i)
-                    .copied()
-                    .ok_or_else(|| String::from("edge index out of range"));
+                return match PREC_EDGES.get(i) {
+                    Some(&edge) => Ok(edge),
+                    None => Err(String::from("edge index out of range")),
+                };
             }
             let k = u32::try_from((x >> 56) & 31).map_err(|_| String::from("bit length"))?;
             let top = 1u64 << k;
