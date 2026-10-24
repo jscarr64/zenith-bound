@@ -16,15 +16,20 @@ PY=${GOLDENS_PYTHON:-$HOME/.local/oracle-venv/bin/python}
 GENERATORS="scripts/gen_goldens.py scripts/gen_ball_goldens.py scripts/gen_ball_enclosure.py"
 # stdout generators (no --check): name and committed file
 STDOUT_GENERATORS="scripts/gen_review_goldens.py:mag_ops_review.txt"
-slices_only=0; [ "${1:-}" = --slices-only ] && slices_only=1
-# Heavy mode (Spence, 2026-10-24). Regular gates: slice generators get --skip-heavy, so HEAVY.SHA256 is checked by pin/sha only
-# (well-formed entries naming exactly the defined heavy files) and no heavy row is recomputed. ZB_HEAVY_RECOMPUTE=1 is the explicit
-# flag that recomputes every heavy row against its pin (about 14 min); ZB_GATE_MODE=merge (merge points) REFUSES (exit 2) without it.
+self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+slices_only=0; regen=0
+for arg in "$@"; do case $arg in --slices-only) slices_only=1 ;; --regen) regen=1 ;; *) echo "goldens-regen: usage: tools/goldens_regen.sh [--slices-only] [--regen]"; exit 2 ;; esac; done
+# Modes (Paul, 2026-10-24: oracle python ran flat out 10+ min in every gate). The key is a sha256 of every scripts/*.py, every
+# committed golden input (tests/goldens/**: *.txt except untracked *_heavy.txt, SHA256SUMS, HEAVY.SHA256, GENERATORS), this script,
+# and the oracle (interpreter path and venv *.dist-info names). It is stamped under $GOLDENS_KEY_DIR (default $(zb_scratch)/goldens-regen-keys)
+# after a passing python run.
+#   cached      key equals the stamp: python is skipped entirely; only the pinned SHA256SUMS / HEAVY.SHA256 are verified.
+#   regen-gate  key changed (or no stamp): every generator runs --check; heavy rows are checked by HEAVY.SHA256 pin only (--skip-heavy).
+#   regen-full  --regen: every generator runs --check and every heavy row is recomputed against its pin (about 14 min).
+# ZB_GATE_MODE=merge (merge points) REFUSES (exit 2) without --regen. The mode and its reason are logged.
 case "${ZB_GATE_MODE:-regular}" in regular|merge) ;; *) echo "goldens-regen: REFUSING: unknown ZB_GATE_MODE=${ZB_GATE_MODE} (want regular or merge)"; exit 2 ;; esac
 gate_mode=${ZB_GATE_MODE:-regular}
-if [ "${ZB_HEAVY_RECOMPUTE:-}" = 1 ]; then heavy_args=""; echo "goldens-regen: heavy mode=recompute (gate mode=$gate_mode; ZB_HEAVY_RECOMPUTE=1)"
-elif [ "$gate_mode" = merge ]; then echo "goldens-regen: REFUSING: ZB_GATE_MODE=merge needs ZB_HEAVY_RECOMPUTE=1 (the merge gate must recompute every heavy row)"; exit 2
-else heavy_args="--skip-heavy"; echo "goldens-regen: heavy mode=pins (gate mode=$gate_mode; HEAVY.SHA256 pin/sha check only, no recompute)"; fi
+if [ "$gate_mode" = merge ] && [ "$regen" != 1 ]; then echo "goldens-regen: REFUSING: ZB_GATE_MODE=merge needs --regen (the merge gate must regenerate and recompute every heavy row)"; exit 2; fi
 cd "$root" || exit 2
 tmp=$(mktemp -d "$(zb_scratch)"/zb-goldens-regen.XXXXXX) || { echo "goldens-regen: mktemp failed"; exit 2; }; runlog_on_exit "rm -rf \"$tmp\""
 # Pop direct-run guard (~/pop-logs/bin/popguard.sh, 11:49 2026-10-24: a bare 58 GB generator run global-OOMed Pop): before the
@@ -40,8 +45,27 @@ pg_require() {
   else echo "goldens-regen: WARNING: no popguard.sh on this host ($POPGUARD): running WITHOUT the Pop memory guard" >&2; fi
   pg_ok=1
 }
+key_inputs() {
+  { find scripts -type f -name '*.py' 2> /dev/null
+    find tests/goldens -type f \( -name '*.txt' -o -name SHA256SUMS -o -name HEAVY.SHA256 -o -name GENERATORS \) ! -name '*_heavy.txt' 2> /dev/null
+  } | sort | while IFS= read -r f; do sha256sum "$f"; done
+  echo "tool $(sha256sum < "$self")"; echo "slices_only=$slices_only"; echo "py $(readlink -f "$PY" 2> /dev/null || echo "$PY")"
+  ls -d "$(dirname "$(dirname "$PY")")"/lib/python*/site-packages/*.dist-info 2> /dev/null | sed 's|.*/||' | sort
+}
+key=$(key_inputs | sha256sum | cut -c1-64); short=$(printf '%s' "$key" | cut -c1-16)
+keydir=${GOLDENS_KEY_DIR:-$(zb_scratch)/goldens-regen-keys}; stamp="$keydir/$(printf '%s' "$root" | sha256sum | cut -c1-16).key"
+if [ "$regen" = 1 ]; then mode=full; heavy_args=""
+  if [ "$gate_mode" = merge ]; then echo "goldens-regen: mode=regen-full (--regen; gate mode=merge); heavy rows recomputed"; else echo "goldens-regen: mode=regen-full (--regen); heavy rows recomputed"; fi
+elif [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$key" ]; then mode=cached
+  echo "goldens-regen: mode=cached (key $short unchanged since the last passing run); python skipped, pinned sums verified only"
+else mode=gate; heavy_args="--skip-heavy"
+  if [ -f "$stamp" ]; then why="inputs differ from the last passing run"; else why="no passing run recorded"; fi
+  echo "goldens-regen: mode=regen-gate (key $short changed: $why); heavy rows by HEAVY.SHA256 pin only"
+fi
 rc=0
-if [ "$slices_only" = 0 ]; then
+if [ "$slices_only" = 0 ] && [ "$mode" = cached ]; then
+(cd tests/goldens && sha256sum --strict -c SHA256SUMS) || { echo "goldens-regen: sha256sum -c FAILED"; rc=1; }
+elif [ "$slices_only" = 0 ]; then
 pg_require
 runlog_step goldlib-selftest -- "$PY" scripts/goldlib.py --selftest || rc=1
 for g in $GENERATORS; do
@@ -58,7 +82,11 @@ for d in tests/goldens/slices/*/; do
   [ -d "$d" ] || continue
   s=$(basename "$d")
   [ -f "$d/SHA256SUMS" ] && [ -f "$d/GENERATORS" ] || { echo "goldens-regen: slice $s lacks SHA256SUMS or GENERATORS"; rc=1; continue; }
-  for g in $(grep -v -E '^[[:space:]]*(#|$)' "$d/GENERATORS"); do
+  if [ -f "$d/HEAVY.SHA256" ]; then   # pinned heavy sums: strict format in every mode (cheap; python checks names in regen modes)
+    hbad=$(grep -v -E '^[[:space:]]*(#|$)' "$d/HEAVY.SHA256" | grep -v -E '^[0-9a-f]{64}  [^/[:space:]]+$' || true)
+    [ -z "$hbad" ] || { echo "goldens-regen: slice $s: malformed HEAVY.SHA256 line(s): $(printf '%s\n' "$hbad" | head -3)"; rc=1; }
+  fi
+  [ "$mode" = cached ] || for g in $(grep -v -E '^[[:space:]]*(#|$)' "$d/GENERATORS"); do
     pg_require
     runlog_step "$s-$(basename "$g" .py)" -- "$PY" "$g" --check "$tmp/slice-$s-$(basename "$g" .py)" $heavy_args || { echo "goldens-regen: $g FAILED"; rc=1; }
   done
@@ -88,5 +116,6 @@ done
 [ "$slices_only" = 1 ] || for f in tests/goldens/*.txt; do
   grep -q -E "^[0-9a-f]{64}  $(basename "$f")\$" tests/goldens/SHA256SUMS || { echo "goldens-regen: $(basename "$f") is not in SHA256SUMS"; rc=1; }
 done
+if [ "$rc" = 0 ] && [ "$mode" != cached ]; then mkdir -p "$keydir" && printf '%s\n' "$key" > "$stamp.tmp" && mv "$stamp.tmp" "$stamp" && echo "goldens-regen: key $short stamped (next unchanged run is cached)"; fi
 [ "$rc" = 0 ] && echo "goldens-regen: ok" || echo "goldens-regen: FAILED"
 exit "$rc"

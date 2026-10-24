@@ -121,4 +121,4 @@ ck; [ "$grc" = 0 ] && ran && grep -q 'mode=regen-full (--regen' <<< "$out" || fa
 HMARGS=; hm ZB_GATE_MODE=bogus
 ck; [ "$grc" = 2 ] || fail "an unknown ZB_GATE_MODE exited $grc, want 2: $out"
 echo "goldens_regen selftest: ok"
-st_done goldens_regen 50   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done goldens_regen 48   # WANT: cases this script runs (tools/selftest_cases.sh)
