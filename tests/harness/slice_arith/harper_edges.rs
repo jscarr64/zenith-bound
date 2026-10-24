@@ -21,6 +21,9 @@ fn plus_zero(what: &str, b: &Ball) -> Result<(), String> {
     Ok(())
 }
 
+/// Builds a fresh operand Ball from its source inputs.
+type Mk<'a> = &'a dyn Fn() -> Result<Ball, String>;
+
 /// Every op applied to a fresh `a` from `mk` (and `b` for the binary ones), each result paired with its name.
 fn all_ops(
     mk: &dyn Fn() -> Result<Ball, String>,
@@ -60,7 +63,7 @@ fn signed_zero_operands_give_plus_zero() -> Result<(), String> {
         let z2 = ok("mul_exact -1", pt(0, prec)?.mul_exact(&num(-1), prec))?;
         let mk1 = || ok("exact -0", Ball::exact(nz.add_full_prec(&num(0)), prec));
         let mk2 = || ok("mul_exact -1", pt(0, prec)?.mul_exact(&num(-1), prec));
-        let pairs: [(&Ball, &dyn Fn() -> Result<Ball, String>); 2] = [(&z1, &mk1), (&z2, &mk2)];
+        let pairs: [(&Ball, Mk); 2] = [(&z1, &mk1), (&z2, &mk2)];
         for (z, mk) in pairs {
             plus_zero("operand", z)?;
             for (name, r) in all_ops(mk, z, prec)? {

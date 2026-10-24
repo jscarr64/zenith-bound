@@ -19,9 +19,10 @@ const WANT_ROWS: usize = 992;
 const LAMBDA: i64 = 1024;
 
 fn field<'a>(v: &[&'a str], i: usize) -> Result<&'a str, String> {
-    v.get(i)
-        .map(|s| *s)
-        .ok_or_else(|| format!("missing field {}", i))
+    match v.get(i) {
+        Some(&s) => Ok(s),
+        None => Err(format!("missing field {}", i)),
+    }
 }
 
 fn value(v: &[&str], at: usize) -> Result<ExactNum, String> {
