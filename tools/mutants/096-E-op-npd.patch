@@ -1,8 +1,8 @@
 diff --git a/src/error.rs b/src/error.rs
-index 4f2bc45..02e9a2d 100644
+index 587ab51..50cda27 100644
 --- a/src/error.rs
 +++ b/src/error.rs
-@@ -79,7 +79,7 @@ impl BoundError {
+@@ -86,7 +86,7 @@ impl BoundError {
              BoundError::InvalidArgument { op, .. } => op,
              BoundError::Domain { op, .. } => op,
              BoundError::Resource { op, .. } => op,
