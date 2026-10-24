@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Canonical full gate for zenith-bound. usage: tools/full_gate.sh TAG
+# Heavy LA goldens: a regular gate checks HEAVY.SHA256 by pin/sha only; a merge-point gate runs with ZB_GATE_MODE=merge ZB_HEAVY_RECOMPUTE=1
+# (goldens-regen recomputes every heavy row; ZB_GATE_MODE=merge without ZB_HEAVY_RECOMPUTE=1 fails the goldens-regen step).
 # Every step runs under `timeout` (STEP_TIMEOUT, default 20m); the rc of each step is written to $T/TAG.rc and its
 # output to $T/TAG-<step>.log (T defaults to $(zb_scratch)/zb-gate-logs, tools/scratch.sh: never /tmp). REPO selects the checkout (default: this one);
 # CARGO_TARGET_DIR is REQUIRED and belongs to one worktree (Paul, 2026-10-23: /tmp/target-<agent>-<worktree>, e.g.

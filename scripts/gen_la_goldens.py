@@ -44,7 +44,7 @@ def _popguard():
         _sys.exit(rc if rc > 0 else 3)
 _popguard()
 
-import sys, os, random, hashlib, argparse, difflib, tempfile, signal, time
+import sys, os, re, random, hashlib, argparse, difflib, tempfile, signal, time
 # Exact rationals are gmpy2.mpq (GMP, lowest terms like fractions.Fraction, same str of numerator/denominator), not
 # fractions.Fraction: Fraction normalizes every op with CPython math.gcd, which is quadratic. On the heavy cosmo GLS rows
 # (entries of 0.5M-3.9M bits) that made la4-heavy2 sit 90 min in op gls (probe: cosmo_spread.p2e1000000_32x2 S^-1 X 98.7 s and
@@ -885,6 +885,21 @@ def sums_header(slice_dir):
 def read_sums(p):
     return {l.split()[1]: l.split()[0] for l in open(p) if l.strip() and not l.startswith("#")} if os.path.exists(p) else {}
 
+PIN_LINE = re.compile(r"[0-9a-f]{64}  [^/\s]+")
+
+def check_pins(sl, d, names):
+    """Regular-gate heavy check, no recompute: HEAVY.SHA256 lines are strict and name exactly the defined heavy files. Returns the failure count."""
+    p = os.path.join(d, "HEAVY.SHA256"); bad = 0
+    lines = [l.rstrip("\n") for l in open(p, encoding="utf-8") if l.strip() and not l.startswith("#")] if os.path.exists(p) else []
+    for l in lines:
+        if not PIN_LINE.fullmatch(l): bad += 1; print(f"check: HEAVY.SHA256 malformed line {sl}: {l}")
+    pins = {l.split()[1]: l.split()[0] for l in lines if PIN_LINE.fullmatch(l)}
+    for k in sorted(names):
+        if k in pins: print(f"check: OK pin {sl}/{k} {pins[k][:16]}")
+        else: bad += 1; print(f"check: HEAVY.SHA256 pin MISSING {sl}/{k}")
+    for k in sorted(set(pins) - set(names)): bad += 1; print(f"check: HEAVY.SHA256 pin STALE {sl}/{k}")
+    return bad
+
 HEAVY_HDR = ("# sha256 of heavy-tier LA golds (not committed; rebuilt deterministically by scripts/gen_la_goldens.py --heavy DIR,\n"
              "# verified by scripts/gen_la_goldens.py --check, step 'heavy' at merge points). sha256sum format.\n")
 
@@ -907,17 +922,17 @@ def render(gate_dir, heavy_dir, skip_heavy):
         hdr, rows, expect, *rest = fn(); exts = rest[0] if rest else {}; stub = "stub" in rest
         ids = [i for i, _ in rows.ids]; assert len(ids) == len(set(ids)), "duplicate case_id"
         if stub: assert not rows, "stub file must have zero rows"
-        sl = out.setdefault(SLICE_OF[name], {"gate": {}, "heavy": {}})
+        sl = out.setdefault(SLICE_OF[name], {"gate": {}, "heavy": {}, "names": []})
         k = f"la_{name}.txt"; f = to(gate_dir, SLICE_OF[name], k)
         sl["gate"][k] = stream_file(name, "gate", hdr, rows, False, expect, f); done(gate_dir, SLICE_OF[name], k, f)
         if not stub:
-            k = f"la_{name}_heavy.txt"; f = None if skip_heavy else to(heavy_dir, SLICE_OF[name], k)
+            k = f"la_{name}_heavy.txt"; sl["names"].append(k); f = None if skip_heavy else to(heavy_dir, SLICE_OF[name], k)
             r = stream_file(name, "heavy", hdr, rows, True, expect, f); done(heavy_dir, SLICE_OF[name], k, f)
             if not skip_heavy: sl["heavy"][k] = r
         want = [i for i, h in rows.ids if not h or ".cosmo_" in i]
         for tag, (ehdr, erows, eexp) in exts.items():
             assert [i for i, _ in erows.ids] == want, "ext case_ids must equal the gate case_ids (plus cosmo_* heavy ids)"
-            k = f"la_{name}_{tag}_heavy.txt"; f = None if skip_heavy else to(heavy_dir, SLICE_OF[name], k)
+            k = f"la_{name}_{tag}_heavy.txt"; sl["names"].append(k); f = None if skip_heavy else to(heavy_dir, SLICE_OF[name], k)
             r = stream_file(name, "heavy", ehdr, erows, True, eexp, f); done(heavy_dir, SLICE_OF[name], k, f)
             if not skip_heavy: sl["heavy"][k] = r
             erows.close()
@@ -948,6 +963,7 @@ def main():
 def run(a):
     if a.check is not None:
         cdir = a.check or tempfile.mkdtemp(dir=(os.makedirs(SPOOL_DIR, exist_ok=True) or SPOOL_DIR))
+        print("check: heavy mode=pins (HEAVY.SHA256 pin/sha check only, no recompute)" if a.skip_heavy else "check: heavy mode=recompute", flush=True)
         out = render(cdir, None, a.skip_heavy); bad = 0
         for sl, t in sorted(out.items()):
             d = os.path.join(SLICES, sl); sums = read_sums(os.path.join(d, "SHA256SUMS"))
@@ -958,6 +974,7 @@ def run(a):
                 else: bad += 1; print(f"check: DIFF {sl}/{k} line {first_diff_line(p, g)}")
                 if sums.get(k) != h: bad += 1; print(f"check: SHA256SUMS mismatch {sl}/{k}")
                 if not a.check: os.remove(g)
+            if a.skip_heavy: bad += check_pins(sl, d, t["names"])
             if t["heavy"]:
                 hs = read_sums(os.path.join(d, "HEAVY.SHA256"))
                 for k, (h, _) in sorted(t["heavy"].items()):

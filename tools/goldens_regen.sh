@@ -17,6 +17,14 @@ GENERATORS="scripts/gen_goldens.py scripts/gen_ball_goldens.py scripts/gen_ball_
 # stdout generators (no --check): name and committed file
 STDOUT_GENERATORS="scripts/gen_review_goldens.py:mag_ops_review.txt"
 slices_only=0; [ "${1:-}" = --slices-only ] && slices_only=1
+# Heavy mode (Spence, 2026-10-24). Regular gates: slice generators get --skip-heavy, so HEAVY.SHA256 is checked by pin/sha only
+# (well-formed entries naming exactly the defined heavy files) and no heavy row is recomputed. ZB_HEAVY_RECOMPUTE=1 is the explicit
+# flag that recomputes every heavy row against its pin (about 14 min); ZB_GATE_MODE=merge (merge points) REFUSES (exit 2) without it.
+case "${ZB_GATE_MODE:-regular}" in regular|merge) ;; *) echo "goldens-regen: REFUSING: unknown ZB_GATE_MODE=${ZB_GATE_MODE} (want regular or merge)"; exit 2 ;; esac
+gate_mode=${ZB_GATE_MODE:-regular}
+if [ "${ZB_HEAVY_RECOMPUTE:-}" = 1 ]; then heavy_args=""; echo "goldens-regen: heavy mode=recompute (gate mode=$gate_mode; ZB_HEAVY_RECOMPUTE=1)"
+elif [ "$gate_mode" = merge ]; then echo "goldens-regen: REFUSING: ZB_GATE_MODE=merge needs ZB_HEAVY_RECOMPUTE=1 (the merge gate must recompute every heavy row)"; exit 2
+else heavy_args="--skip-heavy"; echo "goldens-regen: heavy mode=pins (gate mode=$gate_mode; HEAVY.SHA256 pin/sha check only, no recompute)"; fi
 cd "$root" || exit 2
 tmp=$(mktemp -d "$(zb_scratch)"/zb-goldens-regen.XXXXXX) || { echo "goldens-regen: mktemp failed"; exit 2; }; runlog_on_exit "rm -rf \"$tmp\""
 # Pop direct-run guard (~/pop-logs/bin/popguard.sh, 11:49 2026-10-24: a bare 58 GB generator run global-OOMed Pop): before the
@@ -52,7 +60,7 @@ for d in tests/goldens/slices/*/; do
   [ -f "$d/SHA256SUMS" ] && [ -f "$d/GENERATORS" ] || { echo "goldens-regen: slice $s lacks SHA256SUMS or GENERATORS"; rc=1; continue; }
   for g in $(grep -v -E '^[[:space:]]*(#|$)' "$d/GENERATORS"); do
     pg_require
-    runlog_step "$s-$(basename "$g" .py)" -- "$PY" "$g" --check "$tmp/slice-$s-$(basename "$g" .py)" || { echo "goldens-regen: $g FAILED"; rc=1; }
+    runlog_step "$s-$(basename "$g" .py)" -- "$PY" "$g" --check "$tmp/slice-$s-$(basename "$g" .py)" $heavy_args || { echo "goldens-regen: $g FAILED"; rc=1; }
   done
   entries=$(grep -v -E '^[[:space:]]*(#|$)' "$d/SHA256SUMS" || true)   # no entries is a valid state (rc 1): no ERR trap line
   marked=0; if grep -q -E '^# EMPTY([: ]|$)' "$d/SHA256SUMS"; then marked=1; fi
