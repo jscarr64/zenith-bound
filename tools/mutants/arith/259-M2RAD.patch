@@ -1,5 +1,5 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index 1f8372d..9d6f7f5 100644
+index 1f8372d..7161306 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
 @@ -340,7 +340,7 @@ impl Ball {
@@ -7,7 +7,7 @@ index 1f8372d..9d6f7f5 100644
              OP,
              m.ldexp(k, prec, MID_RM),
 -            mag_mul_2exp_up(&r, k),
-+            r,
++            mag_mul_2exp_up(&r, 0),
              prec,
              false,
          )

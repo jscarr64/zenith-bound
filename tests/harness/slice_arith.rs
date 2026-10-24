@@ -1599,3 +1599,14 @@ fn absn(x: &ExactNum) -> ExactNum {
         num(0).add_full_prec(x)
     }
 }
+
+#[test]
+fn compare_rad_outside_exact_range_is_unknown() -> Result<(), String> {
+    // A finite radius whose exponent is outside the ExactNum range cannot be compared exactly: every decision is Unknown.
+    let wide = ball(num(0), mag(TOP, i64::MAX)?, 64)?;
+    let p = pt(1, 64)?;
+    want_tri("overlaps wide", wide.overlaps(&p), Tri::Unknown)?;
+    want_tri("overlaps wide rev", p.overlaps(&wide), Tri::Unknown)?;
+    want_tri("lt wide", wide.lt(&p), Tri::Unknown)?;
+    want_tri("eq wide", wide.eq(&p), Tri::Unknown)
+}

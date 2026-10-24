@@ -1,5 +1,5 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index 1f8372d..c300459 100644
+index 1f8372d..0e3340e 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
 @@ -417,7 +417,7 @@ impl Ball {
@@ -7,7 +7,7 @@ index 1f8372d..c300459 100644
      let (ra, rb) = (a.rad().to_exact_num().ok()?, b.rad().to_exact_num().ok()?);
      let d = a.mid().sub_full_prec(b.mid());
 -    let rr = ra.add_full_prec(&rb);
-+    let rr = ra.add_full_prec(&ra);
++    let rr = ra.sub_full_prec(&rb);
      let zero = ExactNum::from(0i64);
      let hi = d.add_full_prec(&rr).partial_cmp(&zero)?;
      let lo = d.sub_full_prec(&rr).partial_cmp(&zero)?;

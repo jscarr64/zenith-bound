@@ -1,5 +1,5 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index 1f8372d..dc07002 100644
+index 1f8372d..2b6985d 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
 @@ -350,7 +350,7 @@ impl Ball {
@@ -7,7 +7,7 @@ index 1f8372d..dc07002 100644
          match gaps(self, other) {
              Some((Ordering::Less, _)) => Tri::True,
 -            Some((_, Ordering::Greater)) => Tri::False,
-+            Some((_, Ordering::Greater | Ordering::Equal)) => Tri::False,
++            Some((_, Ordering::Greater)) => Tri::Unknown,
              Some((Ordering::Equal, Ordering::Equal)) => Tri::False,
              Some((Ordering::Equal | Ordering::Greater, Ordering::Equal | Ordering::Less))
              | None => Tri::Unknown,
