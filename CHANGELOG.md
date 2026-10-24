@@ -3,9 +3,11 @@
 ## Unreleased
 
 - Test-count floor (Paul, 2026-10-23): new gate step `test-floor` runs `tools/test_floor.sh` on the build-debug and build-release logs.
-  It fails if the summed `test result:` passed+failed is below the step's floor in `tools/test_floor.txt` (373 each), if there is no summary,
+  It fails if the summed `test result:` passed count is below the step's floor in `tools/test_floor.txt` (373 each), if there is no summary,
   or if fewer summaries than started test binaries appear (a truncated log; the 2052 gate on 7191a1f passed with 599 of 738). Raise a floor
-  with the tests that add to it; lowering one needs a CHANGELOG note. Self-test: `tools/test_floor_selftest.sh`. poplog is unchanged (Rusty owns its guard).
+  with the tests that add to it; lowering one needs a CHANGELOG note. Fails closed (Spence on 92ac25f): `set -euo pipefail`, every parsed count must be a plain integer of at most 18 digits
+  (else `FAIL BADCOUNT`), the log must be readable (`-r`), and only `passed` counts toward the floor. Self-test: `tools/test_floor_selftest.sh`
+  (now also unreadable, garbage, huge-count and passed+failed cases). poplog is unchanged (Rusty owns its guard).
 
 - `tools/mutate.sh` refuses a dirty tree (modified or untracked files; exit 2, `mutate: FAIL dirty tree`) and prints
   `mutate: testing committed HEAD <sha>` (Spence, 2026-10-23). Mutants run on a worktree of the committed HEAD: 2102-zb-mut180 reported
