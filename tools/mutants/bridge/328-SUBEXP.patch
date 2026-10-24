@@ -1,8 +1,8 @@
 diff --git a/src/mag/convert.rs b/src/mag/convert.rs
-index 019043e..ffff6db 100644
+index 67b8452..6f5aafd 100644
 --- a/src/mag/convert.rs
 +++ b/src/mag/convert.rs
-@@ -149,7 +149,7 @@ impl Mag {
+@@ -143,7 +143,7 @@ impl Mag {
              words: &words,
              precision: EXACT_PREC,
              negative: false,

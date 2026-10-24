@@ -1,8 +1,8 @@
 diff --git a/src/mag/convert.rs b/src/mag/convert.rs
-index 019043e..252c758 100644
+index 67b8452..278acc7 100644
 --- a/src/mag/convert.rs
 +++ b/src/mag/convert.rs
-@@ -134,7 +134,7 @@ impl Mag {
+@@ -128,7 +128,7 @@ impl Mag {
          let word = match EXPONENT_MIN.checked_sub(exp).filter(|d| *d > 0) {
              None => mant,
              Some(d) => match u32::try_from(d) {

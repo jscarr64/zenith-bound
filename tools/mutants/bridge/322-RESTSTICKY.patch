@@ -1,8 +1,8 @@
 diff --git a/src/mag/convert.rs b/src/mag/convert.rs
-index 019043e..b811465 100644
+index 67b8452..3cdf1e9 100644
 --- a/src/mag/convert.rs
 +++ b/src/mag/convert.rs
-@@ -65,7 +65,7 @@ fn top_of_words(words: &[u64], exponent: i64) -> Top {
+@@ -60,7 +60,7 @@ fn top_of_words(words: &[u64], exponent: i64) -> Result<Option<(u64, bool, i64)>
          .checked_shr(64)
          .and_then(|t| u64::try_from(t).ok())
          .unwrap_or(0);
