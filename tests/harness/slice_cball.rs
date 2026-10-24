@@ -56,12 +56,22 @@ fn cpt(re: i64, im: i64, prec: usize) -> Result<CBall, String> {
 /// `(re ± 2^-k) + i(im ± 2^-k)`; Mag 2^-k is finite(TOP, 1 - k).
 fn cbox(re: i64, im: i64, k: i64, prec: usize) -> Result<CBall, String> {
     let r = 1i64.checked_sub(k).ok_or("cbox k")?;
-    ok("CBall::new", CBall::new(ball(re, mag(TOP, r)?, prec)?, ball(im, mag(TOP, r)?, prec)?))
+    ok(
+        "CBall::new",
+        CBall::new(ball(re, mag(TOP, r)?, prec)?, ball(im, mag(TOP, r)?, prec)?),
+    )
 }
 
 fn want_point(what: &str, z: &CBall, re: i64, im: i64) -> Result<(), String> {
-    if z.re().mid() != &num(re) || z.im().mid() != &num(im) || !z.re().rad().is_zero() || !z.im().rad().is_zero() {
-        return Err(format!("{}: got {:?}, want exact {} + {}i", what, z, re, im));
+    if z.re().mid() != &num(re)
+        || z.im().mid() != &num(im)
+        || !z.re().rad().is_zero()
+        || !z.im().rad().is_zero()
+    {
+        return Err(format!(
+            "{}: got {:?}, want exact {} + {}i",
+            what, z, re, im
+        ));
     }
     Ok(())
 }
@@ -69,12 +79,19 @@ fn want_point(what: &str, z: &CBall, re: i64, im: i64) -> Result<(), String> {
 fn want_contains(what: &str, b: &Ball, x: &ExactNum) -> Result<(), String> {
     match b.contains(x) {
         Tri::True => Ok(()),
-        t @ (Tri::False | Tri::Unknown) => Err(format!("{}: {:?} does not contain {:?} ({:?})", what, b, x, t)),
+        t @ (Tri::False | Tri::Unknown) => Err(format!(
+            "{}: {:?} does not contain {:?} ({:?})",
+            what, b, x, t
+        )),
     }
 }
 
 fn want_all_reals_both(what: &str, z: &CBall) -> Result<(), String> {
-    if z.re().is_informative() || z.im().is_informative() || !z.re().rad().is_infinity() || !z.im().rad().is_infinity() {
+    if z.re().is_informative()
+        || z.im().is_informative()
+        || !z.re().rad().is_infinity()
+        || !z.im().rad().is_infinity()
+    {
         return Err(format!("{}: want both parts all reals, got {:?}", what, z));
     }
     Ok(())
@@ -101,17 +118,30 @@ fn cball_construct_invariants() -> Result<(), String> {
     // I2: parts of different prec are InvalidArgument.
     match CBall::new(pt(1, 53)?, pt(2, 64)?) {
         Err(BoundError::InvalidArgument { .. }) => {}
-        other => return Err(format!("prec mismatch: want InvalidArgument, got {:?}", other)),
+        other => {
+            return Err(format!(
+                "prec mismatch: want InvalidArgument, got {:?}",
+                other
+            ))
+        }
     }
     let z = ok("new", CBall::new(pt(3, 53)?, pt(-4, 53)?))?;
     if z.prec() != 53 {
         return Err(format!("prec: got {}", z.prec()));
     }
     want_point("new", &z, 3, -4)?;
-    want_point("from_real", &ok("from_real", CBall::from_real(pt(7, 53)?))?, 7, 0)?;
+    want_point(
+        "from_real",
+        &ok("from_real", CBall::from_real(pt(7, 53)?))?,
+        7,
+        0,
+    )?;
     want_all_reals_both("all_complex", &ok("all_complex", CBall::all_complex(53))?)?;
     // I3: an all-reals part leaves the other informative.
-    let h = ok("new", CBall::new(ok("all_reals", Ball::all_reals(53))?, pt(1, 53)?))?;
+    let h = ok(
+        "new",
+        CBall::new(ok("all_reals", Ball::all_reals(53))?, pt(1, 53)?),
+    )?;
     if h.re().is_informative() || !h.im().is_informative() {
         return Err(format!("I3: got {:?}", h));
     }
@@ -156,15 +186,33 @@ fn cball_add_sub_neg_conj_rows() -> Result<(), String> {
 #[ignore = "red: not implemented: waits zf borrowing ops"]
 fn cball_mul_rows() -> Result<(), String> {
     // (1+2i)(3+4i) = (3-8) + (4+6)i = -5+10i.
-    want_point("mul", &ok("mul", cpt(1, 2, 53)?.mul(&cpt(3, 4, 53)?, 53))?, -5, 10)?;
+    want_point(
+        "mul",
+        &ok("mul", cpt(1, 2, 53)?.mul(&cpt(3, 4, 53)?, 53))?,
+        -5,
+        10,
+    )?;
     // cancellation: (1+i)(1-i) = 2 + 0i.
-    want_point("mul cancel", &ok("mul", cpt(1, 1, 53)?.mul(&cpt(1, -1, 53)?, 53))?, 2, 0)?;
+    want_point(
+        "mul cancel",
+        &ok("mul", cpt(1, 1, 53)?.mul(&cpt(1, -1, 53)?, 53))?,
+        2,
+        0,
+    )?;
     // i·i = -1.
-    want_point("i*i", &ok("mul", cpt(0, 1, 53)?.mul(&cpt(0, 1, 53)?, 53))?, -1, 0)?;
+    want_point(
+        "i*i",
+        &ok("mul", cpt(0, 1, 53)?.mul(&cpt(0, 1, 53)?, 53))?,
+        -1,
+        0,
+    )?;
     // boxes, parts containing 0 and mixed signs: containment at every sample corner pair.
     for &prec in PRECS.iter() {
         let (ar, ai, br, bi) = (0i64, -3i64, 5i64, 0i64);
-        let p = ok("mul", cbox(ar, ai, 2, prec)?.mul(&cbox(br, bi, 3, prec)?, prec))?;
+        let p = ok(
+            "mul",
+            cbox(ar, ai, 2, prec)?.mul(&cbox(br, bi, 3, prec)?, prec),
+        )?;
         for x in samples(ar, 2)?.iter() {
             for y in samples(ai, 2)?.iter() {
                 for u in samples(br, 3)?.iter() {
@@ -195,16 +243,31 @@ fn cball_sqr_rows() -> Result<(), String> {
 fn cball_sqr_not_wider_than_mul() -> Result<(), String> {
     // Every row: each part of sqr(a) is no wider than the same part of mul(a, a) (16.CB.5).
     for &prec in PRECS.iter() {
-        for &(re, im, k) in [(0i64, 0i64, 1i64), (0, 3, 2), (1, -1, 4), (-7, 2, 10), (5, 0, 0)].iter() {
+        for &(re, im, k) in [
+            (0i64, 0i64, 1i64),
+            (0, 3, 2),
+            (1, -1, 4),
+            (-7, 2, 10),
+            (5, 0, 0),
+        ]
+        .iter()
+        {
             let a = cbox(re, im, k, prec)?;
             let s = ok("sqr", cbox(re, im, k, prec)?.sqr(prec))?;
             let m = ok("mul", cbox(re, im, k, prec)?.mul(&a, prec))?;
             if s.re().rad() > m.re().rad() || s.im().rad() > m.im().rad() {
-                return Err(format!("sqr wider than mul at prec {} for {:?}: {:?} vs {:?}", prec, a, s, m));
+                return Err(format!(
+                    "sqr wider than mul at prec {} for {:?}: {:?} vs {:?}",
+                    prec, a, s, m
+                ));
             }
             for x in samples(re, k)?.iter() {
                 for y in samples(im, k)?.iter() {
-                    want_contains("sqr re", s.re(), &x.mul_full_prec(x).sub_full_prec(&y.mul_full_prec(y)))?;
+                    want_contains(
+                        "sqr re",
+                        s.re(),
+                        &x.mul_full_prec(x).sub_full_prec(&y.mul_full_prec(y)),
+                    )?;
                     let xy = x.mul_full_prec(y);
                     want_contains("sqr im", s.im(), &xy.add_full_prec(&xy))?;
                 }
@@ -235,7 +298,14 @@ fn cball_abs_rows() -> Result<(), String> {
 fn cball_abs_i64_extremes() -> Result<(), String> {
     // 16.CB.6: CB uses S1 hypot as is. If this fails, it is a red test for S1's hypot range, not a CB fix.
     // (3·2^K) + (4·2^K)i has |z| = 5·2^K, representable at every K below.
-    for &k in [1i64 << 40, -(1i64 << 40), (1i64 << 62) - (1i64 << 10), -((1i64 << 62) - (1i64 << 10))].iter() {
+    for &k in [
+        1i64 << 40,
+        -(1i64 << 40),
+        (1i64 << 62) - (1i64 << 10),
+        -((1i64 << 62) - (1i64 << 10)),
+    ]
+    .iter()
+    {
         let s = pow2(k)?;
         let re = ok("exact", Ball::exact(num(3).mul_full_prec(&s), 64))?;
         let im = ok("exact", Ball::exact(num(4).mul_full_prec(&s), 64))?;
@@ -272,18 +342,30 @@ fn cball_div_rectangle_containing_zero_is_all_reals() -> Result<(), String> {
     // R1: both parts reach 0 → Ok with both parts all reals (never Domain).
     let exact_zero = cpt(0, 0, 53)?;
     want_all_reals_both("0/0", &ok("div", cpt(1, 1, 53)?.div(&exact_zero, 53))?)?;
-    want_all_reals_both("box at 0", &ok("div", cpt(1, 1, 53)?.div(&cbox(0, 0, 3, 53)?, 53))?)?;
+    want_all_reals_both(
+        "box at 0",
+        &ok("div", cpt(1, 1, 53)?.div(&cbox(0, 0, 3, 53)?, 53))?,
+    )?;
     // edge |m| = r on both axes: 1 ± 1 touches 0 exactly.
-    let edge = ok("new", CBall::new(ball(1, mag(TOP, 1)?, 53)?, ball(-1, mag(TOP, 1)?, 53)?))?;
+    let edge = ok(
+        "new",
+        CBall::new(ball(1, mag(TOP, 1)?, 53)?, ball(-1, mag(TOP, 1)?, 53)?),
+    )?;
     want_all_reals_both("edge", &ok("div", cpt(1, 1, 53)?.div(&edge, 53))?)?;
     // just clear on one axis: 2 ± 1 excludes 0, so R1 does not hold.
-    let clear = ok("new", CBall::new(ball(2, mag(TOP, 1)?, 53)?, ball(-1, mag(TOP, 1)?, 53)?))?;
+    let clear = ok(
+        "new",
+        CBall::new(ball(2, mag(TOP, 1)?, 53)?, ball(-1, mag(TOP, 1)?, 53)?),
+    )?;
     want_finite_both("clear on re", &ok("div", cpt(1, 1, 53)?.div(&clear, 53))?)
 }
 
 /// `b = (2^-40 ± 2^-41) + 0i` at `prec`: re excludes 0 (|m| > r) and the exact |b|^2 is [2^-82, 9·2^-82], clear of 0.
 fn r2_divisor_re(prec: usize) -> Result<Ball, String> {
-    ok("from_mid_rad", Ball::from_mid_rad(pow2(-40)?, mag(TOP, -40)?, prec))
+    ok(
+        "from_mid_rad",
+        Ball::from_mid_rad(pow2(-40)?, mag(TOP, -40)?, prec),
+    )
 }
 
 #[test]
@@ -304,7 +386,10 @@ fn cball_div_mid_rad_sqr_widening_is_all_reals() -> Result<(), String> {
     // sqr is mid-rad (see cball_r2_row_s1_sqr_reaches_zero). Observed behavior: both parts all reals, at every prec.
     for &prec in PRECS.iter() {
         let b = ok("new", CBall::new(r2_divisor_re(prec)?, pt(0, prec)?))?;
-        want_all_reals_both("R2 mid-rad row", &ok("div", cpt(1, 0, prec)?.div(&b, prec))?)?;
+        want_all_reals_both(
+            "R2 mid-rad row",
+            &ok("div", cpt(1, 0, prec)?.div(&b, prec))?,
+        )?;
     }
     Ok(())
 }
@@ -331,7 +416,12 @@ fn cball_div_scaling_exact() -> Result<(), String> {
 
 #[test]
 fn cball_all_reals_propagation() -> Result<(), String> {
-    let h = || ok("new", CBall::new(ok("all_reals", Ball::all_reals(53))?, pt(1, 53)?));
+    let h = || {
+        ok(
+            "new",
+            CBall::new(ok("all_reals", Ball::all_reals(53))?, pt(1, 53)?),
+        )
+    };
     // add, sub, neg, conj keep I3: im stays finite.
     for (what, s) in [
         ("add", ok("add", h()?.add(&cpt(1, 1, 53)?, 53))?),
@@ -355,7 +445,10 @@ fn cball_all_reals_propagation() -> Result<(), String> {
 #[ignore = "red: not implemented: waits zf borrowing ops"]
 fn cball_all_reals_propagation_mul() -> Result<(), String> {
     // mul: both output parts use the all-reals re part.
-    let h = ok("new", CBall::new(ok("all_reals", Ball::all_reals(53))?, pt(1, 53)?))?;
+    let h = ok(
+        "new",
+        CBall::new(ok("all_reals", Ball::all_reals(53))?, pt(1, 53)?),
+    )?;
     want_all_reals_both("mul", &ok("mul", h.mul(&cpt(1, 1, 53)?, 53))?)
 }
 
@@ -365,7 +458,12 @@ fn cball_prec_sweep() -> Result<(), String> {
     let a = || cbox(7, -5, 3, 1024);
     for &prec in PRECS.iter() {
         let b = cbox(3, 2, 5, 1024)?;
-        for z in [ok("add", a()?.add(&b, prec))?, ok("sub", a()?.sub(&b, prec))?].iter() {
+        for z in [
+            ok("add", a()?.add(&b, prec))?,
+            ok("sub", a()?.sub(&b, prec))?,
+        ]
+        .iter()
+        {
             if z.prec() != prec || z.re().prec() != prec || z.im().prec() != prec {
                 return Err(format!("prec {}: got {:?}", prec, z));
             }
@@ -387,7 +485,13 @@ fn cball_prec_sweep_mul_sqr_div() -> Result<(), String> {
     let a = || cbox(7, -5, 3, 1024);
     for &prec in PRECS.iter() {
         let b = cbox(3, 2, 5, 1024)?;
-        for z in [ok("mul", a()?.mul(&b, prec))?, ok("sqr", a()?.sqr(prec))?, ok("div", a()?.div(&b, prec))?].iter() {
+        for z in [
+            ok("mul", a()?.mul(&b, prec))?,
+            ok("sqr", a()?.sqr(prec))?,
+            ok("div", a()?.div(&b, prec))?,
+        ]
+        .iter()
+        {
             if z.prec() != prec || z.re().prec() != prec || z.im().prec() != prec {
                 return Err(format!("prec {}: got {:?}", prec, z));
             }
@@ -401,9 +505,18 @@ fn cball_prec_sweep_mul_sqr_div() -> Result<(), String> {
 /// `SIGN EXP MANT` (scripts/gen_cball_goldens.py): value = (-1)^SIGN · MANT · 2^(EXP − bitlen(MANT)), MANT hex.
 fn gold_val(sign: &str, exp: &str, hex: &str) -> Result<ExactNum, String> {
     let e: i64 = exp.parse().map_err(|_| format!("bad exponent {:?}", exp))?;
-    let first = hex.chars().next().ok_or("empty mantissa")?.to_digit(16).ok_or("bad digit")?;
+    let first = hex
+        .chars()
+        .next()
+        .ok_or("empty mantissa")?
+        .to_digit(16)
+        .ok_or("bad digit")?;
     if first == 0 {
-        return if hex == "0" && sign == "0" && e == 0 { Ok(num(0)) } else { Err(format!("non-canonical zero {} {} {}", sign, exp, hex)) };
+        return if hex == "0" && sign == "0" && e == 0 {
+            Ok(num(0))
+        } else {
+            Err(format!("non-canonical zero {} {} {}", sign, exp, hex))
+        };
     }
     let len = i64::try_from(hex.len()).map_err(|_| "mantissa length")?;
     let bitlen = 4 * (len - 1) + i64::from(32 - first.leading_zeros());
@@ -418,7 +531,8 @@ fn gold_val(sign: &str, exp: &str, hex: &str) -> Result<ExactNum, String> {
         let c = u64::from_str_radix(chunk, 16).map_err(|_| format!("bad hex {:?}", chunk))?;
         if c != 0 {
             let lz = i64::from(c.leading_zeros());
-            let part = ExactNum::from_mag_parts(c << lz, base + shift + 64 - lz, 64).map_err(|e| format!("from_mag_parts: {:?}", e))?;
+            let part = ExactNum::from_mag_parts(c << lz, base + shift + 64 - lz, 64)
+                .map_err(|e| format!("from_mag_parts: {:?}", e))?;
             acc = acc.add_full_prec(&part);
         }
         shift += 64;
@@ -441,26 +555,49 @@ struct GoldRow {
 }
 
 fn take_val(f: &[&str], i: &mut usize) -> Result<ExactNum, String> {
-    let v = gold_val(f.get(*i).ok_or("short row")?, f.get(*i + 1).ok_or("short row")?, f.get(*i + 2).ok_or("short row")?)?;
+    let v = gold_val(
+        f.get(*i).ok_or("short row")?,
+        f.get(*i + 1).ok_or("short row")?,
+        f.get(*i + 2).ok_or("short row")?,
+    )?;
     *i += 3;
     Ok(v)
 }
 
 fn take4(f: &[&str], i: &mut usize) -> Result<[ExactNum; 4], String> {
-    Ok([take_val(f, i)?, take_val(f, i)?, take_val(f, i)?, take_val(f, i)?])
+    Ok([
+        take_val(f, i)?,
+        take_val(f, i)?,
+        take_val(f, i)?,
+        take_val(f, i)?,
+    ])
 }
 
 fn gold_rows() -> Result<Vec<GoldRow>, String> {
-    let path = golden_dir().join("slices").join("cball").join("cball_rows.txt");
+    let path = golden_dir()
+        .join("slices")
+        .join("cball")
+        .join("cball_rows.txt");
     let text = fs::read_to_string(&path).map_err(|e| format!("{}: {}", path.display(), e))?;
     let mut rows = Vec::new();
-    for line in text.lines().filter(|l| !l.starts_with('#') && !l.is_empty()) {
+    for line in text
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.is_empty())
+    {
         let f: Vec<&str> = line.split(' ').collect();
         let op = String::from(*f.first().ok_or("empty row")?);
-        let prec: usize = f.get(1).ok_or("short row")?.parse().map_err(|_| "bad prec")?;
+        let prec: usize = f
+            .get(1)
+            .ok_or("short row")?
+            .parse()
+            .map_err(|_| "bad prec")?;
         let mut i = 3;
         let a = take4(&f, &mut i)?;
-        let b = if op == "sqr" || op == "abs" { None } else { Some(take4(&f, &mut i)?) };
+        let b = if op == "sqr" || op == "abs" {
+            None
+        } else {
+            Some(take4(&f, &mut i)?)
+        };
         let rref = [take_val(&f, &mut i)?, take_val(&f, &mut i)?];
         let mut refs = Vec::new();
         for _ in 0..3 {
@@ -469,7 +606,14 @@ fn gold_rows() -> Result<Vec<GoldRow>, String> {
         if i != f.len() {
             return Err(format!("trailing fields in {:?}", line));
         }
-        rows.push(GoldRow { op, prec, a, b, rref, refs });
+        rows.push(GoldRow {
+            op,
+            prec,
+            a,
+            b,
+            rref,
+            refs,
+        });
     }
     if rows.len() != 60 {
         return Err(format!("want 60 gold rows, got {}", rows.len()));
@@ -478,8 +622,22 @@ fn gold_rows() -> Result<Vec<GoldRow>, String> {
 }
 
 fn gold_box(p: &[ExactNum; 4], prec: usize) -> Result<CBall, String> {
-    let re = ok("from_mid_rad", Ball::from_mid_rad(p[0].add_full_prec(&num(0)), Mag::from_exact_num(&p[1]), prec))?;
-    let im = ok("from_mid_rad", Ball::from_mid_rad(p[2].add_full_prec(&num(0)), Mag::from_exact_num(&p[3]), prec))?;
+    let re = ok(
+        "from_mid_rad",
+        Ball::from_mid_rad(
+            p[0].add_full_prec(&num(0)),
+            Mag::from_exact_num(&p[1]),
+            prec,
+        ),
+    )?;
+    let im = ok(
+        "from_mid_rad",
+        Ball::from_mid_rad(
+            p[2].add_full_prec(&num(0)),
+            Mag::from_exact_num(&p[3]),
+            prec,
+        ),
+    )?;
     ok("CBall::new", CBall::new(re, im))
 }
 
@@ -541,7 +699,13 @@ fn factor_log2(op: &str) -> Result<i64, String> {
 fn want_tight(what: &str, b: &Ball, rref: &ExactNum, k: i64) -> Result<(), String> {
     let bound = Mag::from_exact_num(&rref.mul_full_prec(&pow2(k)?));
     if b.rad() > &bound {
-        return Err(format!("{}: rad {:?} > 2^{}·RREF {:?}", what, b.rad(), k, rref));
+        return Err(format!(
+            "{}: rad {:?} > 2^{}·RREF {:?}",
+            what,
+            b.rad(),
+            k,
+            rref
+        ));
     }
     Ok(())
 }
