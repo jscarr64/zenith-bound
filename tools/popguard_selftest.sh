@@ -43,7 +43,8 @@ ck; rm -f "$t/ran"; out=$(gr sbx "$hno" env -u POPSLOT_SCOPE -u POPGUARD); rc=$?
 ck; out=$(cd "$repo" && sbx "$hpg" env -u POPSLOT_SCOPE POPGUARD="$t/none" PYTHONNOUSERSITE=1 /usr/bin/python3 scripts/goldlib.py --selftest 2>&1); rc=$?
   [ "$rc" = 2 ] && printf '%s\n' "$out" | grep -q "REFUSING.*POPGUARD" || fail "Pop host, POPGUARD=/nonexistent: goldlib must refuse exit 2 (rc $rc): $out"
 ck; out=$(cd "$repo" && sbx "$hno" env -u POPSLOT_SCOPE -u POPGUARD PYTHONNOUSERSITE=1 /usr/bin/python3 scripts/goldlib.py --selftest 2>&1); rc=$?
-  [ "$rc" != 2 ] && [ "$rc" != 3 ] && printf '%s\n' "$out" | grep -q "WARNING.*popguard" || fail "no popguard.sh host: goldlib must WARN and go on (rc $rc): $out"
+  [ "$rc" = 0 ] && printf '%s\n' "$out" | grep -q "^goldlib: WARNING: no popguard.sh on this host ($hno/pop-logs/bin/popguard.sh): running WITHOUT the Pop memory guard$" \
+    && printf '%s\n' "$out" | grep -q "^goldlib selftest: ok" || fail "no popguard.sh host: goldlib must WARN and pass its selftest, exit 0 (rc $rc): $out"
 # the selftest itself: on Pop it never skips (a skip inside full_gate would hide a disabled guard); off Pop it skips
 st() { ( unset POPLOG_FILE POPLOG_PID POPLOG_STATE_DIR POPLOG_PROGRESS_FILE POPLOG_RUNNING RUNLOG_INNER RUNLOG_ACTIVE
          RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 "$@" "$here/popguard_selftest.sh" 2>&1 ); }
