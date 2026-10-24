@@ -1,11 +1,14 @@
 diff --git a/src/arith.rs b/src/arith.rs
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -211,7 +211,7 @@
-             }
+@@ -212,10 +212,7 @@
              (Ordering::Equal, _, _) | (Ordering::Less, false, Ordering::Greater) => {
                  let hi_up = if neg {
--                    r
+                     // m < 0 < m + r: hi = m + r exactly when r is a zenith-float value (16.S1.7), else r (>= m + r).
+-                    match r.to_exact_num() {
+-                        Ok(rn) => Mag::from_exact_num(&rn.add_full_prec(&m)),
+-                        Err(_) => r,
+-                    }
 +                    Mag::from_exact_num(&m).add_up(&r)
                  } else {
                      Mag::from_exact_num(&m).add_up(&r)

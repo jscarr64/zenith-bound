@@ -1610,3 +1610,80 @@ fn compare_rad_outside_exact_range_is_unknown() -> Result<(), String> {
     want_tri("lt wide", wide.lt(&p), Tri::Unknown)?;
     want_tri("eq wide", wide.eq(&p), Tri::Unknown)
 }
+
+/// 16.S1.7: under `Clip` a ball with a negative midpoint reaching above 0 has image `[0, sqrt(m + r)]`, and `m + r` is
+/// `r - |m|`, not `|m| + r`. `-1 ± 3` gives `[0, sqrt 2]`, so 3/2 is outside (kills 286-SQRTNEGHI, which used `|m| + r`).
+#[test]
+fn sqrt_clip_negative_mid_hull_is_m_plus_r() -> Result<(), String> {
+    let b = ok(
+        "clip -1±3",
+        ball(num(-1), mag(0xC000_0000_0000_0000, 2)?, 53)?.sqrt(53, &DomainPolicy::Clip),
+    )?;
+    want_contains("clip 0", &b, &num(0))?;
+    want_contains("clip sqrt2", &b, &num(2).sqrt(256, RoundingMode::Up))?;
+    match b.contains(&dy(3, -1)?) {
+        Tri::False => Ok(()),
+        t @ (Tri::True | Tri::Unknown) => Err(format!("clip -1±3: {:?} reaches 3/2 ({:?})", b, t)),
+    }
+}
+
+/// 16.S1.7: for `m - r > 0` the propagated radius is `r / sqrt(m)↓` rounded up, so it is at least `r / sqrt(m)`:
+/// `rad^2 · m >= r^2` exactly (at 4096 bits ε is far below the `Mag` rounding). Kills 287-SQRTROOTUP (`sqrt_up`).
+#[test]
+fn sqrt_radius_is_at_least_r_over_sqrt_m() -> Result<(), String> {
+    let r = mag(TOP, -9)?;
+    let rn = r.to_exact_num().map_err(|e| format!("r: {:?}", e))?;
+    let r2 = rn.mul_full_prec(&rn);
+    for v in 2i64..=200 {
+        let b = ok(
+            "sqrt",
+            ball(num(v), mag(TOP, -9)?, 4096)?.sqrt(4096, &DomainPolicy::Strict),
+        )?;
+        let rad = b
+            .rad()
+            .to_exact_num()
+            .map_err(|e| format!("rad {}: {:?}", v, e))?;
+        let lhs = rad.mul_full_prec(&rad).mul_full_prec(&num(v));
+        match lhs.partial_cmp(&r2) {
+            Some(core::cmp::Ordering::Greater | core::cmp::Ordering::Equal) => {}
+            other => {
+                return Err(format!(
+                    "sqrt({} ± 2^-10): rad {:?} below r/sqrt(m) ({:?})",
+                    v,
+                    b.rad(),
+                    other
+                ))
+            }
+        }
+    }
+    Ok(())
+}
+
+/// CONTRACT 10.4: only an INEXACT result in the top binade counts as overflow. An exact midpoint with exponent
+/// `EXPONENT_MAX` stays exact (kills 290-OVFEXACT, which dropped the `inexact()` test).
+#[test]
+fn exact_top_binade_midpoint_is_not_overflow() -> Result<(), String> {
+    let x = ExactNum::from_mag_parts(TOP, EXPONENT_MAX, 64).map_err(|e| format!("top: {:?}", e))?;
+    let top = || -> Result<Ball, String> { ok("top", Ball::exact(pow2(EXPONENT_MAX - 1)?, 53)) };
+    want_exact(
+        "top + 0",
+        &ok("add", top()?.add(&pt(0, 53)?, 53))?,
+        &x,
+        &Mag::zero(),
+    )?;
+    want_exact(
+        "top * 1",
+        &ok("mul", top()?.mul(&pt(1, 53)?, 53))?,
+        &x,
+        &Mag::zero(),
+    )?;
+    want_exact(
+        "2^(EMAX-2) * 2",
+        &ok(
+            "mul_2exp",
+            ok("half", Ball::exact(pow2(EXPONENT_MAX - 2)?, 53))?.mul_2exp(1, 53),
+        )?,
+        &x,
+        &Mag::zero(),
+    )
+}

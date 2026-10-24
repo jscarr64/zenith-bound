@@ -211,7 +211,11 @@ impl Ball {
             }
             (Ordering::Equal, _, _) | (Ordering::Less, false, Ordering::Greater) => {
                 let hi_up = if neg {
-                    r
+                    // m < 0 < m + r: hi = m + r exactly when r is a zenith-float value (16.S1.7), else r (>= m + r).
+                    match r.to_exact_num() {
+                        Ok(rn) => Mag::from_exact_num(&rn.add_full_prec(&m)),
+                        Err(_) => r,
+                    }
                 } else {
                     Mag::from_exact_num(&m).add_up(&r)
                 };
