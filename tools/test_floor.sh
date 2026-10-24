@@ -17,6 +17,8 @@ int() { [[ $2 =~ ^[0-9]{1,18}$ ]] || { echo "FAIL BADCOUNT: $step: $1 is '$2', n
 [ -f "$ff" ] && [ -r "$ff" ] || { echo "FAIL NOFLOOR: floor file $ff is missing or unreadable"; exit 1; }
 floor=$(awk -F'\t' -v s="$step" '$1 == s { print $2; exit }' "$ff") || { echo "FAIL NOFLOOR: cannot read $ff"; exit 1; }
 [ -n "$floor" ] || { echo "FAIL NOFLOOR: $step has no row in $ff"; exit 1; }
+# A CRLF row: strip the CR only to name it, then still FAIL (fail closed: a floor file edited on Windows must be fixed, not guessed at).
+case "$floor" in *$'\r') echo "FAIL BADCOUNT: $step: floor row ends in CR (CRLF line ending): '${floor%$'\r'}' in $ff; convert it to LF"; exit 1 ;; esac
 int floor "$floor"
 # Only `passed` counts toward the floor: failed tests are not coverage (a red step fails on its own exit code).
 counts=$(awk '

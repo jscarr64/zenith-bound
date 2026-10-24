@@ -11,7 +11,7 @@
   or if fewer summaries than started test binaries appear (a truncated log; the 2052 gate on 7191a1f passed with 599 of 738). Raise a floor
   with the tests that add to it; lowering one needs a CHANGELOG note. Fails closed (Spence on 92ac25f): `set -euo pipefail`, every parsed count must be a plain integer of at most 18 digits
   (else `FAIL BADCOUNT`), the log must be readable (`-r`), and only `passed` counts toward the floor. Self-test: `tools/test_floor_selftest.sh`
-  (now also unreadable, garbage, huge-count and passed+failed cases). poplog is unchanged (Rusty owns its guard).
+  (now also unreadable, garbage, huge-count and passed+failed cases). A CRLF floor row FAILS with a message naming the CR (Spence nit on e61f0ad). poplog is unchanged (Rusty owns its guard).
 
 - `tools/mutate.sh` refuses a dirty tree (modified or untracked files; exit 2, `mutate: FAIL dirty tree`) and prints
   `mutate: testing committed HEAD <sha>` (Spence, 2026-10-23). Mutants run on a worktree of the committed HEAD: 2102-zb-mut180 reported
