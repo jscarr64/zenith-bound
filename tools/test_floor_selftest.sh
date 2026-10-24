@@ -10,7 +10,8 @@ set -u
 here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/test-floor-selftest.XXXXXX)" || { echo "mktemp failed"; exit 2; }; runlog_on_exit "rm -rf \"$t\""
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }
 printf '# fixture\nbuild-debug\t30\n' > "$t/floor.txt"
-chk() { TEST_FLOOR_FILE="$t/floor.txt" "$here/test_floor.sh" "$@"; }
+# Every chk() and the CRLF call are one case each; the count is asserted at the end (Paul: a selftest must not read ok with 0 cases).
+chk() { printf 'x\n' >> "$t/cases"; TEST_FLOOR_FILE="$t/floor.txt" "$here/test_floor.sh" "$@"; }
 bin() { # bin <name> <passed>: one test binary's output
   printf '     Running unittests src/lib.rs (target/debug/deps/%s-0123)\n\nrunning %s tests\n' "$1" "$2"
   printf 'test result: ok. %s passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\n' "$2"; }
@@ -32,8 +33,8 @@ chk build-debug "$t/absent.log" && fail "a missing log must FAIL"
 # Spence (92ac25f review): the check must not fail open.
 { bin a 20; printf '     Running b\n\nrunning 15 tests\n'; printf 'test result: FAILED. 0 passed; 15 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n'; } > "$t/failed.log"
 chk build-debug "$t/failed.log" && fail "20 passed + 15 failed must FAIL a floor of 30 (only passed counts)"
-cp "$t/full.log" "$t/unreadable.log"; chmod 000 "$t/unreadable.log"
-if [ -r "$t/unreadable.log" ]; then echo "test_floor_selftest: note: running as a user who can read mode-000 files; unreadable case skipped"
+skipped=0; cp "$t/full.log" "$t/unreadable.log"; chmod 000 "$t/unreadable.log"
+if [ -r "$t/unreadable.log" ]; then echo "test_floor_selftest: note: running as a user who can read mode-000 files; unreadable case skipped"; skipped=1
 else chk build-debug "$t/unreadable.log" && fail "an unreadable log must FAIL"; fi
 chmod 600 "$t/unreadable.log"
 { bin a 10; printf 'test result: ok. 99999999999999999999999 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n'; } > "$t/garbage.log"
@@ -43,7 +44,9 @@ printf '\001\002\377binary garbage\ntest result: ok. x passed; y failed;\n' > "$
 chk build-debug "$t/binary.log" && fail "a garbage log must FAIL"
 # Spence (e61f0ad nit): a CRLF floor row still FAILS (fail closed), with a message that names the CR instead of printing it raw.
 printf '# fixture\r\nbuild-debug\t30\r\n' > "$t/crlf.txt"
-out=$(TEST_FLOOR_FILE="$t/crlf.txt" "$here/test_floor.sh" build-debug "$t/full.log") && fail "a CRLF floor row must FAIL: $out"
+printf 'x\n' >> "$t/cases"; out=$(TEST_FLOOR_FILE="$t/crlf.txt" "$here/test_floor.sh" build-debug "$t/full.log") && fail "a CRLF floor row must FAIL: $out"
 printf '%s\n' "$out" | grep -q "FAIL BADCOUNT: build-debug: floor row ends in CR (CRLF line ending)" || fail "CRLF floor row: unclear message: $out"
 printf '%s' "$out" | grep -q $'\r' && fail "CRLF floor row: message still carries a raw CR"
-echo "test_floor_selftest: ok"
+want_cases=$((13 - skipped)); ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+[ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
+echo "test_floor_selftest: ok ($ncases cases)"

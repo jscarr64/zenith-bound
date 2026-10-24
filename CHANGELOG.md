@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Mutant floor (Paul, 2026-10-23): a full `tools/mutate.sh` run (the gate's mutants step) FAILS if killed or killed+equivalent is below
+  `tools/mutants/floor.txt` (159 killed / 176 killed+equivalent now; MUTATE_FLOOR overrides). `--only` skips the floor but still FAILS with
+  0 mutants. Missing, garbage or CRLF floor rows FAIL. `tools/mutate_selftest.sh` and `tools/test_floor_selftest.sh` now count their
+  cases and FAIL unless the count matches (25 and 13), so a selftest that runs nothing cannot read ok.
+
 - L0a-2 edge rows (TEST_PLAN 8.1): `tests/harness/mag_rows.rs`, 6 tests: sqrt of 1, of powers of two and of all-ones mantissas (odd and
   even exponent), mul of all-ones and of powers of two, and shift distances 0/63/64 in `Mag::finite`, `add_up` and `sub_lower`. New
   mutants 181-S-sqrt-nosticky and 182-F-finite-minexp. Test floors raised 373 -> 379 (build-debug and build-release).

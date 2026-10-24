@@ -17,7 +17,8 @@
 #   KILLED               the suite failed (a test failed, or the run timed out)
 #   SURVIVED             the suite passed on the mutant: exit 1 (unless the id is in EQUIVALENT.txt: SURVIVED-EQUIVALENT, not a failure)
 #   INVALID              the patch does not apply or the mutant does not build (proves nothing): exit 1
-# Exit 0 only if at least one mutant ran and every mutant was KILLED or SURVIVED-EQUIVALENT (0 mutants is a failure).
+# Exit 0 only if at least one mutant ran and every mutant was KILLED or SURVIVED-EQUIVALENT (0 mutants is a failure), and, for a full
+# run (no --only), killed and killed+equivalent reach tools/mutants/floor.txt (MUTATE_FLOOR overrides).
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap mutate "$@"   # run log (tools/runlog.sh)
 set -u
@@ -25,6 +26,7 @@ export LC_ALL=C
 repo=${MUTATE_REPO:-$(cd "$(dirname "$0")/.." && pwd)}
 manifest=${MUTATE_MANIFEST:-$repo/tools/mutants/manifest.txt}
 equiv=${MUTATE_EQUIVALENT:-$(dirname "$manifest")/EQUIVALENT.txt}
+mfloor=${MUTATE_FLOOR:-$(dirname "$manifest")/floor.txt}
 ttl=${MUTATE_TIMEOUT:-20m}; bttl=${MUTATE_BUILD_TIMEOUT:-20m}
 only=""; list=0
 while [ $# -gt 0 ]; do
@@ -105,4 +107,20 @@ fi
 if [ -n "$only" ] && [ "$total" = 0 ]; then echo "mutate: no mutant with id $only"; exit 2; fi
 echo "mutate: $total mutants: $nk killed, $ns survived, $ne survived-equivalent, $ni invalid"
 [ "$total" -gt 0 ] || { echo "mutate: FAIL 0 mutants ran (an empty manifest proves nothing)"; exit 1; }
-[ "$ns" = 0 ] && [ "$ni" = 0 ]
+[ "$ns" = 0 ] && [ "$ni" = 0 ] || exit 1
+# Mutant floor (Paul, 2026-10-23): a full run must kill at least the checked-in number, so a manifest that loses rows, or a suite that
+# stops killing, cannot pass. --only runs one row by design and skips it (it still needs its one mutant run, above). Fails closed.
+[ -n "$only" ] && exit 0
+[ -f "$mfloor" ] && [ -r "$mfloor" ] || { echo "mutate: FAIL NOFLOOR: mutant floor $mfloor is missing or unreadable"; exit 1; }
+mrow() { awk -F'\t' -v k="$1" '$1 == k { print $2; found = 1; exit } END { exit !found }' "$mfloor"; }
+fk=$(mrow killed) || { echo "mutate: FAIL NOFLOOR: no 'killed' row in $mfloor"; exit 1; }
+fke=$(mrow killed+equivalent) || { echo "mutate: FAIL NOFLOOR: no 'killed+equivalent' row in $mfloor"; exit 1; }
+for v in "$fk" "$fke"; do
+  case "$v" in *$'\r') echo "mutate: FAIL BADCOUNT: floor row ends in CR (CRLF line ending): '${v%$'\r'}' in $mfloor; convert it to LF"; exit 1 ;; esac
+  [[ $v =~ ^[0-9]{1,18}$ ]] || { echo "mutate: FAIL BADCOUNT: floor value '$v' in $mfloor is not a plain integer"; exit 1; }
+done
+nke=$((nk + ne)); rc=0
+if [ "$nk" -ge "$fk" ]; then :; else echo "mutate: FAIL BELOW floor: $nk killed < $fk ($mfloor)"; rc=1; fi
+if [ "$nke" -ge "$fke" ]; then :; else echo "mutate: FAIL BELOW floor: $nke killed+equivalent < $fke ($mfloor)"; rc=1; fi
+[ "$rc" = 0 ] && echo "mutate: floor ok ($nk killed >= $fk, $nke killed+equivalent >= $fke)"
+exit "$rc"

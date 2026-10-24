@@ -1,0 +1,4 @@
+# Mutant floor for a full tools/mutate.sh run (the gate step). Raise it with the mutants that add to it; lowering needs a CHANGELOG note.
+# Format: KEY<TAB>MIN. killed: KILLED count. killed+equivalent: KILLED plus SURVIVED-EQUIVALENT (every row must be one of the two).
+killed	159
+killed+equivalent	176

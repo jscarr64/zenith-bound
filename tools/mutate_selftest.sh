@@ -55,7 +55,10 @@ printf 'src/lib.rs:add\t005-badpatch\t005-badpatch.patch\ttoy\n' > m.bad
 printf '# header only\n' > tools/mutants/EQUIVALENT.txt
 git add -A; git commit -qm mutants
 export MUTATE_REPO="$r" MUTATE_TMP="$t"
-run() { MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@"; }
+# Every run() is one case; the count is asserted at the end, so a selftest that silently skips its cases cannot read ok (Paul, 2026-10-23:
+# the zb-green-mutate-dirty2 step ran 0 tests and exited 0).
+printf '# fixture floor\nkilled\t0\nkilled+equivalent\t1\n' > "$t/mfloor.txt"
+run() { printf 'x\n' >> "$t/cases"; MUTATE_FLOOR="${MFLOOR:-$t/mfloor.txt}" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@"; }
 leftovers() { git -C "$r" worktree list | grep -c 'zb-mutate\.' ; find "$t" -maxdepth 1 \( -name "zb-mutate.*" -o -name "zb-mutate-target.*" \) | wc -l; }
 cm() { git -C "$r" add -A; git -C "$r" commit -qm fixture-edit >/dev/null 2>&1 || :; }   # commit a fixture edit: mutate.sh refuses a dirty tree
 setm() { cp "$r/$1" "$r/tools/mutants/manifest.txt"; cm; }   # committed: mutate.sh refuses a dirty tree
@@ -120,6 +123,23 @@ out="$(run)" && fail "modified tracked file passed: $out"; echo "$out" | grep -q
 git -C "$r" checkout -q tests/toy.rs; printf '#[test]\nfn new_one() {}\n' > "$r/tests/new_untracked.rs"
 out="$(run)" && fail "untracked file passed: $out"; echo "$out" | grep -q "^mutate: FAIL dirty tree" || fail "untracked: wrong message: $out"
 rm -f "$r/tests/new_untracked.rs"
+# Paul (2026-10-23): a full run FAILS when killed or killed+equivalent is below the checked-in floor (tools/mutants/floor.txt; MUTATE_FLOOR
+# overrides it). --only runs skip the floor but still need one mutant run. A missing, garbage or CRLF floor FAILS (fail closed).
+setm m.killed
+printf 'killed\t2\nkilled+equivalent\t2\n' > "$t/f.high"; out="$(MFLOOR="$t/f.high" run)" && fail "below the mutant floor passed: $out"
+echo "$out" | grep -q "^mutate: FAIL BELOW floor: 1 killed < 2" || fail "below floor: wrong message: $out"
+printf 'killed\t1\nkilled+equivalent\t1\n' > "$t/f.at"; out="$(MFLOOR="$t/f.at" run)" || fail "at the mutant floor failed: $out"
+echo "$out" | grep -q "^mutate: floor ok" || fail "at floor: no floor line: $out"
+out="$(MFLOOR="$t/f.high" run --only 001-add-mul)" || fail "--only must skip the floor: $out"
+out="$(MFLOOR="$t/f.none" run)" && fail "a missing mutant floor passed: $out"; echo "$out" | grep -q "^mutate: FAIL NOFLOOR" || fail "missing floor: wrong message: $out"
+printf 'killed\tlots\nkilled+equivalent\t1\n' > "$t/f.bad"; out="$(MFLOOR="$t/f.bad" run)" && fail "a garbage mutant floor passed: $out"
+echo "$out" | grep -q "^mutate: FAIL BADCOUNT" || fail "garbage floor: wrong message: $out"
+printf 'killed\t1\r\nkilled+equivalent\t1\r\n' > "$t/f.crlf"; out="$(MFLOOR="$t/f.crlf" run)" && fail "a CRLF mutant floor passed: $out"
+echo "$out" | grep -q "^mutate: FAIL BADCOUNT.*CRLF" || fail "CRLF floor: wrong message: $out"
+printf '# empty\n' > "$r/tools/mutants/manifest.txt"; cm
+out="$(MFLOOR="$t/f.at" run)" && fail "0 mutants with a floor passed: $out"; echo "$out" | grep -c "0 mutants ran" > /dev/null || fail "0 mutants: wrong message: $out"
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-echo "mutate selftest: ok"
+want_cases=25; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+[ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
+echo "mutate selftest: ok ($ncases cases)"
