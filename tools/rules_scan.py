@@ -635,8 +635,81 @@ def alias_tree_check():
     return 1 if sites else 0
 
 
+def narrow_exponent_sites():
+    """API-freeze unit 4: [(relpath, line, snippet)] for every public signature in src/ naming zf's `Exponent` or `i32`.
+    Covers `pub fn` signatures (up to the body or `;`, wrapped forms included), `pub const/static/type` items and `pub`
+    fields; `pub(crate)` and private items are not public API. Comments and strings are blanked first."""
+    narrow = re.compile(r"\b(?:i32|Exponent)\b")
+    starts = [
+        re.compile(r"\bpub\s+(?:(?:const|async|unsafe|extern)\s+)*fn\b"),
+        re.compile(r"\bpub\s+(?:const|static|type)\b"),
+        re.compile(r"\bpub\s+[A-Za-z_]\w*\s*:(?!:)"),
+    ]
+    sites = []
+    for dp, dn, fn in os.walk(os.path.join(ROOT, "src")):
+        dn[:] = sorted(dn)
+        for f in sorted(fn):
+            if not f.endswith(".rs"):
+                continue
+            path = os.path.join(dp, f)
+            text = blank_code(open(path, errors="replace").read())
+            for rx in starts:
+                for m in rx.finditer(text):
+                    end = len(text)
+                    for stop in ("{", ";", ",", "}") if rx is starts[2] else ("{", ";"):
+                        k = text.find(stop, m.end())
+                        if k != -1:
+                            end = min(end, k)
+                    sig = text[m.start():end]
+                    if narrow.search(sig):
+                        sites.append((os.path.relpath(path, ROOT), text.count("\n", 0, m.start()) + 1, " ".join(sig.split())))
+    return sites
+
+
+def narrow_exponent_check():
+    sites = narrow_exponent_sites()
+    for rel, line, snippet in sites:
+        print("%s:%d [pub_sig_narrow_exponent] %s" % (rel, line, snippet[:120]))
+    print("rules_scan: public signatures naming Exponent or i32: %d (no baseline, any hit fails; zb uses i64)" % len(sites))
+    return 1 if sites else 0
+
+
+def prec_width_sites():
+    """API-freeze unit 5: [(relpath, line, snippet)] for every `prec` in src/ typed with a concrete integer width
+    instead of the `Precision` alias: `prec`-named params, fields and bindings, and `fn *prec*(..) -> int` returns. Private
+    `const` items (zf-side container sizes such as `ZERO_PREC: usize`) are not a precision API and are skipped."""
+    width = r"(?:(?:core|std)::primitive::)?[ui](?:8|16|32|64|128|size)\b"
+    rxs = [
+        re.compile(r"\b[A-Za-z_]*prec\w*\s*:(?!:)\s*" + width, re.I),
+        re.compile(r"\bfn\s+\w*prec\w*\s*(?:<[^>]*>)?\s*\([^)]*\)\s*->\s*" + width, re.I),
+    ]
+    sites = []
+    for dp, dn, fn in os.walk(os.path.join(ROOT, "src")):
+        dn[:] = sorted(dn)
+        for f in sorted(fn):
+            if not f.endswith(".rs"):
+                continue
+            path = os.path.join(dp, f)
+            text = blank_code(open(path, errors="replace").read())
+            for rx in rxs:
+                for m in rx.finditer(text):
+                    bol = text.rfind("\n", 0, m.start()) + 1
+                    if re.search(r"\b(?:const|static)\s+$", text[bol:m.start()]):
+                        continue
+                    sites.append((os.path.relpath(path, ROOT), text.count("\n", 0, m.start()) + 1, " ".join(m.group(0).split())))
+    return sites
+
+
+def prec_width_check():
+    sites = prec_width_sites()
+    for rel, line, snippet in sites:
+        print("%s:%d [prec_concrete_width] %s" % (rel, line, snippet[:120]))
+    print("rules_scan: prec typed with a concrete integer width: %d (no baseline, any hit fails; use Precision)" % len(sites))
+    return 1 if sites else 0
+
+
 def both_count_checks(update=False):
-    return max(count_check(update), ref_count_check(update), hidden_count_check(update), rebuild_count_check(update), alias_tree_check())
+    return max(count_check(update), ref_count_check(update), hidden_count_check(update), rebuild_count_check(update), alias_tree_check(), narrow_exponent_check(), prec_width_check())
 
 
 def main(argv):

@@ -126,7 +126,7 @@ fn finite_rejections_are_the_representation_error() -> Result<(), String> {
 
     for &(mant, exp) in &cases {
         let got = Mag::finite(mant, exp);
-        if !matches!(got, Err(BoundError::Representation)) {
+        if !matches!(got, Err(BoundError::Representation { .. })) {
             return Err(format!(
                 "Mag::finite({}, {}) must be Err(BoundError::Representation), got {:?}",
                 mant, exp, got

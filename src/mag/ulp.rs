@@ -5,19 +5,21 @@
 
 use super::Mag;
 use super::TOP;
+use crate::precision::Precision;
 
 impl Mag {
     /// `2^(pre_round_exp - prec)`, placed as a canonical power of two (CONTRACT 14.7).
     ///
     /// The exponent field is computed in `i128` as `pre_round_exp - prec + 1` and then
-    /// placed. `prec` is the full `u32` value. An exponent field above `i64::MAX`
+    /// placed. `prec` is the full `Precision` value. An exponent field above `i64::MAX`
     /// (only `ulp_mag(i64::MAX, 0)`) is `Infinity`. An exponent field below `i64::MIN`
     /// rounds up to the smallest positive `Mag` (CONTRACT 3.2).
-    pub fn ulp_mag(pre_round_exp: i64, prec: u32) -> Mag {
-        // |pre_round_exp - prec + 1| < 2^65, so the checked steps cannot fail. `Infinity` is the
+    pub fn ulp_mag(pre_round_exp: i64, prec: Precision) -> Mag {
+        // |pre_round_exp - prec + 1| < 2^65, so the checked steps cannot fail (a `usize` prec always fits `i128`). `Infinity` is the
         // one fallback: an error term must never be too small.
-        match i128::from(pre_round_exp)
-            .checked_sub(i128::from(prec))
+        match i128::try_from(prec)
+            .ok()
+            .and_then(|p| i128::from(pre_round_exp).checked_sub(p))
             .and_then(|diff| diff.checked_add(1))
         {
             Some(mag_exp) => place_pow2(mag_exp),
@@ -28,14 +30,17 @@ impl Mag {
     /// `2^(mid_exp - prec - 1)`, placed as a canonical power of two (CONTRACT 14.7).
     ///
     /// At `prec == 0` this is `2^(mid_exp - 1)`. The exponent field is `mid_exp - prec`,
-    /// computed in `i128` over the full `u32` precision. Underflow rounds up to the
+    /// computed in `i128` over the full `Precision` range. Underflow rounds up to the
     /// smallest positive `Mag`; overflow is `Infinity`.
     ///
     /// This value is the right midpoint-rounding term only under a nearest mode. A
     /// directed mode needs the full ulp from [`Mag::ulp_mag`].
-    pub fn half_ulp(mid_exp: i64, prec: u32) -> Mag {
+    pub fn half_ulp(mid_exp: i64, prec: Precision) -> Mag {
         // |mid_exp - prec| < 2^64, so the checked step cannot fail. `Infinity` is the one fallback.
-        match i128::from(mid_exp).checked_sub(i128::from(prec)) {
+        match i128::try_from(prec)
+            .ok()
+            .and_then(|p| i128::from(mid_exp).checked_sub(p))
+        {
             Some(mag_exp) => place_pow2(mag_exp),
             None => Mag::infinity(),
         }
@@ -46,11 +51,12 @@ impl Mag {
     /// For a finite nonzero `Mag` this is `exp <= mid_exp - prec - 1`, evaluated in
     /// `i128` so a threshold below `i64::MIN` is not rounded up (CONTRACT 1.4, 14.7).
     /// The canonical zero is below every half ulp. `Infinity` is not.
-    pub fn smaller_than_half_ulp(&self, mid_exp: i64, prec: u32) -> bool {
+    pub fn smaller_than_half_ulp(&self, mid_exp: i64, prec: Precision) -> bool {
         // |mid_exp - prec - 1| < 2^65, so the checked steps cannot fail; `false` ("not known to be
         // below") is the one fallback.
-        let Some(threshold) = i128::from(mid_exp)
-            .checked_sub(i128::from(prec))
+        let Some(threshold) = i128::try_from(prec)
+            .ok()
+            .and_then(|p| i128::from(mid_exp).checked_sub(p))
             .and_then(|diff| diff.checked_sub(1))
         else {
             return false;

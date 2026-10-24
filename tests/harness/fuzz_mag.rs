@@ -356,7 +356,7 @@ fn report(
         seed: base_seed,
         case: case_index,
         op: String::from(prop.name),
-        prec: shrunk.case.prec,
+        prec: usize::try_from(shrunk.case.prec).unwrap_or(usize::MAX),
         rm: String::from("none"),
         a: shrunk.case.a.encode(),
         b: shrunk.case.b.encode(),
@@ -415,7 +415,7 @@ pub const NON_VACUITY_CASES: u64 = 100_000;
 /// What a failed case reports: the replay-line fields and the reason. Spence's `Bad` implements this in the post-merge glue.
 pub trait CaseFailure {
     fn op(&self) -> &str;
-    fn prec(&self) -> u32;
+    fn prec(&self) -> usize;
     fn a(&self) -> &str;
     fn b(&self) -> &str;
     fn why(&self) -> &str;
@@ -663,7 +663,8 @@ fn a_wrong_op_is_caught_with_a_replay_line_that_reproduces_it() -> Result<(), St
     let shrunk = MagCase {
         a,
         b,
-        prec: line.prec,
+        prec: u32::try_from(line.prec)
+            .map_err(|_| format!("replay prec {} is not a fuzz precision", line.prec))?,
     };
     if !fails(&broken_ops(), &PROPS[0], &shrunk) {
         return Err(format!("the shrunk case does not fail: {}", first));
@@ -785,7 +786,7 @@ impl CaseFailure for Planted {
     fn op(&self) -> &str {
         "planted"
     }
-    fn prec(&self) -> u32 {
+    fn prec(&self) -> usize {
         5
     }
     fn a(&self) -> &str {

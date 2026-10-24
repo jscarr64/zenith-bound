@@ -185,8 +185,14 @@ fn mag_suite() -> Result<Digest, String> {
     }
     for exp in EXPS.iter() {
         for prec in PS_FAST.iter() {
-            fold_mag(&mut d, &Mag::ulp_mag(*exp, *prec));
-            fold_mag(&mut d, &Mag::half_ulp(*exp, *prec));
+            fold_mag(
+                &mut d,
+                &Mag::ulp_mag(*exp, usize::try_from(*prec).unwrap_or(usize::MAX)),
+            );
+            fold_mag(
+                &mut d,
+                &Mag::half_ulp(*exp, usize::try_from(*prec).unwrap_or(usize::MAX)),
+            );
         }
     }
     Ok(d)

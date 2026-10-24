@@ -352,7 +352,7 @@ fn replay_text(label: &str, seed: u64, case: u64, prec: u32, rule: &Rule, c: &Ca
         seed,
         case,
         op: format!("{}[ka={},kb={}]", label, c.shifts.ka, c.shifts.kb),
-        prec,
+        prec: usize::try_from(prec).unwrap_or(usize::MAX),
         rm: String::from(ModeOrNone::None.name()),
         a: enc(&c.a),
         b: if rule.unary {

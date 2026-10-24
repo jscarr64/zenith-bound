@@ -56,7 +56,7 @@ fn run_line(line: &str, op: &str) -> Result<bool, String> {
     let (got, want) = match op {
         "ulp_mag" | "half_ulp" => {
             let exp = i64_of(&mut it)?;
-            let prec = u32::try_from(u64_of(&mut it)?).map_err(|e| format!("bad u32: {}", e))?;
+            let prec = usize::try_from(u64_of(&mut it)?).map_err(|e| format!("bad prec: {}", e))?;
             let m = if op == "ulp_mag" {
                 Mag::ulp_mag(exp, prec)
             } else {

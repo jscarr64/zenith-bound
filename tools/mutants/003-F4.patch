@@ -1,11 +1,10 @@
 diff --git a/src/mag/mod.rs b/src/mag/mod.rs
-index 746cd54..6e9fd77 100644
 --- a/src/mag/mod.rs
 +++ b/src/mag/mod.rs
-@@ -77,7 +77,7 @@ impl Mag {
-                     .checked_sub(i128::from(shift))
-                     .and_then(|adjusted| i64::try_from(adjusted).ok())
-                     .ok_or(BoundError::Representation)?;
+@@ -84,7 +84,7 @@
+                         op: "Mag::finite",
+                         detail: "below the smallest positive Mag",
+                     })?;
 -                Ok(Mag::from_canonical(exp, mant << shift))
 +                Ok(Mag::from_canonical(exp, mant << (shift % 32)))
              }

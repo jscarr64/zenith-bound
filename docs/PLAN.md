@@ -1,5 +1,8 @@
 # Plan: zenith-bound, rigorous ball arithmetic on zenith-float (revision 2026-10-14)
 
+> **Superseded 2026-10-23 (Paul; CONTRACT O19, O20).** Ball operations take no `RoundingMode`: the midpoint rounds to nearest (`ToEven`) and the radius rounds outward. Wherever this file gives a Ball op an `rm` argument or runs a Ball row "per mode" / "under each mode" / "all modes", read: one call at `ToEven`; per-mode rows apply only to internal `ulp`/`half_ulp` helpers and the zenith-float scalar level, where `RoundingMode::None` is still rejected. `identical` returns `bool`; `contains` and `overlaps` return `Tri`. CONTRACT wins on any remaining conflict.
+
+
 - **Branch under review:** `jscarr64/zenith-float` `cursor/oracle-step1-2-0-0-79c6`, head `508a40039fcb6118d4eb07f14596f0153639298f` (committed 2026-10-14 10:57 CT; `04ba6a8` is in its history). Read through the GitHub connector only. No clone, no push, no PR.
 - **This document:** a plan only. It revises `zenith-bound_PLAN_2026-10-13.md` and folds in Jeff's briefs B1–B9. Part K is the Task 1 audit of zf's rounding that this revision rests on. **Amended 2026-10-14 after an outside review**; every review item and its disposition is in Part R.
 - **Decisions (locked):**
@@ -31,7 +34,7 @@ zf precision is also rounded up to a multiple of 64 bits today. That would overe
 
 **Rough size: ~201–356 runs** (was ~147–268 on 10-13; ~173–331 before the outside review; ~195–345 after it, before the Gemini review). Jeff discounts AI timeline estimates, so read these only as relative sizes between items. The growth comes from the bigger zf 2.1 set (P1–P14), the contract layer, the review's added L0/L1 scope, the Gemini items (P14 audit, P15 exact-bit rounding, O(1) Mag paths), the independent truth model, `ComplexBall`/polynomial/series/matrix work, and review-sized L0 steps for the local model.
 
-zf's old `Ball` is deprecated in zf 2.1 (pointing to zenith-bound) and removed in zf 3.0. zenith-bound starts at 0.0.0 (scaffold) and 0.1.0 (L0).
+zf's old `Ball`, `ComplexBall` and `ziv_round`/`ziv_round_vec` are deleted in zf 2.0, and `zenith_float::{Ball, ComplexBall}` re-export zenith-bound's types (C2). zenith-bound starts at 0.0.0 (scaffold) and 0.1.0 (L0).
 
 ## Part A. What exists in zf (surveyed on `16141841`; rounding re-audited on `508a400` in Part K)
 
@@ -39,7 +42,7 @@ zf's old `Ball` is deprecated in zf 2.1 (pointing to zenith-bound) and removed i
 |---|---|---|---|
 | Real ball | `Ball { mid: ExactNum, rad: ExactNum }`. Has `new`, `add`, `mul`, `exp`, `sin`, `cos`, `ln`, `sqrt`, `erf`, `bessel_j0`, `bessel_j1`, `contains`, and private `strictly_positive` and `excludes_zero` | `zenith-float-num/src/ball.rs:17-239` | Partly. See gaps |
 | Complex ball | `ComplexBall { mid: ExactComplex, rad: ExactNum }`, a disk. Has `add`, `mul`, `exp`, `ln`, `sin`, `cos`, `contains` | `ball.rs:241-~360` | Partly |
-| Ziv retry | `ziv_round`, `ziv_round_vec`. They use the ball to certify correct rounding | `ball.rs:~380-430` | Yes, for its purpose |
+| Ziv retry | `ziv_round`, `ziv_round_vec`. They use the ball to certify correct rounding (deleted in zf 2.0, C2) | `ball.rs:~380-430` | Yes, for its purpose |
 | Ball goldens | `balls.jsonl`, run by `methods_oracle.rs::balls`. Covers `ball_exp`, `ball_sin`, `ball_add`, `ball_mul`. It checks only that the truth is inside the ball, not how tight the ball is | `zenith-float-num/tests/oracle/goldens/balls.jsonl`, `tests/methods_oracle.rs:336-360,429` | Inclusion only |
 | Rounding modes | `RoundingMode { None=1, Up=2, Down=4, ToZero=8, FromZero=16, ToEven=32, ToOdd=64 }`. `Up`/`Down` are directed (the docs wrongly say "round half") | `zenith-float-num/src/defs.rs:251-272` | **Finite range only, tested not proven; overflow ignores the mode (Part K3).** `None` truncates, unsafe for bounds |
 | Mag / radius type | **None.** The radius is a full `ExactNum` at working precision `p` | `ball.rs:21` | — |
@@ -176,6 +179,8 @@ Subnormal results in the MPFR differential only check MPFR's underflow flag, not
 
 ### C1. zf 2.1 prerequisites (status from Part K)
 
+**Interim Stage A pin (2026-10-23, Jeff):** zenith-bound depends on `zenith-float-num` by path at zf SHA **`fe5c15d`** (detached worktree `/tmp/zf-pin-fe5c15d`, `default-features = false`, no std). The pin is also recorded in `Cargo.toml`. Replace it with the released Stage A version when one is tagged.
+
 | # | Prerequisite | Status on `508a400` | Needed by |
 |---|---|---|---|
 | P1 | `exponent()` and a named leading-bit exponent | EXISTS (`exponent`); helper MISSING | Mag `from_exact_num`, `ulp_mag` |
@@ -200,7 +205,7 @@ P1, P4, P6 and P10 exist (P10 needs validation). P2, P3, P7, P8, P9, P11 are mis
 **G1 decision: LOCKED by Jeff, 2026-10-14 (CONTRACT.md clause 5).** Exact-bit precision rounding lives in zenith-float (P15, tied to zf defect 6). zenith-bound does **not** re-chop or re-round a zf result to a smaller precision, and there is no chop fallback. Reasons: a second chop of zf's 64-bit-rounded result is double rounding, which is wrong under nearest modes, and one rounding path means one MPFR-tested implementation. If the zf 2.0.0 defect-6 fix delivers exact-bit rounding, P15 folds into 2.0.0; otherwise it stays in 2.1. If P15 slips, L0 waits.
 
 ### C2. zf's prototype `Ball` and `ComplexBall`
-Unchanged from 10-13: deprecated in zf 2.1 (pointing to zenith-bound), `contains` truncation bug fixed (`ball.rs:236`), removed in zf 3.0. `ziv_round` stays in zf. `GkResult.abs_err_est` is renamed `heuristic_err` in 3.0.
+**Replaced 2026-10-23 (zf 2.0 API surface approved, via Spence):** in zf 2.0, zf's prototype `Ball`, `ComplexBall`, their serde impls and `ziv_round`/`ziv_round_vec` are **deleted** (no deprecation cycle), and `zenith_float::{Ball, ComplexBall}` re-export zenith-bound's types. zenith-bound's `ComplexBall` (a disk) in L2a takes over `add`, `mul`, `exp`, `ln`, `sin`, `cos` and `contains`; `erf`, `bessel_j0` and `bessel_j1` go to L2d. serde for `Ball` lives in zenith-bound behind an optional feature and uses the canonical codec (Part J, CONTRACT 13). `GkResult.abs_err_est` is renamed `heuristic_err` in 3.0.
 
 ### C3. Versions and release story
 - 0.0.0 = scaffold (Part N). 0.1 = L0, 0.2 = L1, 0.3 = L2, 0.4 = L3, 0.5 = L4. 1.0 when L0–L4 are green and the Part J encoding and Part I trace format are frozen.
@@ -231,16 +236,20 @@ Provenance: `NOTICE-puremp` at the repo root holds the full MIT text; each porte
   - `Ball { mid: ExactNum, rad: Mag, prec: u32 }` (B3). `prec` is exactly `prec` bits, through zf P15 (exact-bit rounding in zenith-float, LOCKED; Gemini G1; no re-chopping in zenith-bound). Before P15, zf stores `round_up_to_64(prec)` (K5), and L0 does not start.
   - `ComplexBall` in **two forms** (B3): `Rect { re: Ball, im: Ball }` (Arb `acb`) and `Disk { mid: ExactComplex, rad: Mag }`, with conversions that only ever enlarge (`rect→disk`: `rad = hypot_up(r_re, r_im)`; `disk→rect`: each component gets `rad`).
   - `Interval { lo, hi }` (inf–sup) with `Ball::to_interval` (lo rounded Down, hi rounded Up) and `Interval::to_ball`, for subdivision (B1).
-  - `BallPoly`, `BallSeries` (truncated power series with an order), `BallMat`, `ComplexBallMat` (B1).
+  - `BallPoly`, `BallSeries` (truncated power series with an order) (B1).
+  - **Arrays (2026-10-23, rulings c/e):** `BallArray` (dynamic rank-N, row-major, `shape: Box<[usize]>`, private fields, no `Clone`/`PartialEq`), thin `BallVec`/`BallMat` newtypes, `ComplexBallArray`/`ComplexBallVec`/`ComplexBallMat`, `MagArray`; result types `BallLu`, `BallCholesky`, `BallQr`, `GlsResult`. Ops take `prec: u32` (no `rm`), return `BoundResult`; `identical() -> bool`, `contains`/`overlaps` → `Tri`. A sealed trait `Enclosure` is implemented by `Ball` and `ComplexBall`.
   - `Tri { True, False, Unknown }`.
-  - **No `PartialEq`/`PartialOrd` on `Ball`** (or on any ball container). `==` on enclosures is ambiguous. Use `identical(&self, &Ball) -> bool` (same mid bits, same `Mag`, same `prec`) for representation equality and the `Tri` comparisons (`lt`, `le`, `eq`, …) for value questions.
+  - **No `PartialEq`/`PartialOrd` on `Ball`** (or on any ball container). `==` on enclosures is ambiguous. Use `identical(&self, &Ball) -> bool` (O20; `contains` and `overlaps` return `Tri`) (same mid bits, same `Mag`, same `prec`) for representation equality and the `Tri` comparisons (`lt`, `le`, `eq`, …) for value questions.
   - `DomainPolicy { Strict, Clip }` (see Part L clause 7): one enum, an **explicit last parameter** on every op that has a domain (`tan` included); `Strict` is `Default::default()` only, there are no paired `foo()`/`foo_policy()` forms (O6 decided 2026-10-16, Paul under Jeff's delegation, Rusty recommended).
 - **Precision is explicit** on every op: `fn add(&self, b: &Ball, prec: u32, rm: RoundingMode) -> BoundResult<Ball>`. `rm` only shapes the midpoint; it never affects correctness (B1: "mid rounded to prec p with rm").
 - **Results and error kinds** (B2):
   ```text
   enum BoundError {
       Domain { op, detail },          // ball outside the domain under DomainPolicy (Part L clause 7); division by a ball touching 0
-      Resource { op, limit },         // precision cap, iteration/evaluation budget, memory
+      Resource { op, detail },        // precision cap, iteration/evaluation budget, memory; "cannot certify at this prec"
+      NotPositiveDefinite { op, detail }, // certified not SPD (2026-10-23, ruling b)
+      Singular { op, detail },        // certified singular (ruling b)
+      // #[non_exhaustive] (ruling a)
       // plus InvalidArgument and Representation (CONTRACT O11-W); no Overflow (O2), no Indeterminate (O1)
   }
   type BoundResult<T> = Result<T, BoundError>;     // O1 decided 2026-10-16, Paul under Jeff's delegation, Rusty recommended
@@ -357,7 +366,7 @@ B2's order maps onto the layers like this: (1) contract + (2) real balls = **L0*
 
 **L2b Ball polynomials and power series.** `BallPoly` (coefficients are balls; evaluation by Horner with rounding errors accumulated in `Mag`; root bounds by Cauchy/Fujiwara rounded up). `BallSeries` (truncated power series to order `n` with ball coefficients, mul/compose/inverse/exp/log of series; the truncation error is not dropped: a series result either states its order or carries a tail bound).
 
-**L2c Ball matrices with dense linear-algebra enclosures.** `BallMat`/`ComplexBallMat`: products by the midpoint–radius formula `|A|·rB + rA·(|B| + rB)` plus a rounding bound, all in `Mag`, sequential index order (Part J). Dense enclosures: determinant, inverse, and the residual `‖I − RA‖` used by L4's verified solve.
+**L2c Ball arrays and linear algebra (all in 2.0, Jeff 2026-10-23).** L2c-1 `BallArray` rank-N + Vec/Mat + complex mirrors, elementwise ops; L2c-2 norms (`norm_inf`/`norm_1`/`norm_frob_up` → `Mag`), mid/rad split, componentwise↔normwise (enlarging only); L2c-3 dot/matvec/matmul by `|A|·rB + rA·(|B| + rB)` plus a rounding bound, all in `Mag`, sequential order (Part J); L2c-4 triangular solves; L2c-5 LU (pivots on mids) + determinant; L2c-6 verified Cholesky + `is_spd -> Tri` (`NotPositiveDefinite` when certified, `Resource` when undecided); L2c-7 `logdet_spd`, `quad_form` (rᵀC⁻¹r = ‖L⁻¹r‖²), Cholesky solve (needs L1 `ln`); L2c-8 Householder QR + least squares. Order: 1→2→3→4→(5 ‖ 6→7 ‖ 8). Units 1–6 and 8 need only L0b.
 
 **L2d Selected specials (after a–c).** Priority by Accumath use: gamma/lgamma, erf/erfc, Bessel J0/J1, zeta. **B3 rule:** erf, J0, J1 use **derivative bounds** (`erf' = 2/√π·e^{−x²}`, `J0' = −J1`, `J1' = J0 − J1/x`, each bounded over the ball). Higher specials (pFq, elliptic, polylog, expint, Airy, the rest) use **either** a series with a rigorous remainder **or** zf's correctly rounded value at the midpoint plus a separately proven bound (derivative or remainder). Anything without a proof returns `Err(Resource)` or an all-reals ball (O1; never a guess). The 10-13 method table for specials still applies:
 
@@ -392,10 +401,12 @@ Tests: sets as for L1, plus poles (gamma at −n), branch cuts approached from b
   - **Root isolation:** port puremp `bisect_root` (certified sign change) plus interval Newton / Krawczyk for existence and uniqueness; output is a list of isolating balls each tagged `Unique`/`Exists`/`Unknown`.
   - **Verified linear solve:** approximate inverse `R` in point arithmetic, then Krawczyk/Rump with L2c's `‖I − RA‖ < 1` check; enclosure `x̃ ± ‖R(b − Ax̃)‖/(1 − ‖I − RA‖)`. Reports failure, never a narrow wrong answer.
   - **Bounded residuals:** every point solution Accumath shows carries a ball residual `‖f(x̃)‖` and, where the theory allows, an error bound on `x̃`.
-  - **Eigen-enclosures** for symmetric matrices (Weyl + residual); general matrices refuse.
+  - **Verified SPD solve / inverse / logdet** (Rump residual on top of L2c-6).
+  - **GLS:** `gls(X, C, y, prec) -> BoundResult<GlsResult { beta, cov, chi2, logdet_c }>` via Cholesky whitening then QR; never forms (XᵀC⁻¹X)⁻¹ directly.
+  - **Eigen-enclosures:** symmetric: verified eigenpairs (point Jacobi, rigorous residual bound, Weyl for the radius of A, Gershgorin on X̃ᵀAX̃ for clusters); general: Gershgorin discs only (Bauer–Fike refused without certified cond(V)).
   - **ODE:** Lohner-style validated integrator (Taylor series by ball AD, Picard a-priori enclosure, QR wrapping). v1: polynomial/elementary right-hand sides, small systems.
 - **Accumath integration (B2 differentiator):** symbolic expression → certified enclosure, via Part F.
-- **Tests:** Hilbert matrices n = 5..12 as a set (contain the exact rational solution or report failure), ODE sets (`y′ = −y`, harmonic oscillator, short-horizon Lorenz), root-isolation sets with clustered and multiple roots.
+- **Tests:** Hilbert matrices n = 5..32 (gate ≤32×32 at 16384 bits; larger in deep/cloud runs, ruling d) as a set (contain the exact rational solution or report failure), ODE sets (`y′ = −y`, harmonic oscillator, short-horizon Lorenz), root-isolation sets with clustered and multiple roots.
 
 ## Part E. Test strategy (all layers; B2, B3)
 
@@ -525,7 +536,7 @@ Jeff discounts AI timeline estimates, so this table gives **relative runs only**
 
 ## Part J. Bit-identical ball results across machines and builds
 
-**Goal.** For a given (op, inputs, prec, rm, crate version), the output midpoint *and* radius are byte-identical on every supported platform and in debug and release builds. Golden hash files enforce this.
+**Goal.** For a given (op, inputs, prec, crate version), the output midpoint *and* radius are byte-identical on every supported platform and in debug and release builds. Golden hash files enforce this.
 
 **Sources of nondeterminism to ban (each has a lint or test):**
 

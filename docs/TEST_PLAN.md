@@ -1,5 +1,8 @@
 # zenith-bound test plan: wide-range testing, build plan and checklist
 
+> **Superseded 2026-10-23 (Paul; CONTRACT O19, O20).** Ball operations take no `RoundingMode`: the midpoint rounds to nearest (`ToEven`) and the radius rounds outward. Wherever this file gives a Ball op an `rm` argument or runs a Ball row "per mode" / "under each mode" / "all modes", read: one call at `ToEven`; per-mode rows apply only to internal `ulp`/`half_ulp` helpers and the zenith-float scalar level, where `RoundingMode::None` is still rejected. `identical` returns `bool`; `contains` and `overlaps` return `Tri`. CONTRACT wins on any remaining conflict.
+
+
 **Status: working build plan (2026-10-15).** This is the document the tests get built against. It is not a proposal waiting on sign-off: Jeff's instruction (2026-10-15 10:45 PM CT) is "on all our crates we need wide range testing not just narrow testing... we need to make sure it handles all edges; not sure how we go about testing zenith-bound but we need to be very thorough." Items still open are technical choices for Rusty (section 17); they have a default stated here and the build starts on the default.
 
 - **Written against (builder head is now `a577e67`, see 2.1):** branch `spence/zb-l0-prep` at `581f677` (local worktree `/tmp/zb-testplan`, branch `spence/zb-test-plan`). Another executor keeps adding commits to `spence/zb-l0-prep`; names and counts below were read at `581f677` and must be re-read when the plan is applied. **Drift since I started (re-read 2026-10-15, about 11:05 PM CT):** the build worker moved `spence/zb-l0-prep` from `581f677` to `e09ab26` (section 2.1). Everything below is as of `581f677` unless a line names the newer commit; **counts and file facts need a re-read at apply time.** Cassie's note that `/tmp/zb-work` had uncommitted changes at her read time (`scripts/gen_goldens.py` modified, `tests/goldens/mag_ops.txt` deleted) came from a read-only executor at about 10:45 PM CT. **Unverified by me:** I did not inspect that worktree (instruction: do not touch it); at `09edb9e` both files are committed on the branch.
@@ -426,11 +429,11 @@ Budgets are proposals, unmeasured `[NV]`; item S0 measures first and sets the fi
 |---|---|
 | Shared (S) | S0 calibration done and counts recorded; generators, props, replay/shrink, coverage script, mutant runner, `goldens-regen` step, `-(b-a)` scan rule are in the gate and green; M1 model extension has self-tests that fail on a wrong model |
 | L0a Mag | every row of 8.1 has at least one named test citing its clause; all 8 round ops plus `cmp`, conversions, `ulp` helpers satisfy P1 to P3, P9 and W1 at gate seeds with 0 failures and in one deep run at or above the section 1 deep target; goldens regenerate byte-identically and contain round-down-overflow rows; pub-fn coverage clean for `src/mag`; every Mag mutant in the catalog killed (or documented equivalent); extra review of the Mag tests by Paul or Cassie (PLAN L0 review rule) and Rusty's rounding review recorded |
-| L0b real balls | every row of 8.2 tested; P1 to P10 and W1 to W6 hold for every op x 6 modes x PS-fast at gate and PS-deep in a deep run, 0 failures; `RoundingMode::None` rejected everywhere; `inexact()` pin test green; tightness report within the (D2) factors with the ratchet file committed; chains of 2/10/100/1000 hold; encoder/decoder fuzz clean; pub-fn coverage and mutation matrix clean for `src/ball`, `src/encode.rs`, `src/decimal.rs`; grid digests identical on the required targets (D8). Needs the zf pin items in section 15 |
+| L0b real balls | every row of 8.2 tested; P1 to P10 and W1 to W6 hold for every op x `ToEven` (O19) x PS-fast at gate and PS-deep in a deep run, 0 failures; `RoundingMode::None` (zf scalar level only, O19) rejected everywhere; `inexact()` pin test green; tightness report within the (D2) factors with the ratchet file committed; chains of 2/10/100/1000 hold; encoder/decoder fuzz clean; pub-fn coverage and mutation matrix clean for `src/ball`, `src/encode.rs`, `src/decimal.rs`; grid digests identical on the required targets (D8). Needs the zf pin items in section 15 |
 | L1 elementary | every row of 8.3 tested for each of the 25 items; exact cases return in bounded work under all modes; both policies at every domain edge; goldens at the PS-fast precisions at gate and all PS in nightly, containment 0 failures, tight/loose within factors; P14 findings exist for every function (L1 does not start without them, PLAN; they are zenith-float Stage B, with P11 and Option A for the functions L1 calls, DECIDED 2026-10-16, Paul under Jeff's delegation); mutation and coverage clean |
 | L2 | rows of 8.4; Rect/Disk conversions only enlarge; singular/ill-conditioned paths return errors; specials goldens including zeta at 0, -1, 1 from mpmath; compounds and equivalent-form checks; coverage and mutation clean |
 | L3 | rows of 8.5; budgets are counts; no narrow uncertified result in any adversarial set; coverage and mutation clean |
-| L4 | rows of 8.6; the failure rule (error or `Infinity` radius on every failed enclosure) asserted on every refusal path; Hilbert n = 5..12 contain the exact solution or fail; coverage and mutation clean |
+| L4 | rows of 8.6; L4-v4-SWEEPS row (32×32 @16384 bits converges within 64 sweeps, count recorded; out of sweeps ⇒ `NotConverged`) checked off; the failure rule (error or `Infinity` radius on every failed enclosure) asserted on every refusal path; Hilbert n = 5..12 contain the exact solution or fail; coverage and mutation clean |
 | Whole crate (before ship) | all levels closed; full nightly set green twice in a row at different extra seeds; cross-target digest diff clean; no surviving non-equivalent mutant; no open item from section 17 that blocks an assertion |
 
 ## 15. What depends on the final zenith-float pin SHA (pending)
@@ -776,7 +779,7 @@ What I could check: 2027-02-12 minus 2027-01-02 is 41 calendar days, which match
 **L2**
 - [ ] L2-1 Rect/Disk complex incl. cuts and conversions
 - [ ] L2-2 BallPoly, BallSeries
-- [ ] L2-3 BallMat/ComplexBallMat incl. singular and Hilbert
+- [ ] L2-3 BallArray/BallVec/BallMat + complex (rank-N, elementwise), norms, products, tri solve, LU/det, Cholesky + is_spd, logdet/quad_form, QR, incl. singular, indefinite and Hilbert (§22)
 - [ ] L2-4 specials (gamma, lgamma, erf, erfc, J0, J1, zeta at 0, -1, 1 from mpmath)
 - [ ] L2-5 goldens, compounds, fuzz, mutants, coverage, exit review
 
@@ -784,12 +787,20 @@ What I could check: 2027-02-12 minus 2027-01-02 is 41 calendar days, which match
 - [ ] L3-1 analytic and non-analytic sets, budgets, adversarial integrands, goldens, fuzz, mutants, coverage, exit review
 
 **L4**
-- [ ] L4-1 adaptive precision, root isolation (multiple/clustered), verified solve (Hilbert 5..12, singular), residuals, eigen, ODE sets
+- [ ] L4-1 adaptive precision, root isolation (multiple/clustered), verified solve (Hilbert 5..32, singular), verified SPD solve, GLS, eigen (symmetric verified eigenpairs, general Gershgorin), residuals, ODE sets (§22)
+- [ ] L4-v4-SWEEPS (tracked placeholder; Paul 2026-10-23, eig not in L0b): when symmetric eigen lands, a gate test at 32×32 and 16384 bits must converge within `EigOpts::max_sweeps = 64` and record the actual sweep count used (the default is measured, not assumed); running out of sweeps must return `BoundError::NotConverged`, never a loose answer. **Owner: the L4-v4 builder. Blocks: L4 exit (§14) and the 2.0 gate.**
 - [ ] L4-2 failure-rule assertion on every refusal path, goldens, fuzz, mutants, coverage, exit review
 
 **Whole crate**
 - [ ] W-1 two consecutive green nightly full runs at different extra seeds; cross-target diff clean; mutants all killed or documented
 - [x] C-REST (closed 2026-10-15): Cassie's resend of items 9 and 10 folded into 8.2, 8.3, 17 (D15), 18.2, 18.3 (K16 to K19) and Appendix B; open remainder is S17
+
+## 22. Wide-range sections (added 2026-10-23)
+Limits: ExactNum exponent i32 at `fe5c15d` (≈10^±6.46e8); after SP-i64 `Exponent = i64` with EXPONENT_MIN/MAX = ±(2^62−1) (≈10^±1.39e18; `Mag` is wider, full i64 ≈10^±2.78e18); MAX_PRECISION = min(2^60, usize::MAX/4)−1. Rows tagged [i64] run only after zb pins Rusty's SHA.
+- **22.1 WR-E exponents [i64]:** every L0b/L1/L2c op on Rusty's i64 matrix (zf i64 plan /tmp/zf-logs/i64-exponent-plan.md): mid exponents at offsets 0, ±1, p−1, p, p+1 from EXPONENT_MIN and EXPONENT_MAX (= ±(2^62−1)), for p ∈ {64, 113, 16384, 16385, 65536}; carry-out round-up at EXPONENT_MAX (Inf or ±MAX by rounding mode; ball: all-reals); subnormals rounding up into the normal range; min_positive(p) = 2^(EXPONENT_MIN−p) shrinking as p grows; Mag→ExactNum bridge cases just inside and just outside ±(2^62−1) and at the grid floor 2^(EXPONENT_MIN−p) (outside ⇒ Representation for exact conversion, rad=Inf for an upward radius bound); i32 and i64::MIN/MAX Mag edges kept as regression rows. Oracle: MPFR via raw gmp-mpfr-sys `mpfr_set_emin`/`mpfr_set_emax` (rug caps the range at i32). Containment; overflow ⇒ all-reals (O2); no panic; matrix rows with diagonal scalings 10^±300 and 2^±(2^61) (overflow is elementwise all-reals, not an error). i32-edge rows kept as regressions.
+- **22.2 WR-P precision:** includes p ∈ {64, 113, 16384, 16385, 65536} from 22.1; prec above MAX_PRECISION rejected, not panicking; prec ∈ {1, 53, 63, 64, 65, 113, 256, 1024, 4095, 4096, 4097, 16384, 65536 smoke}; Hilbert solve/Cholesky vs exact rationals (python-flint fmpq_mat) at 4096 and 16384; radius shrinks ≈ 2^-prec·cond; per-op time/alloc cost table. Gate ≤32×32 at 16384 bits; larger sizes deep/cloud only.
+- **22.3 WR-LA:** SPD / semidefinite / indefinite (`is_spd` Tri), near-singular, cond 10^40 and 10^200, cancellation-heavy dense ±1 matrices (256×256 deep only), GLS vs fmpq exact, logdet/quad_form vs arb, eigen vs arb/mpmath (containment and cluster tagging).
+- **22.4 WR-ND:** rank 0..6, empty dimensions, shape-product overflow ⇒ `InvalidArgument`, identical/contains/overlaps over arrays (Tri-AND).
 
 ## Appendix A. Rusty's rounding-core edge list (as received 2026-10-15, folded into sections 4 to 12)
 

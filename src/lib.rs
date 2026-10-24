@@ -8,5 +8,13 @@
     clippy::arithmetic_side_effects
 )]
 
+pub mod array;
+pub mod ball;
+pub mod enclosure;
 pub mod error;
 pub mod mag;
+pub mod policy;
+pub mod precision;
+pub mod tri;
+
+pub use precision::{Precision, MAX_PRECISION, MIN_PRECISION};
