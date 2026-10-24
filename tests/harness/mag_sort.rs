@@ -1,4 +1,4 @@
-//! TEST_PLAN 8.1 / L0a-2 "`Ord` transitivity": sorting a set of `Mag` values that includes both zero forms, the extreme finite
+//! TEST_PLAN 8.1 / L0a-2 "`Ord` transitivity": sorting a set of `Mag` values that includes both zero constructors (zero has one canonical representation), the extreme finite
 //! values, a duplicate and `Infinity` gives one and the same sequence under every input permutation, and that sequence is the
 //! hand-ordered one (CONTRACT 14.5: zero least, `Infinity` greatest, finite by `(exp, mant)`). A non-transitive or non-total
 //! `cmp` makes `sort` depend on the input order, so this is the observable form of transitivity. Permutations: every one of a
@@ -59,10 +59,18 @@ fn key(m: &Mag) -> Result<Key, String> {
         (true, false, _, _) => Ok((0, 0, 0)),
         (false, true, _, _) => Ok((2, 0, 0)),
         (false, false, Some(e), Some(x)) => Ok((1, e, x)),
-        (z, i, e, x) => Err(format!(
-            "inconsistent Mag: zero {} inf {} exp {:?} mant {:?}",
-            z, i, e, x
+        // The remaining combinations, listed so the compiler checks the match is exhaustive (no catch-all).
+        (true, true, e, x) => Err(format!(
+            "inconsistent Mag: both zero and Infinity (exp {:?} mant {:?})",
+            e, x
         )),
+        (false, false, None, x) => Err(format!(
+            "inconsistent Mag: finite with no exp (mant {:?})",
+            x
+        )),
+        (false, false, Some(e), None) => {
+            Err(format!("inconsistent Mag: finite with no mant (exp {})", e))
+        }
     }
 }
 

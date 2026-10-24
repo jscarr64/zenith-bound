@@ -57,16 +57,17 @@ git add -A; git commit -qm mutants
 export MUTATE_REPO="$r" MUTATE_TMP="$t"
 run() { MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@"; }
 leftovers() { git -C "$r" worktree list | grep -c 'zb-mutate\.' ; find "$t" -maxdepth 1 \( -name "zb-mutate.*" -o -name "zb-mutate-target.*" \) | wc -l; }
-setm() { cp "$r/$1" "$r/tools/mutants/manifest.txt"; }
+cm() { git -C "$r" add -A; git -C "$r" commit -qm fixture-edit >/dev/null 2>&1 || :; }   # commit a fixture edit: mutate.sh refuses a dirty tree
+setm() { cp "$r/$1" "$r/tools/mutants/manifest.txt"; cm; }   # committed: mutate.sh refuses a dirty tree
 
 # manifest integrity (checked before any mutant runs): an id listed twice, or a patch file that does not exist, FAILS the whole run
-printf 'src/lib.rs:add\t001-add-mul\t001-add-mul.patch\ttoy\nsrc/lib.rs:add\t001-add-mul\t002-add-commute.patch\ttoy\n' > "$r/tools/mutants/manifest.txt"
+printf 'src/lib.rs:add\t001-add-mul\t001-add-mul.patch\ttoy\nsrc/lib.rs:add\t001-add-mul\t002-add-commute.patch\ttoy\n' > "$r/tools/mutants/manifest.txt"; cm
 out="$(run)" && fail "duplicate manifest id passed: $out"; echo "$out" | grep -c "^mutate: FAIL duplicate manifest id 001-add-mul" > /dev/null || fail "duplicate id: wrong message: $out"
-printf 'src/lib.rs:add\t001-add-mul\t001-add-mul.patch\ttoy\nsrc/lib.rs:add\t006-gone\t006-gone.patch\ttoy\n' > "$r/tools/mutants/manifest.txt"
+printf 'src/lib.rs:add\t001-add-mul\t001-add-mul.patch\ttoy\nsrc/lib.rs:add\t006-gone\t006-gone.patch\ttoy\n' > "$r/tools/mutants/manifest.txt"; cm
 out="$(run)" && fail "missing patch file passed: $out"; echo "$out" | grep -c "^mutate: FAIL manifest id 006-gone names missing patch 006-gone.patch" > /dev/null || fail "missing patch: wrong message: $out"
 
 # 0 mutants: a header-only manifest FAILS (Spence review: the gate's mutants step must run at least one mutant)
-printf '# empty\n' > "$r/tools/mutants/manifest.txt"
+printf '# empty\n' > "$r/tools/mutants/manifest.txt"; cm
 out="$(run)" && fail "empty manifest passed (0 mutants proves nothing): $out"; echo "$out" | grep -c "0 mutants ran" > /dev/null || fail "empty manifest: wrong message: $out"
 
 # a real mutant must be KILLED
@@ -77,10 +78,10 @@ echo "$out" | grep -c "^KILLED 001-add-mul" > /dev/null || fail "killed: wrong r
 setm m.surv; out="$(run)" && fail "surviving mutant passed (runner exited 0)"
 echo "$out" | grep -c "^SURVIVED 002-add-commute" > /dev/null || fail "survivor: wrong report: $out"
 # ... unless it is documented as equivalent (reported differently, exit 0)
-printf '002-add-commute\taddition commutes\n' > "$r/tools/mutants/EQUIVALENT.txt"
+printf '002-add-commute\taddition commutes\n' > "$r/tools/mutants/EQUIVALENT.txt"; cm
 out="$(run)" || fail "documented-equivalent survivor failed the run: $out"
 echo "$out" | grep -c "^SURVIVED-EQUIVALENT 002-add-commute" > /dev/null || fail "equivalent: wrong report: $out"
-printf '# header only\n' > "$r/tools/mutants/EQUIVALENT.txt"
+printf '# header only\n' > "$r/tools/mutants/EQUIVALENT.txt"; cm
 
 # a mutant that does not build and a patch that does not apply are INVALID (nonzero)
 setm m.nobuild; out="$(run)" && fail "non-building mutant passed"; echo "$out" | grep -c "^INVALID 003-nobuild" > /dev/null || fail "nobuild: wrong report: $out"
@@ -91,7 +92,7 @@ setm m.hang; out="$(MUTATE_TIMEOUT=5s run)" || fail "hanging mutant not accepted
 echo "$out" | grep -c "^KILLED 004-hang.*timed out" > /dev/null || fail "hang: wrong report: $out"
 
 # --only selects one row; an unknown id is an error
-cat m.killed m.surv > "$r/tools/mutants/manifest.txt"
+cat m.killed m.surv > "$r/tools/mutants/manifest.txt"; cm
 out="$(run --only 001-add-mul)" || fail "--only killed row failed: $out"; echo "$out" | grep -c "1 mutants" > /dev/null || fail "--only: wrong count: $out"
 run --only nope >/dev/null 2>&1 && fail "unknown --only id passed"
 
@@ -109,6 +110,16 @@ MUTATE_TARGET="relative/dir" run >/dev/null 2>&1 && fail "relative MUTATE_TARGET
 MUTATE_TARGET="$r/target" run >/dev/null 2>&1 && fail "MUTATE_TARGET inside the repo accepted"
 rm -rf "$pt"
 
+# mutate.sh tests the COMMITTED HEAD, so a dirty tree would test code other than what is on disk (2102-zb-mut180: SURVIVED because the
+# uncommitted mag_sort tests were not in HEAD 7191a1f). It must refuse a modified or untracked file, and print the SHA it tested.
+setm m.killed; head_sha=$(git -C "$r" rev-parse HEAD)
+out="$(run)" || fail "clean tree: killable mutant not accepted: $out"
+echo "$out" | grep -qx "mutate: testing committed HEAD $head_sha" || fail "clean tree: tested SHA not printed: $out"
+echo '// edit' >> "$r/tests/toy.rs"
+out="$(run)" && fail "modified tracked file passed: $out"; echo "$out" | grep -q "^mutate: FAIL dirty tree" || fail "modified: wrong message: $out"
+git -C "$r" checkout -q tests/toy.rs; printf '#[test]\nfn new_one() {}\n' > "$r/tests/new_untracked.rs"
+out="$(run)" && fail "untracked file passed: $out"; echo "$out" | grep -q "^mutate: FAIL dirty tree" || fail "untracked: wrong message: $out"
+rm -f "$r/tests/new_untracked.rs"
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
 echo "mutate selftest: ok"

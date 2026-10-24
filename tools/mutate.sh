@@ -66,6 +66,12 @@ cleanup() {
 }
 runlog_on_exit cleanup; trap 'cleanup; exit 130' INT TERM
 
+head_sha=$(git -C "$repo" rev-parse HEAD 2>/dev/null) || { echo "mutate: FAIL cannot read HEAD of $repo"; exit 2; }
+# Mutants run on a worktree of the COMMITTED HEAD, so a dirty tree (edits or untracked files, e.g. new tests not yet committed) would
+# test other code than the tree on disk. Refuse it (Spence, 2026-10-23: 2102-zb-mut180 SURVIVED on HEAD 7191a1f, before mag_sort was committed).
+dirty=$(git -C "$repo" status --porcelain 2>&1) || { echo "mutate: FAIL git status failed in $repo: $dirty"; exit 2; }
+if [ -n "$dirty" ]; then echo "mutate: FAIL dirty tree in $repo (mutants test the committed HEAD $head_sha; commit or stash first):"; printf '%s\n' "$dirty" | head -20 | sed 's/^/    /'; exit 2; fi
+echo "mutate: testing committed HEAD $head_sha"
 nk=0; ns=0; ne=0; ni=0; total=0
 newtgt
 if [ -n "$rows" ]; then
