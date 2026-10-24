@@ -1,0 +1,17 @@
+diff --git a/src/arith.rs b/src/arith.rs
+index 1f8372d..172c2b0 100644
+--- a/src/arith.rs
++++ b/src/arith.rs
+@@ -317,10 +317,10 @@ impl Ball {
+         check_prec(OP, prec)?;
+         let (m, r, _) = self.into_parts();
+         match cmp_abs_rad(&m, &r) {
+-            Some(Ordering::Greater | Ordering::Equal) => {
++            Some(Ordering::Greater | Ordering::Equal) if prec == 0 => {
+                 finish(OP, round_to(&m.abs(), prec), r, prec, false)
+             }
+-            Some(Ordering::Less) | None => {
++            Some(Ordering::Greater | Ordering::Equal | Ordering::Less) | None => {
+                 let u = Mag::from_exact_num(&m).add_up(&r);
+                 endpoint_ball(OP, u, prec)
+             }
