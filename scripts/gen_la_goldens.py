@@ -21,7 +21,7 @@ Gate = every case with all dims <= 12 and every input integer < 2^(10^4+64) in s
 (n = 16..32, 2^+-10^6 scales). case_ids are fixed strings; the random streams are drawn in the same order for
 gate and heavy, so splitting never changes a row. The generator is a pure exact oracle and never calls zenith-bound.
 
-All arithmetic is exact (fractions.Fraction / sympy QQ / Python ints). Irrational
+All arithmetic is exact (gmpy2.mpq / sympy QQ / Python ints). Irrational
 outputs are emitted as rigorous dyadic enclosures computed by exact integer square
 roots, exact rational root refinement (sympy, Sturm-based), or mpmath.iv interval
 arithmetic. No floats are used anywhere. Every identity and every enclosure is
@@ -45,7 +45,15 @@ def _popguard():
 _popguard()
 
 import sys, os, random, hashlib, argparse, difflib, tempfile, signal, time
-from fractions import Fraction as F
+# Exact rationals are gmpy2.mpq (GMP, lowest terms like fractions.Fraction, same str of numerator/denominator), not
+# fractions.Fraction: Fraction normalizes every op with CPython math.gcd, which is quadratic. On the heavy cosmo GLS rows
+# (entries of 0.5M-3.9M bits) that made la4-heavy2 sit 90 min in op gls (probe: cosmo_spread.p2e1000000_32x2 S^-1 X 98.7 s and
+# the exact S x == v check > 600 s with Fraction; 0.45 s and 94 s with mpq; whole row 213 s). gmpy2 is the pinned mpmath 1.3.0
+# backend in the oracle venv (no new dep); refuse to run without it rather than fall back to the slow path.
+try:
+    from gmpy2 import mpq as F
+except ImportError as e:
+    raise SystemExit(f"gen_la_goldens.py: gmpy2 missing ({e}); run with ~/.local/oracle-venv/bin/python (mpmath backend gmpy)")
 from math import isqrt
 
 SYMPY_PIN = "1.14.0"
@@ -282,7 +290,7 @@ def enclose_log(x, bits):
 X = sympy.Symbol("x")
 def eig_exact(A, bits=BITS):
     n = len(A)
-    M = sympy.Matrix([[sympy.Rational(a.numerator, a.denominator) for a in r] for r in A])
+    M = sympy.Matrix([[sympy.Rational(int(a.numerator), int(a.denominator)) for a in r] for r in A])
     P = sympy.Poly(M.charpoly(X).as_expr(), X, domain="QQ")
     coeffs = [F(int(c.p), int(c.q)) for c in P.all_coeffs()]
     _, facs = P.factor_list()
@@ -308,7 +316,7 @@ def eig_exact(A, bits=BITS):
             sF, tF = F(int(s.p), int(s.q)), F(int(t.p), int(t.q))
             lo = (floor_q(sF / F(2) ** e), e); hi = (ceil_q(tF / F(2) ** e), e)
             L, H = dyval(*lo), dyval(*hi)
-            assert f.count_roots(sympy.Rational(L.numerator, L.denominator), sympy.Rational(H.numerator, H.denominator)) == 1
+            assert f.count_roots(sympy.Rational(int(L.numerator), int(L.denominator)), sympy.Rational(int(H.numerator), int(H.denominator))) == 1
             for _ in range(mult): out.append(((sF + tF) / 2, "alg", lo, hi))
     out.sort(key=lambda r: r[0])
     for a, b in zip(out, out[1:]):  # ordering must be unambiguous: distinct eigenvalues get disjoint enclosures
