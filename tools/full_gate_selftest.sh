@@ -77,8 +77,8 @@ printf '#!/bin/sh\necho stub mutate_selftest.sh\n' > "$t/mu/tools/mutate_selftes
 # s2 (empty). FAKE_MUT picks what the run prints: ok | timeout | missing | invalid | survived | floor (floor: central needs 3 kills).
 cat > "$t/mu/tools/mutate.sh" <<'FAKE'
 #!/usr/bin/env bash
-sc=${FAKE_MUT:-ok}; mode=run; slice=""
-while [ $# -gt 0 ]; do case $1 in --list) mode=list ;; --floor) mode=floor ;; --slices) mode=slices ;; --slice) slice=$2; shift ;; esac; shift; done
+sc=${FAKE_MUT:-ok}; mode=run; slice=""; only=""
+while [ $# -gt 0 ]; do case $1 in --list) mode=list ;; --floor) mode=floor ;; --slices) mode=slices ;; --slice) slice=$2; shift ;; --only) only=$2; shift ;; esac; shift; done
 ids() { case $1 in central) printf '001-a\n002-b\n' ;; s1) printf '201-x\n' ;; s2) ;; *) ids central; ids s1 ;; esac; }
 case $mode in
   slices) printf 'central\ns1\ns2\n'; exit 0 ;;
@@ -86,8 +86,9 @@ case $mode in
   floor) case $slice in central) k=2; [ "$sc" = floor ] && k=3 ;; s1) k=1 ;; *) k=0 ;; esac; printf 'killed %s\nkilled+equivalent %s\n' "$k" "$k"; exit 0 ;;
 esac
 for id in $(ids "$slice"); do
+  [ -z "$only" ] || [ "$id" = "$only" ] || continue
   if [ "$id" = 002-b ]; then
-    case $sc in timeout) sleep 6; continue ;; missing) continue ;; invalid) echo "INVALID $id: mutant does not build"; continue ;;
+    case $sc in timeout) sleep 6; continue ;; hang) exec sleep 1000 ;; missing) continue ;; invalid) echo "INVALID $id: mutant does not build"; continue ;;
       survived) echo "SURVIVED $id (f, suite s): the suite passed on the mutant"; continue ;; esac
   fi
   echo "KILLED $id (f, suite s): suite failed (rc 101)"; echo "TIME $id 0s"
@@ -118,8 +119,23 @@ mcase missing 'INCOMPLETE: 1 results for 2 ids.*missing: 002-b'
 mcase invalid 'FAIL INVALID: 002-b'
 mcase survived 'FAIL SURVIVED \(no equivalent entry\): 002-b'
 mcase floor 'FAIL BELOW floor'
+# 6. per-mutant timeout (60s, measured max 14s x ~4): a runner that hangs on one id is caught in about 60s with `TIMEOUT <id>`, not after
+# the slice budget (hours on the real manifest). MUTATE_SETUP_S=0 and the default budget give this 2-id slice 120s, so only a per-mutant
+# limit can catch it under 90s.
+ck; tag=mu-hang; h0=$SECONDS; if mu env FAKE_MUT=hang MUTATE_SETUP_S=0; then miss+="[hang: gate exited 0] "; fi; hel=$((SECONDS - h0))
+ck; { grep -qE '(^|: )TIMEOUT 002-b' "$t/logs/mu-hang-mutants.log" 2>/dev/null && [ "$hel" -lt 90 ]; } || miss+="[hang: no 'TIMEOUT 002-b' within 90s (took ${hel}s)] "
+# 7. ID_REGEX: `mutate_slice.sh SLICE ID_REGEX` runs only matching ids, skips floor/completeness and says so, never prints a full pass
+ms() { "${fe[@]}" PATH="$t/mu-bin:$PATH" "$@"; }
+ck; ms env FAKE_MUT=floor "$t/mu/tools/mutate_slice.sh" central '^001' > "$t/rx.out" 2>&1 || miss+="[regex: partial run with a floor miss exited nonzero] "
+ck; grep -qF 'PARTIAL run (ID_REGEX=^001): floor/completeness not checked' "$t/rx.out" || miss+="[regex: no PARTIAL line] "
+ck; { grep -q 'KILLED 001-a' "$t/rx.out" && ! grep -q '002-b' "$t/rx.out"; } || miss+="[regex: did not run only 001-a] "
+ck; grep -qE -- '-> ok$|all slices ok' "$t/rx.out" && miss+="[regex: printed a full-pass line] "
+ck; ms "$t/mu/tools/mutate_slice.sh" central 'nomatch' > "$t/rx0.out" 2>&1 && miss+="[regex: a regex matching nothing exited 0] "
+ck; grep -q 'matches no id' "$t/rx0.out" || miss+="[regex: no-match not named] "
+ck; ms "$t/mu/tools/mutate_slice.sh" --all '^001' > "$t/rxa.out" 2>&1 && miss+="[regex: --all accepted a regex] "
+ck; grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -qE 'mutate_slice\.sh --all"$' || miss+="[full_gate passes something after --all] "
 [ -z "$miss" ] || fail "mutants step did not catch: $miss"
-st_done full_gate 82   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done full_gate 92   # WANT: cases this script runs (tools/selftest_cases.sh)
 # the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 from the caller's env (only the selftest fixture may use a 0 floor)
 grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -q 'env -u MUTATE_FLOOR_ZERO_OK tools/mutate_slice\.sh --all' || fail "mutants step runs tools/mutate_slice.sh --all without env -u MUTATE_FLOOR_ZERO_OK"
 echo "full_gate selftest: ok"
