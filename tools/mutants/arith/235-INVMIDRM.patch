@@ -1,8 +1,8 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index 50bf6cd..c6da035 100644
+index 1f8372d..87e9d93 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -265,7 +265,7 @@ impl Ball {
+@@ -268,7 +268,7 @@ impl Ball {
              return Ball::all_reals(prec);
          };
          let rad = s.div_up(&n_lo.mul_lower(&n_lo.sub_lower(&s)));
@@ -10,4 +10,4 @@ index 50bf6cd..c6da035 100644
 +        finish(OP, n.reciprocal(prec, RoundingMode::ToZero), rad, prec, false)
      }
  
-     /// `hypot(m ± r, n ± s) = round(hypot(m, n)) ± (r + s + ε)`: hypot is 1-Lipschitz in each argument (16.S1.8).
+     /// Monotone enclosure (16.S1.8): hypot is increasing in `|x|` and `|y|`, so the result lies in

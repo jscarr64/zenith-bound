@@ -1,0 +1,13 @@
+diff --git a/src/arith.rs b/src/arith.rs
+index 1f8372d..457f071 100644
+--- a/src/arith.rs
++++ b/src/arith.rs
+@@ -351,7 +351,7 @@ impl Ball {
+         match gaps(self, other) {
+             Some((Ordering::Less, _)) => Tri::True,
+             Some((_, Ordering::Greater)) => Tri::False,
+-            Some((Ordering::Equal, Ordering::Equal)) => Tri::False,
++            Some((Ordering::Equal, Ordering::Equal)) => Tri::Unknown,
+             Some((Ordering::Equal | Ordering::Greater, Ordering::Equal | Ordering::Less))
+             | None => Tri::Unknown,
+         }
