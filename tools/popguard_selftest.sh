@@ -8,6 +8,7 @@
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap popguard_selftest "$@"   # run log (tools/runlog.sh)
 set -u
+unset ZB_GATE_MODE GOLDENS_REGEN_ARGS   # fixtures run regular mode even inside a merge-gate run (gate 1707: inherited ZB_GATE_MODE=merge refused every fixture)
 here="$(cd "$(dirname "$0")" && pwd)"; repo="$(cd "$here/.." && pwd)"
 t="$(mktemp -d "$(zb_scratch)/popguard-selftest.XXXXXX")"; runlog_on_exit "rm -rf \"$t\""
 . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
