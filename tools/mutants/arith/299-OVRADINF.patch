@@ -1,0 +1,12 @@
+diff --git a/src/arith.rs b/src/arith.rs
+--- a/src/arith.rs
++++ b/src/arith.rs
+@@ -398,7 +398,7 @@
+     /// Whether the two closed balls share a point (CONTRACT 15.2, O20, 16.S1.11); an `Infinity` radius overlaps
+     /// everything.
+     pub fn overlaps(&self, other: &Ball) -> Tri {
+-        if self.rad().is_infinity() || other.rad().is_infinity() {
++        if self.rad().is_infinity() && other.rad().is_infinity() {
+             return Tri::True;
+         }
+         match gaps(self, other) {

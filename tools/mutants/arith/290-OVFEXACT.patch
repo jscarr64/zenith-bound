@@ -1,0 +1,12 @@
+diff --git a/src/arith.rs b/src/arith.rs
+--- a/src/arith.rs
++++ b/src/arith.rs
+@@ -551,7 +551,7 @@
+             }),
+         };
+     }
+-    if raw.inexact() && raw.exponent() == Some(EXPONENT_MAX) {
++    if raw.exponent() == Some(EXPONENT_MAX) {
+         return Ok(Mid::Overflow);
+     }
+     Ok(Mid::Value(raw))

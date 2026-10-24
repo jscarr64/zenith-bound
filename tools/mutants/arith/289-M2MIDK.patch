@@ -1,0 +1,12 @@
+diff --git a/src/arith.rs b/src/arith.rs
+--- a/src/arith.rs
++++ b/src/arith.rs
+@@ -339,7 +339,7 @@
+         let (m, r, _) = self.into_parts();
+         finish(
+             OP,
+-            m.ldexp(k, prec, MID_RM),
++            m.ldexp(0, prec, MID_RM),
+             mag_mul_2exp_up(&r, k),
+             prec,
+             false,

@@ -1,0 +1,12 @@
+diff --git a/src/arith.rs b/src/arith.rs
+--- a/src/arith.rs
++++ b/src/arith.rs
+@@ -211,7 +211,7 @@
+             }
+             (Ordering::Equal, _, _) | (Ordering::Less, false, Ordering::Greater) => {
+                 let hi_up = if neg {
+-                    r
++                    Mag::from_exact_num(&m).add_up(&r)
+                 } else {
+                     Mag::from_exact_num(&m).add_up(&r)
+                 };

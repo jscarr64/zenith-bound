@@ -1,0 +1,12 @@
+diff --git a/src/arith.rs b/src/arith.rs
+--- a/src/arith.rs
++++ b/src/arith.rs
+@@ -178,7 +178,7 @@
+         };
+         let (m, r, _) = self.into_parts();
+         if r.is_infinity() {
+-            return if strict {
++            return if !strict {
+                 Err(domain(OP, "the all-reals ball reaches below 0"))
+             } else {
+                 Ball::all_reals(prec)
