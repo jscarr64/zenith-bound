@@ -1,8 +1,8 @@
 diff --git a/src/bridge.rs b/src/bridge.rs
-index d809059..8d738b6 100644
+index 04017bc..8d738b6 100644
 --- a/src/bridge.rs
 +++ b/src/bridge.rs
-@@ -59,11 +59,15 @@ impl Mag {
+@@ -59,7 +59,7 @@ impl Mag {
          }
          if x.is_zero() {
              return Some(if self.is_zero() {
@@ -11,27 +11,3 @@ index d809059..8d738b6 100644
              } else {
                  Ordering::Greater
              });
-         }
-+        // Zero is stored with exponent 0, so it must not reach the exponent comparison.
-+        if self.is_zero() {
-+            return Some(Ordering::Less);
-+        }
-         let (me, mm) = match (self.exp(), self.mant()) {
-             (Some(e), Some(m)) => (e, m),
-             (None, _) | (_, None) => return Some(Ordering::Less),
-@@ -115,10 +119,11 @@ impl Mag {
-         let es = exp_of(small)?;
-         // |a - b| lies in (2^(e-1) - 2^(e-65), 2^e + 2^(e-65)) since |small| < 2^es <= 2^(e - EXACT_GAP); a radius below
-         // 2^(e-1) has mant <= u64::MAX so it is at most 2^(e-1) - 2^(e-65).
--        let me = match self.exp() {
--            Some(me) => me,
--            None => return Some(Ordering::Less),
--        };
-+        // |a - b| > 0 here; zero is stored with exponent 0, so it must not reach the exponent cutoffs.
-+        if self.is_zero() {
-+            return Some(Ordering::Less);
-+        }
-+        let me = self.exp()?;
-         if me <= e.checked_sub(1)? {
-             return Some(Ordering::Less);
-         }
