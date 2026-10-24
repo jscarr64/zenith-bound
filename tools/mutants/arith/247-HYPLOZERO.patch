@@ -1,13 +1,13 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index f86eb99..f578791 100644
+index f86eb99..a6f28a8 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -308,7 +308,7 @@ impl Ball {
+@@ -307,7 +307,7 @@ impl Ball {
+ 
  /// A lower bound on `min |m ± r|` at `wp` bits: 0 when the ball reaches 0, else `|m| - r` rounded toward 0.
  fn abs_lower(m: &ExactNum, r: &Mag, rn: &ExactNum, wp: Precision) -> ExactNum {
-     match cmp_abs_rad(m, r) {
--        Some(Ordering::Greater) => {
-+        Some(Ordering::Less) => {
+-    match cmp_abs_rad(m, r) {
++    match cmp_abs_rad(m, r).map(|_| Ordering::Less) {
+         Some(Ordering::Greater) => {
              let x = ExactNum::from(1i64).mul(m, wp, RoundingMode::ToZero);
              if m.is_negative() {
-                 x.add(rn, wp, RoundingMode::ToZero)

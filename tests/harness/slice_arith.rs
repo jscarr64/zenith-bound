@@ -1256,3 +1256,97 @@ fn hypot_wide_rows_1313_1343_tight() -> Result<(), String> {
     }
     Ok(())
 }
+
+/// The hypot radius covers both halves of `[lo, hi]`: the `ToEven` midpoint can land on either side of the centre.
+/// `x = (1 + k·2^-64) ± 2^-64` with `y = 0` at prec 64 gives `[|x| - r, |x| + r]` exactly; every k parity is checked.
+/// A narrow non-straddling pair stays at the monotone width (below the 1-Lipschitz `r + s`).
+#[test]
+fn hypot_radius_covers_both_endpoints() -> Result<(), String> {
+    let ulp = || pow2(-64);
+    for k in 1..=8i64 {
+        let x = || -> Result<ExactNum, String> {
+            Ok(num(1).add_full_prec(&num(k).mul_full_prec(&ulp()?)))
+        };
+        for neg in [false, true] {
+            let xm = if neg { -x()? } else { x()? };
+            let r = ok("hypot", ball(xm, mag(1, 0)?, 64)?.hypot(&pt(0, 64)?, 64))?;
+            let what = format!("k {} neg {}", k, neg);
+            want_contains(&what, &r, &x()?.sub_full_prec(&ulp()?))?;
+            want_contains(&what, &r, &x()?.add_full_prec(&ulp()?))?;
+        }
+    }
+    // [2 ± 1, 3 ± 1]: lo = hypot(1, 2) = √5, hi = hypot(3, 4) = 5 exactly; the width (5 - √5)/2 < 1.39 < r + s = 2.
+    for (a, b) in [(2i64, 3i64), (-2, 3), (2, -3), (-2, -3)] {
+        let r = ok(
+            "hypot",
+            ball(num(a), mag(1, 64)?, 64)?.hypot(&ball(num(b), mag(1, 64)?, 64)?, 64),
+        )?;
+        want_contains("hi = 5", &r, &num(5))?;
+        if r.rad() > &mag(0x58f5_c28f_5c28_f5c3, 2)? {
+            return Err(format!("({}, {}): rad {:?} above 1.39", a, b, r.rad()));
+        }
+    }
+    // [4 ± 1, 5 ± 1]: lo = hypot(3, 4) = 5 exactly.
+    for (a, b) in [(4i64, 5i64), (-4, -5)] {
+        let r = ok(
+            "hypot",
+            ball(num(a), mag(1, 64)?, 64)?.hypot(&ball(num(b), mag(1, 64)?, 64)?, 64),
+        )?;
+        want_contains("lo = 5", &r, &num(5))?;
+    }
+    Ok(())
+}
+
+/// powi carries guard bits through its squaring chain, so an exact input's power is within one ulp at `prec`
+/// (after Harper's powi_exact_input_within_one_ulp; kills 246-POWIGUARD).
+#[test]
+fn powi_exact_input_within_one_ulp() -> Result<(), String> {
+    let mut checked = 0u32;
+    for (i, prec) in [53usize, 64, 113].into_iter().enumerate() {
+        for j in 0..12i64 {
+            let x = || -> Result<ExactNum, String> {
+                Ok(num(1).add_full_prec(
+                    &num(j
+                        .checked_mul(37)
+                        .and_then(|v| v.checked_add(5))
+                        .ok_or("x")?)
+                    .mul_full_prec(&pow2(-20)?),
+                ))
+            };
+            let n = 100u64
+                .checked_add(
+                    u64::try_from(j)
+                        .map_err(|_| "j")?
+                        .checked_mul(71)
+                        .ok_or("n")?,
+                )
+                .and_then(|v| v.checked_add(u64::try_from(i).ok()?))
+                .ok_or("n")?;
+            let mut want = num(1);
+            for _ in 0..n {
+                want = want.mul_full_prec(&x()?);
+            }
+            let res = ok("powi", ok("exact", Ball::exact(x()?, prec))?.powi(n, prec))?;
+            if !res.is_informative() {
+                continue;
+            }
+            want_contains("powi", &res, &want)?;
+            let me = res.mid().exponent().ok_or("exp")?;
+            let ulp = Mag::half_ulp(me, prec.checked_sub(1).ok_or("p-1")?);
+            if res.rad() > &ulp {
+                return Err(format!(
+                    "prec {} n {}: rad {:?} > one ulp {:?}",
+                    prec,
+                    n,
+                    res.rad(),
+                    ulp
+                ));
+            }
+            checked = checked.checked_add(1).ok_or("c")?;
+        }
+    }
+    if checked < 30 {
+        return Err(format!("only {} informative powi rows", checked));
+    }
+    Ok(())
+}
