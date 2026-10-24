@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Pop guard bypass closed (2026-10-24, Spence blocked 7881073: POPGUARD=/nonexistent turned the cap off silently): goldens_regen.sh
+  and goldlib.py REFUSE (exit 2) when POPGUARD is missing/not executable on a host that has ~/pop-logs/bin/popguard.sh; a host with
+  no popguard.sh runs with a loud stderr WARNING. popguard.sh (pop-logs 6d1fc93) now also requires the scope's memory.max to be a
+  number <= the 6G cap. popguard_selftest never skips on Pop (fails instead) and has 15 cases (the red commit said 16; 15 is right).
+  Red: harper-work/popguard/zb-bypass-red.log; green: zb-bypass-green.log.
+
+- mutate.sh quiet ERR trap (2026-10-24, Spence: 1207-zb-popguard-full-gate1 logged 184 `ERR rc=1 line=92` inrange misses and one
+  `ERR rc=101 line=214` per killed mutant): the inrange calls take `|| true` (no owning range is normal), the suite run captures its rc
+  explicitly (`rc=0; (...) || rc=$?`), and an unexpected rc (INVALID branch) is re-raised with `(exit "$rc")` so the ERR trap still
+  records it. mutate_selftest 34 cases (+2: logged run has no ERR line; unexpected rc 101 still logs ERR and fails).
+  Red: harper-work/popguard/zb-errquiet-red.log; green: zb-errquiet-green.log.
+
+- Pop direct-run guard (2026-10-24, 11:49 incident: a bare 58 GB goldens python run global-OOMed Pop): tools/goldens_regen.sh
+  (before its first generator) and scripts/goldlib.py (at import, before the oracle check, so every mpmath generator) call
+  ~/pop-logs/bin/popguard.sh and exit 3 outside a popslot/poprun memory scope (6G per job, swap 0); hosts without popguard.sh
+  run unguarded. New tools/popguard_selftest.sh (8 cases, in the goldens-regen step).
+
+- goldens_regen (2026-10-24): a slice SHA256SUMS holding only '# EMPTY' is skipped cleanly (no ERR trap lines); '# EMPTY' with a *.txt next to it, with entries, or with a malformed line FAILS. goldens_regen_selftest 19 cases. Red: 1200-goldens_regen_selftest, 1200-goldens_regen_selftest-2200915; green: 1201-goldens_regen_selftest
 - full_gate (2026-10-24): gate-selftest now runs tools/mutate_selftest.sh (and requires cargo, git, timeout). Red: 0915-zb-red-gate-skips-mutate-selftest
   (step PASS with a planted break); 0915-zb-red2 FAIL with it; 0917-zb-green-gate-mutate-selftest PASS, 28 cases.
 

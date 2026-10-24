@@ -24,8 +24,7 @@ fn draw_dyadic(rng: &mut SplitMix64) -> (i64, i64) {
 }
 
 fn exact(a: i64, e: i64) -> Result<ExactNum, String> {
-    let e32 = i32::try_from(e).map_err(|_| "exp")?;
-    Ok(ExactNum::from(a).ldexp(e32, 64, RoundingMode::None))
+    Ok(ExactNum::from(a).ldexp(e, 64, RoundingMode::None))
 }
 
 /// `|v| << (e - base)`.

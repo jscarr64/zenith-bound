@@ -18,13 +18,13 @@ const OPS: [&str; 8] = [
     "sqrt_lower",
 ];
 
-struct Row {
-    op: String,
-    args: Vec<MagV>,
-    want: MagV,
+pub(crate) struct Row {
+    pub(crate) op: String,
+    pub(crate) args: Vec<MagV>,
+    pub(crate) want: MagV,
 }
 
-fn parse_row(line: &str) -> Result<Option<Row>, String> {
+pub(crate) fn parse_row(line: &str) -> Result<Option<Row>, String> {
     let line = line.trim();
     if line.is_empty() || line.starts_with('#') {
         return Ok(None);
@@ -99,7 +99,7 @@ fn next_result(it: &mut SplitWhitespace) -> Result<MagV, String> {
     }
 }
 
-fn run_line(line: &str) -> Result<(), String> {
+pub(crate) fn run_line(line: &str) -> Result<(), String> {
     match parse_row(line)? {
         None => Ok(()),
         Some(row) => {
@@ -150,7 +150,7 @@ fn run_line(line: &str) -> Result<(), String> {
     }
 }
 
-fn verify_row(op: &str, args: &[MagV], r: &MagV) -> Result<(), String> {
+pub(crate) fn verify_row(op: &str, args: &[MagV], r: &MagV) -> Result<(), String> {
     let a = args
         .first()
         .ok_or_else(|| String::from("missing argument a"))?;
@@ -178,7 +178,7 @@ fn is_up(op: &str) -> bool {
     matches!(op, "add_up" | "mul_up" | "div_up" | "sqrt_up")
 }
 
-fn perturb(op: &str, want: &MagV) -> Option<MagV> {
+pub(crate) fn perturb(op: &str, want: &MagV) -> Option<MagV> {
     if is_up(op) {
         match want {
             MagV::Infinity => Some(max_mag()),

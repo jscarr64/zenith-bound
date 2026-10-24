@@ -25,10 +25,10 @@ pub const MAX_PREC: u32 = 4096;
 pub const TOP: u64 = 1 << 63;
 
 /// zenith-float 2.0 `Exponent` range (`Exponent = i64`, Jeff 2026-10-23 12:36 PM CT; zf 1.x was `i32`): Rusty set it to +-(2^62 - 1), so
-/// the sum or difference of two in-range exponents fits in i64. Defined ONCE here; every zb test uses these. NOTE: Rusty's zf i64 SHA brings
-/// the real zf constant names (`EXPONENT_MIN` / `EXPONENT_MAX`); when it is pinned, bind these to them (the pinned fe5c15d is still i32).
-pub const ZF_EXPONENT_MAX: i64 = (1i64 << 62) - 1;
-pub const ZF_EXPONENT_MIN: i64 = -ZF_EXPONENT_MAX;
+/// the sum or difference of two in-range exponents fits in i64. Defined ONCE here; every zb test uses these. Bound to zf's i64
+/// `EXPONENT_MIN` / `EXPONENT_MAX` (±(2^62−1), pinned 829f112).
+pub const ZF_EXPONENT_MAX: i64 = zenith_float_num::EXPONENT_MAX;
+pub const ZF_EXPONENT_MIN: i64 = zenith_float_num::EXPONENT_MIN;
 /// Cosmology-scale exponents (2^8 ..= 2^20; Jeff 2026-10-23 12:20 PM CT; 405 is cosmology's 2^+-405), forced into every run, not only
 /// reached through the Uniform band. 405 and 1000 are not within one of a power of two, so the PowerOfTwo band does not hit them either.
 pub const COSMOLOGY_EXPONENTS: [i64; 8] =

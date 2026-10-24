@@ -79,6 +79,27 @@ def require_mpmath():
     return require_oracle()
 
 
+def require_popslot_scope(name=None):
+    """Pop direct-run guard (~/pop-logs/bin/popguard.sh; 11:49 2026-10-24 a bare 58 GB generator run global-OOMed Pop):
+    exit 3 outside a capped popslot/poprun memory scope; exit 2 if POPGUARD is unusable on a host that has popguard.sh.
+    Hosts without popguard.sh (CI) are not guarded and get a stderr WARNING."""
+    import subprocess
+    host_guard = os.path.expanduser("~/pop-logs/bin/popguard.sh")
+    guard = os.environ.get("POPGUARD") or host_guard
+    if not os.access(guard, os.X_OK):
+        # POPGUARD pointing at nothing must not switch the guard off (Spence, 2026-10-24)
+        if os.path.exists(host_guard):
+            sys.stderr.write("goldlib: REFUSING: POPGUARD=%s is missing or not executable, but this host has %s "
+                             "(the memory guard cannot be switched off)\n" % (guard, host_guard))
+            raise SystemExit(2)
+        sys.stderr.write("goldlib: WARNING: no popguard.sh on this host (%s): running WITHOUT the Pop memory guard\n" % guard)
+        return
+    name = name or os.path.basename(sys.argv[0] or "goldlib")
+    if subprocess.run([guard, name]).returncode != 0:
+        raise SystemExit(3)
+
+
+require_popslot_scope()   # at import, before the oracle check: every mpmath generator imports goldlib first
 require_oracle()   # at import: every generator imports goldlib before mpmath
 
 
