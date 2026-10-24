@@ -1,0 +1,13 @@
+diff --git a/src/arith.rs b/src/arith.rs
+index f86eb99..ee9f9a4 100644
+--- a/src/arith.rs
++++ b/src/arith.rs
+@@ -310,7 +310,7 @@ fn abs_lower(m: &ExactNum, r: &Mag, rn: &ExactNum, wp: Precision) -> ExactNum {
+     match cmp_abs_rad(m, r) {
+         Some(Ordering::Greater) => {
+             let x = ExactNum::from(1i64).mul(m, wp, RoundingMode::ToZero);
+-            if m.is_negative() {
++            if !m.is_negative() {
+                 x.add(rn, wp, RoundingMode::ToZero)
+             } else {
+                 x.sub(rn, wp, RoundingMode::ToZero)
