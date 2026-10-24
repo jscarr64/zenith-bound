@@ -56,4 +56,4 @@ ck; out=$(cd "$repo" && env -u POPSLOT_SCOPE PYTHONNOUSERSITE=1 /usr/bin/python3
 ck; out=$(cd "$repo" && inscope env PYTHONNOUSERSITE=1 /usr/bin/python3 scripts/goldlib.py --selftest 2>&1); rc=$?
   printf '%s\n' "$out" | grep -q REFUSING && fail "goldlib refused inside a popslot scope: $out"
 echo "popguard selftest: ok"
-st_done popguard 16   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done popguard 15   # WANT: cases this script runs (tools/selftest_cases.sh)

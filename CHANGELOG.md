@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Pop guard bypass closed (2026-10-24, Spence blocked 7881073: POPGUARD=/nonexistent turned the cap off silently): goldens_regen.sh
+  and goldlib.py REFUSE (exit 2) when POPGUARD is missing/not executable on a host that has ~/pop-logs/bin/popguard.sh; a host with
+  no popguard.sh runs with a loud stderr WARNING. popguard.sh (pop-logs 6d1fc93) now also requires the scope's memory.max to be a
+  number <= the 6G cap. popguard_selftest never skips on Pop (fails instead) and has 15 cases (the red commit said 16; 15 is right).
+  Red: harper-work/popguard/zb-bypass-red.log; green: zb-bypass-green.log.
+
 - mutate.sh quiet ERR trap (2026-10-24, Spence: 1207-zb-popguard-full-gate1 logged 184 `ERR rc=1 line=92` inrange misses and one
   `ERR rc=101 line=214` per killed mutant): the inrange calls take `|| true` (no owning range is normal), the suite run captures its rc
   explicitly (`rc=0; (...) || rc=$?`), and an unexpected rc (INVALID branch) is re-raised with `(exit "$rc")` so the ERR trap still

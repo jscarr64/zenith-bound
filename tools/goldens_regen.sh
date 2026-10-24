@@ -20,9 +20,18 @@ slices_only=0; [ "${1:-}" = --slices-only ] && slices_only=1
 cd "$root" || exit 2
 tmp=$(mktemp -d "$(zb_scratch)"/zb-goldens-regen.XXXXXX) || { echo "goldens-regen: mktemp failed"; exit 2; }; runlog_on_exit "rm -rf \"$tmp\""
 # Pop direct-run guard (~/pop-logs/bin/popguard.sh, 11:49 2026-10-24: a bare 58 GB generator run global-OOMed Pop): before the
-# first generator, refuse (exit 3) outside a popslot/poprun memory scope. Hosts without popguard.sh (CI) run unguarded.
+# first generator, refuse (exit 3) outside a capped popslot/poprun memory scope. Hosts without popguard.sh (CI) run unguarded, with a WARNING.
 POPGUARD=${POPGUARD:-$HOME/pop-logs/bin/popguard.sh}; pg_ok=0
-pg_require() { [ "$pg_ok" = 1 ] && return 0; if [ -x "$POPGUARD" ]; then "$POPGUARD" goldens_regen || exit 3; fi; pg_ok=1; }
+# POPGUARD pointing at nothing must not switch the guard off (Spence, 2026-10-24): on a host that has ~/pop-logs/bin/popguard.sh
+# it REFUSES (exit 2); only a host with no popguard.sh at all runs unguarded, with a loud WARNING on stderr.
+pg_require() {
+  [ "$pg_ok" = 1 ] && return 0
+  if [ -x "$POPGUARD" ]; then "$POPGUARD" goldens_regen || exit 3
+  elif [ -e "$HOME/pop-logs/bin/popguard.sh" ]; then
+    echo "goldens-regen: REFUSING: POPGUARD=$POPGUARD is missing or not executable, but this host has $HOME/pop-logs/bin/popguard.sh (the memory guard cannot be switched off)" >&2; exit 2
+  else echo "goldens-regen: WARNING: no popguard.sh on this host ($POPGUARD): running WITHOUT the Pop memory guard" >&2; fi
+  pg_ok=1
+}
 rc=0
 if [ "$slices_only" = 0 ]; then
 pg_require
