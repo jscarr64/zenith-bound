@@ -1216,3 +1216,143 @@ fn div_inv_denominator_rounds_down() -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Harper's oracle rows 1313 and 1343 (arith_oracle_rows.txt @ e634e11, test hypot_wide_rows_1313_1343_tight @ b1c412b):
+/// `OP PREC W N AMID ARAD BMID BRAD LO HI RREF`, each value `SIGN EXP MANT`. The first ball touches or straddles 0,
+/// so the 1-Lipschitz `r + s` radius is over 4x the reference radius; 16.S1.8 requires rad <= 4 * RREF.
+const HYPOT_WIDE_ROWS: [(usize, &str); 2] = [
+    (1313, "hypot 64 192 0 0 -28 1 0 -28 1 1 -26 7ffffffffffffff 0 -87 3 0 -26 7fffffffffffffed 0 -25 83f07b357f6837a0c7d62f13ee20be2705fe7f07ebb27d19 0 -31 5e2f274e3236ab25"),
+    (1343, "hypot 256 576 0 1 -1058 489706e98a646a056377d 0 -1058 3 1 -1056 ed2d7dd0cc75befbdf7a601e714cae309d5ff5498fc1ca098cc8e4a26cfe994f 0 -1313 1 0 -1056 3b4b5f74331d6fbef7de98079c532b8c2757fd5263f07282633239289b3fa653b 0 -1056 7ddb211a35ecafa48bddea922ae94aa45a81ecab0f05f8151dfd6226c4ef912f6acdb6567175ca04c408b2ff737809a7e9979fa2387738aeacb7da04b1d58e76f25d3b763e9e9823 0 -1060 178be5214e370fb7"),
+];
+
+#[test]
+fn hypot_wide_rows_1313_1343_tight() -> Result<(), String> {
+    for (id, line) in HYPOT_WIDE_ROWS {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        let v = |i: usize| -> Result<ExactNum, String> {
+            match (f.get(i), f.get(i + 1), f.get(i + 2)) {
+                (Some(s), Some(e), Some(m)) => row_val(s, e, m),
+                _ => Err(format!("row {}: short at field {}", id, i)),
+            }
+        };
+        let prec: usize = f
+            .get(1)
+            .ok_or("prec")?
+            .parse()
+            .map_err(|_| format!("row {}: prec", id))?;
+        let a = ball(v(4)?, Mag::from_exact_num(&v(7)?), prec)?;
+        let b = ball(v(10)?, Mag::from_exact_num(&v(13)?), prec)?;
+        let r = ok("hypot", a.hypot(&b, prec))?;
+        let what = format!("row {}", id);
+        want_contains(&what, &r, &v(16)?)?;
+        want_contains(&what, &r, &v(19)?)?;
+        let rad = r
+            .rad()
+            .to_exact_num()
+            .map_err(|e| format!("{}: rad {:?}: {:?}", what, r.rad(), e))?;
+        let bound = v(22)?.mul_full_prec(&num(4));
+        if rad > bound {
+            return Err(format!(
+                "{}: TIGHT: rad {:?} > 4*RREF {:?}",
+                what,
+                r.rad(),
+                bound
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The hypot radius covers both halves of `[lo, hi]`: the `ToEven` midpoint can land on either side of the centre.
+/// `x = (1 + k·2^-64) ± 2^-64` with `y = 0` at prec 64 gives `[|x| - r, |x| + r]` exactly; every k parity is checked.
+/// A narrow non-straddling pair stays at the monotone width (below the 1-Lipschitz `r + s`).
+#[test]
+fn hypot_radius_covers_both_endpoints() -> Result<(), String> {
+    let ulp = || pow2(-64);
+    for k in 1..=8i64 {
+        let x = || -> Result<ExactNum, String> {
+            Ok(num(1).add_full_prec(&num(k).mul_full_prec(&ulp()?)))
+        };
+        for neg in [false, true] {
+            let xm = if neg { -x()? } else { x()? };
+            let r = ok("hypot", ball(xm, mag(1, 0)?, 64)?.hypot(&pt(0, 64)?, 64))?;
+            let what = format!("k {} neg {}", k, neg);
+            want_contains(&what, &r, &x()?.sub_full_prec(&ulp()?))?;
+            want_contains(&what, &r, &x()?.add_full_prec(&ulp()?))?;
+        }
+    }
+    // [2 ± 1, 3 ± 1]: lo = hypot(1, 2) = √5, hi = hypot(3, 4) = 5 exactly; the width (5 - √5)/2 < 1.39 < r + s = 2.
+    for (a, b) in [(2i64, 3i64), (-2, 3), (2, -3), (-2, -3)] {
+        let r = ok(
+            "hypot",
+            ball(num(a), mag(1, 64)?, 64)?.hypot(&ball(num(b), mag(1, 64)?, 64)?, 64),
+        )?;
+        want_contains("hi = 5", &r, &num(5))?;
+        if r.rad() > &mag(0x58f5_c28f_5c28_f5c3, 2)? {
+            return Err(format!("({}, {}): rad {:?} above 1.39", a, b, r.rad()));
+        }
+    }
+    // [4 ± 1, 5 ± 1]: lo = hypot(3, 4) = 5 exactly.
+    for (a, b) in [(4i64, 5i64), (-4, -5)] {
+        let r = ok(
+            "hypot",
+            ball(num(a), mag(1, 64)?, 64)?.hypot(&ball(num(b), mag(1, 64)?, 64)?, 64),
+        )?;
+        want_contains("lo = 5", &r, &num(5))?;
+    }
+    Ok(())
+}
+
+/// powi carries guard bits through its squaring chain, so an exact input's power is within one ulp at `prec`
+/// (after Harper's powi_exact_input_within_one_ulp; kills 246-POWIGUARD).
+#[test]
+fn powi_exact_input_within_one_ulp() -> Result<(), String> {
+    let mut checked = 0u32;
+    for (i, prec) in [53usize, 64, 113].into_iter().enumerate() {
+        for j in 0..12i64 {
+            let x = || -> Result<ExactNum, String> {
+                Ok(num(1).add_full_prec(
+                    &num(j
+                        .checked_mul(37)
+                        .and_then(|v| v.checked_add(5))
+                        .ok_or("x")?)
+                    .mul_full_prec(&pow2(-20)?),
+                ))
+            };
+            let n = 100u64
+                .checked_add(
+                    u64::try_from(j)
+                        .map_err(|_| "j")?
+                        .checked_mul(71)
+                        .ok_or("n")?,
+                )
+                .and_then(|v| v.checked_add(u64::try_from(i).ok()?))
+                .ok_or("n")?;
+            let mut want = num(1);
+            for _ in 0..n {
+                want = want.mul_full_prec(&x()?);
+            }
+            let res = ok("powi", ok("exact", Ball::exact(x()?, prec))?.powi(n, prec))?;
+            if !res.is_informative() {
+                continue;
+            }
+            want_contains("powi", &res, &want)?;
+            let me = res.mid().exponent().ok_or("exp")?;
+            let ulp = Mag::half_ulp(me, prec.checked_sub(1).ok_or("p-1")?);
+            if res.rad() > &ulp {
+                return Err(format!(
+                    "prec {} n {}: rad {:?} > one ulp {:?}",
+                    prec,
+                    n,
+                    res.rad(),
+                    ulp
+                ));
+            }
+            checked = checked.checked_add(1).ok_or("c")?;
+        }
+    }
+    if checked < 30 {
+        return Err(format!("only {} informative powi rows", checked));
+    }
+    Ok(())
+}

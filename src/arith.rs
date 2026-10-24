@@ -21,6 +21,8 @@ use crate::precision::{Precision, MAX_PRECISION, MIN_PRECISION};
 const MID_RM: RoundingMode = RoundingMode::ToEven;
 /// Extra bits `powi` carries through its squaring chain before the one final rounding to `prec` (16.S1.6).
 const POWI_GUARD_BITS: Precision = 64;
+/// Guard bits for the hypot endpoint magnitudes `|m| ± r`.
+const HYPOT_GUARD_BITS: Precision = 64;
 /// `Mag` mantissa of one half: `0.1b * 2^0`.
 const HALF_MANT: u64 = 0x8000_0000_0000_0000;
 
@@ -268,16 +270,63 @@ impl Ball {
         finish(OP, n.reciprocal(prec, MID_RM), rad, prec, false)
     }
 
-    /// `hypot(m ± r, n ± s) = round(hypot(m, n)) ± (r + s + ε)`: hypot is 1-Lipschitz in each argument (16.S1.8).
+    /// Monotone enclosure (16.S1.8): hypot is increasing in `|x|` and `|y|`, so the result lies in
+    /// `[hypot↓(min|X|, min|Y|), hypot↑(max|X|, max|Y|)]` (endpoints at `prec`), returned as the ball
+    /// `round((lo + hi) / 2) ± max(hi - mid, mid - lo)` rounded out. A radius outside zf's exponent range falls back to
+    /// the 1-Lipschitz `round(hypot(m, n)) ± (r + s + ε)`.
     ///
     /// # Errors
-    /// `InvalidArgument` for a bad `prec`. An infinite radius or a midpoint overflow is `Ok(all reals)`.
+    /// `InvalidArgument` for a bad `prec`. An infinite radius or an overflowing upper endpoint is `Ok(all reals)`.
     pub fn hypot(self, other: &Ball, prec: Precision) -> BoundResult<Ball> {
         const OP: &str = "Ball::hypot";
         check_prec(OP, prec)?;
         let (m, r, _) = self.into_parts();
-        let rad = r.add_up(other.rad());
-        finish(OP, m.hypot(other.mid(), prec, MID_RM), rad, prec, false)
+        let (n, s) = (other.mid(), other.rad());
+        let (Ok(rn), Ok(sn)) = (r.to_exact_num(), s.to_exact_num()) else {
+            let rad = r.add_up(s);
+            return finish(OP, m.hypot(n, prec, MID_RM), rad, prec, false);
+        };
+        let wp = match prec.checked_add(HYPOT_GUARD_BITS) {
+            Some(w) if w <= MAX_PRECISION => w,
+            Some(_) | None => prec,
+        };
+        let lo =
+            abs_lower(&m, &r, &rn, wp).hypot(&abs_lower(n, s, &sn, wp), prec, RoundingMode::Down);
+        let hi = abs_upper(&m, &rn, wp).hypot(&abs_upper(n, &sn, wp), prec, RoundingMode::Up);
+        let (Mid::Value(lo), Mid::Value(hi)) = (classify(OP, lo)?, classify(OP, hi)?) else {
+            return Ball::all_reals(prec);
+        };
+        let Mid::Value(mid) = classify(OP, lo.add_full_prec(&hi).ldexp(-1, prec, MID_RM))? else {
+            return Ball::all_reals(prec);
+        };
+        let rad = Mag::from_exact_num(&hi.sub_full_prec(&mid))
+            .max(Mag::from_exact_num(&mid.sub_full_prec(&lo)));
+        Ball::from_mid_rad(mid, rad, prec)
+    }
+}
+
+/// A lower bound on `min |m ± r|` at `wp` bits: 0 when the ball reaches 0, else `|m| - r` rounded toward 0.
+fn abs_lower(m: &ExactNum, r: &Mag, rn: &ExactNum, wp: Precision) -> ExactNum {
+    match cmp_abs_rad(m, r) {
+        Some(Ordering::Greater) => {
+            let x = ExactNum::from(1i64).mul(m, wp, RoundingMode::ToZero);
+            if m.is_negative() {
+                x.add(rn, wp, RoundingMode::ToZero)
+            } else {
+                x.sub(rn, wp, RoundingMode::ToZero)
+            }
+        }
+        Some(Ordering::Equal | Ordering::Less) | None => ExactNum::from(0i64),
+    }
+}
+
+/// An upper bound on `max |m ± r|` at `wp` bits: `|m| + r` rounded away from 0.
+fn abs_upper(m: &ExactNum, rn: &ExactNum, wp: Precision) -> ExactNum {
+    let x = ExactNum::from(1i64).mul(m, wp, RoundingMode::FromZero);
+    if m.is_negative() {
+        x.sub(rn, wp, RoundingMode::FromZero)
+    } else {
+        x.add(rn, wp, RoundingMode::FromZero)
     }
 }
 

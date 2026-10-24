@@ -44,3 +44,15 @@ src/arith.rs:Ball::div	239-DIVZEROINV	arith/239-DIVZEROINV.patch	harness
 src/arith.rs:Ball::inv	240-INVZEROALL	arith/240-INVZEROALL.patch	harness
 src/arith.rs:Ball::div	241-DIVEPS	arith/241-DIVEPS.patch	harness
 src/arith.rs:Ball::hypot	242-HYPRADSUB	arith/242-HYPRADSUB.patch	harness
+src/arith.rs:eps	243-EPSHALF	arith/243-EPSHALF.patch	harness
+src/arith.rs:eps	244-EPSLOOSE	arith/244-EPSLOOSE.patch	harness
+src/arith.rs:endpoint_ball	245-ENDPTWIDE	arith/245-ENDPTWIDE.patch	harness
+src/arith.rs:Ball::powi	246-POWIGUARD	arith/246-POWIGUARD.patch	harness
+src/arith.rs:abs_lower	247-HYPLOZERO	arith/247-HYPLOZERO.patch	harness
+src/arith.rs:Ball::hypot	248-HYPLODIR	arith/248-HYPLODIR.patch	harness
+src/arith.rs:Ball::hypot	249-HYPHIDIR	arith/249-HYPHIDIR.patch	harness
+src/arith.rs:Ball::hypot	250-HYPMIDLO	arith/250-HYPMIDLO.patch	harness
+src/arith.rs:abs_lower	251-HYPLONEG	arith/251-HYPLONEG.patch	harness
+src/arith.rs:abs_upper	252-HYPUPNEG	arith/252-HYPUPNEG.patch	harness
+src/arith.rs:Ball::hypot	253-HYPFALLBACK	arith/253-HYPFALLBACK.patch	harness
+src/arith.rs:Ball::hypot	254-HYPHIOVF	arith/254-HYPHIOVF.patch	harness
