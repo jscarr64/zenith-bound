@@ -35,7 +35,7 @@ pub const COSMOLOGY_EXPONENTS: [i64; 8] =
     [256, 405, 1000, 1024, 4097, 65_536, 1_048_575, 1_048_576];
 
 /// The forced exponents, in this fixed order: the four zf bounds `MIN`, `MIN + 1`, `MAX - 1`, `MAX`, then each of `COSMOLOGY_EXPONENTS`
-/// followed by its negation (20 values, all inside both `ExpDomain::MAG` and `ExpDomain::MID`). Fuzz suites run them before the random cases.
+/// followed by its negation (20 values, all inside both `ExpDomain::MAG` and `ExpDomain::MID`). Fuzz suites run them after the random cases.
 pub fn forced_exponents() -> Vec<i64> {
     let mut out = vec![
         ZF_EXPONENT_MIN,
@@ -46,6 +46,26 @@ pub fn forced_exponents() -> Vec<i64> {
     for e in COSMOLOGY_EXPONENTS {
         out.push(e);
         out.push(-e);
+    }
+    out
+}
+
+/// The forced exponents of every L0a-5 Mag property (tests/harness/fuzz_mag_props.rs), in this fixed order: the four zf bounds `MIN`,
+/// `MIN + 1`, `MAX - 1`, `MAX`, then `0`, then each `COSMOLOGY_EXPONENTS` value up to the 1024 scale (256, 405, 1000, 1024) followed by
+/// its negation (13 values).
+pub fn forced_prop_exponents() -> Vec<i64> {
+    let mut out = vec![
+        ZF_EXPONENT_MIN,
+        ZF_EXPONENT_MIN + 1,
+        ZF_EXPONENT_MAX - 1,
+        ZF_EXPONENT_MAX,
+        0,
+    ];
+    for e in COSMOLOGY_EXPONENTS {
+        if e <= 1024 {
+            out.push(e);
+            out.push(-e);
+        }
     }
     out
 }

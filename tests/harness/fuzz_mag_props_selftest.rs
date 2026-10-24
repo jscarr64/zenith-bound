@@ -5,13 +5,14 @@
 //! No test here depends on the correctness of the library except where it says so (the planted operations are real `Mag` operations used in the
 //! wrong place, e.g. `mul_lower` as `mul_up`).
 
+use crate::common::expect_eq;
 use crate::common::generators::TOP;
 use crate::common::replay::{parse_config, FuzzConfig, ReplayLine};
 use crate::common::rng::SplitMix64;
 use crate::fuzz_mag::run_cfg;
 use crate::fuzz_mag_props::{
     self as props, check_bracket, check_down, check_up, cmp_add, cmp_div, cmp_mul, cmp_scaled,
-    cmp_sqrt, cmp_sub, draw_case, next_down, next_up, Bad, Mono, Ops, Out, Rel,
+    cmp_sqrt, cmp_sub, draw_case, next_down, next_up, Bad, Mono, Ops, Out, Rel, Src,
 };
 use core::cmp::Ordering;
 use zenith_bound::mag::Mag;
@@ -294,7 +295,7 @@ macro_rules! planted {
         #[test]
         fn $name() -> Result<(), String> {
             let ops = $ops;
-            run_planted($idx, $cases, &|rng| $case(&ops, rng))
+            run_planted($idx, $cases, &|rng| $case(&ops, &mut Src::random(rng)))
         }
     };
 }
@@ -596,7 +597,9 @@ macro_rules! planted_mono {
         #[test]
         fn $name() -> Result<(), String> {
             let ops = $ops;
-            run_planted($idx, 20_000, &|rng| props::mono_case(&ops, &$which, rng))
+            run_planted($idx, 20_000, &|rng| {
+                props::mono_case(&ops, &$which, &mut Src::random(rng))
+            })
         }
     };
 }
@@ -683,7 +686,7 @@ fn the_real_operations_pass_every_property_for_a_short_run() -> Result<(), Strin
         cases: 5000,
         replay: None,
     };
-    let first: &dyn Fn(&Ops, &mut SplitMix64) -> Result<u8, Bad> = &props::add_up_case;
+    let first: &dyn Fn(&Ops, &mut Src) -> Result<u8, Bad> = &props::add_up_case;
     for f in [
         first,
         &props::sub_lower_case,
@@ -696,7 +699,7 @@ fn the_real_operations_pass_every_property_for_a_short_run() -> Result<(), Strin
         &props::canonical_case,
         &props::ulp_case,
     ] {
-        run_cfg(&cfg, &|rng| f(&ops, rng))?;
+        run_cfg(&cfg, &|rng| f(&ops, &mut Src::random(rng)))?;
     }
     Ok(())
 }
@@ -784,7 +787,7 @@ fn the_case_draws_reach_the_range_boundaries_and_every_shape() -> Result<(), Str
     };
     for case in cfg.case_range()? {
         let mut rng = SplitMix64::new(cfg.seed_of(case));
-        let s = draw_case(&mut rng, &Rel::Sum)?;
+        let s = draw_case(&mut Src::random(&mut rng), &Rel::Sum)?;
         let sum = i128::from(s.ea) + i128::from(s.eb);
         if (i128::from(i64::MAX) - 3..=i128::from(i64::MAX) + 3).contains(&sum) {
             sum_hi += 1;
@@ -793,7 +796,7 @@ fn the_case_draws_reach_the_range_boundaries_and_every_shape() -> Result<(), Str
             sum_lo += 1;
         }
         let mut rng = SplitMix64::new(cfg.seed_of(case));
-        let d = draw_case(&mut rng, &Rel::Diff)?;
+        let d = draw_case(&mut Src::random(&mut rng), &Rel::Diff)?;
         let diff = i128::from(d.ea) - i128::from(d.eb);
         if (i128::from(i64::MAX) - 3..=i128::from(i64::MAX) + 3).contains(&diff) {
             diff_hi += 1;
@@ -802,7 +805,7 @@ fn the_case_draws_reach_the_range_boundaries_and_every_shape() -> Result<(), Str
             diff_lo += 1;
         }
         let mut rng = SplitMix64::new(cfg.seed_of(case));
-        let a = draw_case(&mut rng, &Rel::Any)?;
+        let a = draw_case(&mut Src::random(&mut rng), &Rel::Any)?;
         if a.ea == a.eb {
             equal_exp += 1;
         }
@@ -829,4 +832,58 @@ fn the_case_draws_reach_the_range_boundaries_and_every_shape() -> Result<(), Str
         }
     }
     Ok(())
+}
+
+// ---- (4) the forced pairs --------------------------------------------------------------------------------------------------------
+
+/// `mul_up` that is wrong (zero) only on the operand exponent pairs (zf MAX - 1, zf MIN + 1) and (405, -1000).
+fn wrong_mul_up_only_at_forced_pairs(a: &Mag, b: &Mag) -> Mag {
+    let max = (1i64 << 62) - 1;
+    match (a.exp(), b.exp()) {
+        (Some(x), Some(y)) if (x, y) == (max - 1, 1 - max) || (x, y) == (405, -1000) => Mag::zero(),
+        _ => Mag::mul_up(a, b),
+    }
+}
+
+#[test]
+fn a_wrong_op_only_at_the_zf_bounds_or_the_1024_scale_survives_the_random_band_and_is_caught_by_the_forced_pairs(
+) -> Result<(), String> {
+    let ops = Ops {
+        mul_up: wrong_mul_up_only_at_forced_pairs,
+        ..props::real()
+    };
+    let cfg = FuzzConfig {
+        seed: 0x5EED_F0CE,
+        cases: 20_000,
+        replay: None,
+    };
+    run_cfg(&cfg, &|rng| props::mul_case(&ops, &mut Src::random(rng)))?;
+    match props::run_forced(&|src| props::mul_case(&ops, src)) {
+        Ok(n) => Err(format!("the wrong mul_up survived {} forced pairs", n)),
+        Err(m) if m.starts_with("forced pair ") && m.contains("op=mul_up") => Ok(()),
+        Err(m) => Err(format!("unexpected forced report: {}", m)),
+    }
+}
+
+#[test]
+fn every_property_runs_on_every_ordered_forced_pair() -> Result<(), String> {
+    let seen = core::cell::RefCell::new(Vec::new());
+    let n = props::run_forced(&|src| {
+        let c = props::draw_case(src, &Rel::Any).map_err(|m| Bad {
+            op: "draw",
+            prec: 0,
+            a: String::from("-"),
+            b: String::from("-"),
+            msg: m,
+        })?;
+        seen.borrow_mut().push((c.ea, c.eb));
+        Ok(0)
+    })?;
+    expect_eq("forced pairs", &n, &props::FORCED_PAIRS)?;
+    let es = crate::common::generators::forced_prop_exponents();
+    let want: Vec<(i64, i64)> = es
+        .iter()
+        .flat_map(|a| es.iter().map(move |b| (*a, *b)))
+        .collect();
+    expect_eq("forced pairs in order", &seen.into_inner(), &want)
 }

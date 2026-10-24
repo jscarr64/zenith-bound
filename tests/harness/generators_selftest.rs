@@ -1,4 +1,4 @@
-//! COVERS: common::BallDesc::encode, common::ExpBand::Edge, common::ExpBand::Gap, common::ExpBand::Near0, common::ExpBand::PowerOfTwo, common::ExpBand::Uniform, common::ExpBand::from_index, common::ExpBand::index, common::ExpDomain::edge_values, common::ExpDomain::in_raw_range, common::GapClass::One, common::GapClass::P, common::GapClass::PGuard, common::GapClass::PGuardMinus1, common::GapClass::PGuardPlus1, common::GapClass::PMinus1, common::GapClass::PPlus1, common::GapClass::Random, common::GapClass::Two, common::GapClass::Zero, common::GapClass::from_index, common::GapClass::index, common::GapClass::magnitude, common::MantPattern::Aaab, common::MantPattern::AllOnes, common::MantPattern::Alt5555, common::MantPattern::C000, common::MantPattern::MaxMinus1, common::MantPattern::SingleBit, common::MantPattern::TieAtP, common::MantPattern::TieMinus1, common::MantPattern::TiePlus1, common::MantPattern::Top, common::MantPattern::TopPlus1, common::MantPattern::Uniform, common::MantPattern::from_index, common::MantPattern::index, common::ModeOrNone::None, common::ModeOrNone::Valid, common::ModeOrNone::all_with_none, common::ModeOrNone::is_valid, common::ModeOrNone::name, common::PrecSource::Fast, common::PrecSource::Operand, common::PrecSource::Schedule, common::PrecSource::Uniform, common::RadiusClass::HalfUlp, common::RadiusClass::Huge, common::RadiusClass::Infinity, common::RadiusClass::OneUlp, common::RadiusClass::RandomMag, common::RadiusClass::Zero, common::RadiusClass::from_index, common::RadiusClass::index, common::RadiusClass::tag, common::RoundingMode::Down, common::RoundingMode::FromZero, common::RoundingMode::ToEven, common::RoundingMode::ToOdd, common::RoundingMode::ToZero, common::RoundingMode::Up, common::RoundingMode::all, common::RoundingMode::index, common::RoundingMode::name, common::RoundingMode::parse, common::Sign::Minus, common::Sign::Plus, common::Sign::symbol, common::generators::check_exp_mix, common::generators::check_mant_mix, common::generators::draw_ball, common::generators::draw_exponent, common::generators::draw_exponent_pair, common::generators::draw_exponent_with, common::generators::draw_gap, common::generators::draw_mantissa, common::generators::draw_mantissa_with, common::generators::draw_mode, common::generators::draw_precision, common::generators::forced_exponents, common::generators::gap_pair, common::generators::tie_mantissa, common::generators::uniform_in
+//! COVERS: common::BallDesc::encode, common::ExpBand::Edge, common::ExpBand::Gap, common::ExpBand::Near0, common::ExpBand::PowerOfTwo, common::ExpBand::Uniform, common::ExpBand::from_index, common::ExpBand::index, common::ExpDomain::edge_values, common::ExpDomain::in_raw_range, common::GapClass::One, common::GapClass::P, common::GapClass::PGuard, common::GapClass::PGuardMinus1, common::GapClass::PGuardPlus1, common::GapClass::PMinus1, common::GapClass::PPlus1, common::GapClass::Random, common::GapClass::Two, common::GapClass::Zero, common::GapClass::from_index, common::GapClass::index, common::GapClass::magnitude, common::MantPattern::Aaab, common::MantPattern::AllOnes, common::MantPattern::Alt5555, common::MantPattern::C000, common::MantPattern::MaxMinus1, common::MantPattern::SingleBit, common::MantPattern::TieAtP, common::MantPattern::TieMinus1, common::MantPattern::TiePlus1, common::MantPattern::Top, common::MantPattern::TopPlus1, common::MantPattern::Uniform, common::MantPattern::from_index, common::MantPattern::index, common::ModeOrNone::None, common::ModeOrNone::Valid, common::ModeOrNone::all_with_none, common::ModeOrNone::is_valid, common::ModeOrNone::name, common::PrecSource::Fast, common::PrecSource::Operand, common::PrecSource::Schedule, common::PrecSource::Uniform, common::RadiusClass::HalfUlp, common::RadiusClass::Huge, common::RadiusClass::Infinity, common::RadiusClass::OneUlp, common::RadiusClass::RandomMag, common::RadiusClass::Zero, common::RadiusClass::from_index, common::RadiusClass::index, common::RadiusClass::tag, common::RoundingMode::Down, common::RoundingMode::FromZero, common::RoundingMode::ToEven, common::RoundingMode::ToOdd, common::RoundingMode::ToZero, common::RoundingMode::Up, common::RoundingMode::all, common::RoundingMode::index, common::RoundingMode::name, common::RoundingMode::parse, common::Sign::Minus, common::Sign::Plus, common::Sign::symbol, common::generators::check_exp_mix, common::generators::check_mant_mix, common::generators::draw_ball, common::generators::draw_exponent, common::generators::draw_exponent_pair, common::generators::draw_exponent_with, common::generators::draw_gap, common::generators::draw_mantissa, common::generators::draw_mantissa_with, common::generators::draw_mode, common::generators::draw_precision, common::generators::forced_exponents, common::generators::forced_prop_exponents, common::generators::gap_pair, common::generators::tie_mantissa, common::generators::uniform_in
 //! Self-tests of tests/common/generators.rs. Oracle: the plan (TEST_PLAN section 7, 9), hand-derived expectations, and pinned counts/digests
 //! for the fixed seed `seed_for("common", CASE_CLASS_GATE)` at GENERATOR_VERSION 5 (a drift detector, produced by this generator; the band
 //! counts were also recomputed independently by scripts/goldlib.py, see the comment at EXP_BAND_COUNTS).
@@ -7,10 +7,10 @@ use crate::common::expect_eq;
 use crate::common::generators::{
     check_exp_mix, check_mant_mix, draw_ball, draw_exponent, draw_exponent_pair,
     draw_exponent_with, draw_gap, draw_mantissa, draw_mantissa_with, draw_mode, draw_precision,
-    forced_exponents, gap_pair, tie_mantissa, uniform_in, BallDesc, ExpBand, ExpDomain, GapClass,
-    MantPattern, ModeOrNone, PrecSource, RadiusClass, RoundingMode, Sign, EXP_MIX,
-    EXP_MIX_SPEC_PERCENT, GUARD, MANT_MIX, MAX_PREC, PS, PS_FAST, RADIUS_MIX, TOP, ZF_EXPONENT_MAX,
-    ZF_EXPONENT_MIN, ZF_MIN_NORMAL_EXPONENT,
+    forced_exponents, forced_prop_exponents, gap_pair, tie_mantissa, uniform_in, BallDesc, ExpBand,
+    ExpDomain, GapClass, MantPattern, ModeOrNone, PrecSource, RadiusClass, RoundingMode, Sign,
+    EXP_MIX, EXP_MIX_SPEC_PERCENT, GUARD, MANT_MIX, MAX_PREC, PS, PS_FAST, RADIUS_MIX, TOP,
+    ZF_EXPONENT_MAX, ZF_EXPONENT_MIN, ZF_MIN_NORMAL_EXPONENT,
 };
 use crate::common::rng::SplitMix64;
 use crate::common::seeds::{seed_for, CASE_CLASS_GATE, GENERATOR_VERSION};
@@ -977,4 +977,26 @@ fn uniform_band_reaches_cosmology_scale_exponents_and_every_bit_length() -> Resu
         expect_eq("bit lengths past the domain", &past, &0)?;
     }
     Ok(())
+}
+
+#[test]
+fn forced_prop_exponents_are_the_zf_bounds_zero_then_the_1024_scale_with_both_signs(
+) -> Result<(), String> {
+    let max = (1i64 << 62) - 1;
+    let want: Vec<i64> = vec![
+        -max,
+        -max + 1,
+        max - 1,
+        max,
+        0,
+        256,
+        -256,
+        405,
+        -405,
+        1000,
+        -1000,
+        1024,
+        -1024,
+    ];
+    expect_eq("forced prop exponents", &forced_prop_exponents(), &want)
 }

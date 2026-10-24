@@ -2,11 +2,13 @@
 //! L0a-5 wide-range Mag property fuzz (TEST_PLAN 8.1, section 7, checklist L0a-5): one `#[test]` per property family, each run through
 //! Harper's property-runner contract in tests/harness/fuzz_mag.rs (`run_property`: per-property stream, `ZB_FUZZ_SEED`/`ZB_FUZZ_CASES`/
 //! `ZB_REPLAY`, `ZB_FUZZ_DEEP` deep stream, non-vacuity on outcome-class counts, `<replay line> -- <why>` on failure). The checkers and their
-//! self-tests are in fuzz_mag_props.rs and fuzz_mag_props_selftest.rs. Gate count `PROP_CASES` per property (a count, never wall-clock time).
+//! self-tests are in fuzz_mag_props.rs and fuzz_mag_props_selftest.rs. Gate count `PROP_CASES` per property (a count, never wall-clock time),
+//! then every property's forced pairs (`fuzz_mag_props::run_forced`: the zf exponent bounds, 0 and the 1024 scale).
 
+use crate::common::expect_eq;
 use crate::common::rng::SplitMix64;
 use crate::fuzz_mag::{run_property, CaseFailure};
-use crate::fuzz_mag_props::{self as props, Bad, Mono, Ops};
+use crate::fuzz_mag_props::{self as props, Bad, Mono, Ops, Src};
 
 /// Cases per property at the gate tier (override with `ZB_FUZZ_CASES`).
 const PROP_CASES: u64 = 1_000_000;
@@ -34,10 +36,19 @@ fn go(
     prop_index: u64,
     label: &str,
     need: &[(u8, &str)],
-    f: &dyn Fn(&Ops, &mut SplitMix64) -> Result<u8, Bad>,
+    f: &dyn Fn(&Ops, &mut Src) -> Result<u8, Bad>,
 ) -> Result<(), String> {
     let ops = props::real();
-    run_property(prop_index, label, need, PROP_CASES, &|rng| f(&ops, rng))
+    run_property(
+        prop_index,
+        label,
+        need,
+        PROP_CASES,
+        &|rng: &mut SplitMix64| f(&ops, &mut Src::random(rng)),
+    )?;
+    let forced = props::run_forced(&|src| f(&ops, src))
+        .map_err(|m| format!("property {} ({}): {}", prop_index, label, m))?;
+    expect_eq("forced pairs run", &forced, &props::FORCED_PAIRS)
 }
 
 const ALL: [(u8, &str); 4] = [

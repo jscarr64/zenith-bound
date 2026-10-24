@@ -16,7 +16,7 @@
 //!   ulp helpers               ulp_mag, half_ulp (exact powers of two with the range clamps), smaller_than_half_ulp (exact comparison), their relations
 
 use crate::common::generators::{
-    draw_exponent, draw_mantissa, draw_precision, ExpDomain, PrecSource, TOP,
+    draw_exponent, draw_mantissa, draw_precision, forced_prop_exponents, ExpDomain, PrecSource, TOP,
 };
 use crate::common::rng::SplitMix64;
 use core::cmp::Ordering;
@@ -395,32 +395,36 @@ fn bare(msg: String) -> Bad {
     }
 }
 
-fn exp_of(rng: &mut SplitMix64, prec: u32, anchor: i64) -> Result<i64, String> {
-    Ok(draw_exponent(rng, &ExpDomain::MAG, anchor, prec)?.value)
+fn exp_of(src: &mut Src, prec: u32, anchor: i64) -> Result<i64, String> {
+    match src.next_forced() {
+        Some(e) => Ok(e),
+        None => Ok(draw_exponent(src.rng, &ExpDomain::MAG, anchor, prec)?.value),
+    }
 }
 
 /// Draws a case. The consumption is fixed (frozen draw order): precision, ea, ma, shape, free eb, delta, target, mb.
-pub fn draw_case(rng: &mut SplitMix64, rel: &Rel) -> Result<Case, String> {
-    let prec = draw_precision(rng, &PrecSource::Fast)?;
-    let ea = exp_of(rng, prec, 0)?;
-    let ma = draw_mantissa(rng, prec)?.value;
-    let shape = rng.below(4);
-    let free = exp_of(rng, prec, ea)?;
-    let delta = i128::from(rng.below(7)) - 3;
-    let target: i128 = match rng.below(5) {
+pub fn draw_case(src: &mut Src, rel: &Rel) -> Result<Case, String> {
+    let prec = draw_precision(src.rng, &PrecSource::Fast)?;
+    let ea = exp_of(src, prec, 0)?;
+    let ma = draw_mantissa(src.rng, prec)?.value;
+    let shape = src.below(4);
+    let free = exp_of(src, prec, ea)?;
+    let delta = i128::from(src.below(7)) - 3;
+    let target: i128 = match src.below(5) {
         0 => 0,
         1 => i128::from(i64::MAX),
         2 => i128::from(i64::MIN),
         3 => 64,
         _ => -64,
     };
-    let mb = draw_mantissa(rng, prec)?.value;
+    let mb = draw_mantissa(src.rng, prec)?.value;
     let related = match rel {
         Rel::Any => None,
         Rel::Sum => Some(target - ex(ea) + delta),
         Rel::Diff => Some(ex(ea) - target - delta),
     };
-    let eb = match (shape >= 2, related) {
+    // a forced case keeps its forced second exponent (the forced pair is the edge being exercised)
+    let eb = match (shape >= 2 && !src.is_forced(), related) {
         (true, Some(v)) => i64::try_from(v).unwrap_or(free),
         _ => free,
     };
@@ -431,6 +435,69 @@ pub fn draw_case(rng: &mut SplitMix64, rel: &Rel) -> Result<Case, String> {
         eb,
         mb,
     })
+}
+
+// ---- where a case's draws come from ---------------------------------------------------------------------------------------------
+
+/// The draws of one case: the random stream, with the case's first exponent draws (in draw order) optionally forced to fixed values.
+pub struct Src<'a> {
+    rng: &'a mut SplitMix64,
+    forced: &'a [i64],
+    used: usize,
+}
+
+impl<'a> Src<'a> {
+    /// Every exponent from the random stream (the random band).
+    pub fn random(rng: &'a mut SplitMix64) -> Self {
+        Src {
+            rng,
+            forced: &[],
+            used: 0,
+        }
+    }
+    /// The first `forced.len()` exponent draws are `forced`, in order; later ones come from the random stream.
+    pub fn forced(rng: &'a mut SplitMix64, forced: &'a [i64]) -> Self {
+        Src {
+            rng,
+            forced,
+            used: 0,
+        }
+    }
+    fn is_forced(&self) -> bool {
+        !self.forced.is_empty()
+    }
+    fn next_forced(&mut self) -> Option<i64> {
+        let e = self.forced.get(self.used)?;
+        self.used += 1;
+        Some(*e)
+    }
+    fn below(&mut self, n: u64) -> u64 {
+        self.rng.below(n)
+    }
+}
+
+/// The forced pairs every property runs on, besides its random band: every ordered pair of `forced_prop_exponents()` (13^2 = 169).
+pub const FORCED_PAIRS: u64 = 169;
+
+/// Runs `f` once on every ordered pair `(ea, eb)` of `forced_prop_exponents()`, as the first two exponent draws (mantissas, precisions and
+/// shapes from a stream seeded by the pair index). Returns the number of pairs run; `Err` is `forced pair <i> (<ea>, <eb>) op=.. prec=.. a=.. b=.. -- why`.
+pub fn run_forced(f: &dyn Fn(&mut Src) -> Result<u8, Bad>) -> Result<u64, String> {
+    let es = forced_prop_exponents();
+    let mut n = 0u64;
+    for ea in es.iter() {
+        for eb in es.iter() {
+            let pair = [*ea, *eb];
+            let mut rng = SplitMix64::new(n);
+            if let Err(b) = f(&mut Src::forced(&mut rng, &pair)) {
+                return Err(format!(
+                    "forced pair {} ({}, {}) op={} prec={} a={} b={} -- {}",
+                    n, ea, eb, b.op, b.prec, b.a, b.b, b.msg
+                ));
+            }
+            n += 1;
+        }
+    }
+    Ok(n)
 }
 
 fn mag_from(mant: u64, exp: i64) -> Result<Mag, String> {
@@ -460,8 +527,8 @@ fn flag(o: &Out) -> u8 {
 }
 
 /// `add_up`: sound, smallest upper bound.
-pub fn add_up_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
-    let c = draw_case(rng, &Rel::Any).map_err(bare)?;
+pub fn add_up_case(ops: &Ops, src: &mut Src) -> Result<u8, Bad> {
+    let c = draw_case(src, &Rel::Any).map_err(bare)?;
     let run = || -> Result<u8, String> {
         let (a, b) = (mag_from(c.ma, c.ea)?, mag_from(c.mb, c.eb)?);
         let out = ap2(ops.add_up, &a, &b)?;
@@ -474,8 +541,8 @@ pub fn add_up_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
 }
 
 /// `sub_lower`: zero iff `a <= b`, else the largest lower bound.
-pub fn sub_lower_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
-    let c = draw_case(rng, &Rel::Any).map_err(bare)?;
+pub fn sub_lower_case(ops: &Ops, src: &mut Src) -> Result<u8, Bad> {
+    let c = draw_case(src, &Rel::Any).map_err(bare)?;
     let run = || -> Result<u8, String> {
         let (a, b) = (mag_from(c.ma, c.ea)?, mag_from(c.mb, c.eb)?);
         let out = ap2(ops.sub_lower, &a, &b)?;
@@ -494,8 +561,8 @@ pub fn sub_lower_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
 }
 
 /// `mul_up` and `mul_lower`: tight bounds, bracketing each other.
-pub fn mul_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
-    let c = draw_case(rng, &Rel::Sum).map_err(bare)?;
+pub fn mul_case(ops: &Ops, src: &mut Src) -> Result<u8, Bad> {
+    let c = draw_case(src, &Rel::Sum).map_err(bare)?;
     let run = || -> Result<u8, (&'static str, String)> {
         let (a, b) = (
             mag_from(c.ma, c.ea).map_err(|m| ("mul", m))?,
@@ -513,8 +580,8 @@ pub fn mul_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
 }
 
 /// `div_up` and `div_lower`.
-pub fn div_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
-    let c = draw_case(rng, &Rel::Diff).map_err(bare)?;
+pub fn div_case(ops: &Ops, src: &mut Src) -> Result<u8, Bad> {
+    let c = draw_case(src, &Rel::Diff).map_err(bare)?;
     let run = || -> Result<u8, (&'static str, String)> {
         let (a, b) = (
             mag_from(c.ma, c.ea).map_err(|m| ("div", m))?,
@@ -532,8 +599,8 @@ pub fn div_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
 }
 
 /// `sqrt_up` and `sqrt_lower` (unary: the second operand of the case is unused and printed as `-`).
-pub fn sqrt_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
-    let c = draw_case(rng, &Rel::Any).map_err(bare)?;
+pub fn sqrt_case(ops: &Ops, src: &mut Src) -> Result<u8, Bad> {
+    let c = draw_case(src, &Rel::Any).map_err(bare)?;
     let run = || -> Result<u8, (&'static str, String)> {
         let a = mag_from(c.ma, c.ea).map_err(|m| ("sqrt", m))?;
         let cmp = |er, mr| cmp_sqrt((c.ea, c.ma), (er, mr));
@@ -555,8 +622,8 @@ fn unary(mut b: Bad) -> Bad {
 // ---- commutativity ------------------------------------------------------------------------------------------------------------
 
 /// `add_up`, `mul_up`, `mul_lower` give the same result in both argument orders.
-pub fn commutative_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
-    let c = draw_case(rng, &Rel::Sum).map_err(bare)?;
+pub fn commutative_case(ops: &Ops, src: &mut Src) -> Result<u8, Bad> {
+    let c = draw_case(src, &Rel::Sum).map_err(bare)?;
     let run = || -> Result<u8, (&'static str, String)> {
         let (a, b) = (
             mag_from(c.ma, c.ea).map_err(|m| ("commute", m))?,
@@ -611,10 +678,10 @@ impl Mono {
 type Raw = (i64, u64);
 
 /// Draws a second operand that is at or above `(e, m)`: the next larger value, a fresh draw ordered against it, or the same value.
-fn draw_partner(rng: &mut SplitMix64, prec: u32, e: i64, m: u64) -> Result<(Raw, Raw), String> {
-    let pick = rng.below(4);
-    let fresh_e = exp_of(rng, prec, e)?;
-    let fresh_m = draw_mantissa(rng, prec)?.value;
+fn draw_partner(src: &mut Src, prec: u32, e: i64, m: u64) -> Result<(Raw, Raw), String> {
+    let pick = src.below(4);
+    let fresh_e = exp_of(src, prec, e)?;
+    let fresh_m = draw_mantissa(src.rng, prec)?.value;
     let other = match (pick, next_up(e, m)) {
         (0, Some(n)) | (1, Some(n)) => n,
         (2, _) => (fresh_e, fresh_m),
@@ -636,16 +703,16 @@ fn le(label: &str, lo: &Out, hi: &Out) -> Result<(), String> {
 }
 
 /// `f(x1, y) <= f(x2, y)` for `x1 <= x2` (and the divisor/subtrahend reversed): the monotonicity of CONTRACT 14.1.
-pub fn mono_case(ops: &Ops, which: &Mono, rng: &mut SplitMix64) -> Result<u8, Bad> {
+pub fn mono_case(ops: &Ops, which: &Mono, src: &mut Src) -> Result<u8, Bad> {
     let rel = match which {
         Mono::MulUp | Mono::MulLower => Rel::Sum,
         Mono::DivUp | Mono::DivLower => Rel::Diff,
         Mono::AddUp | Mono::SqrtUp | Mono::SqrtLower | Mono::SubLower => Rel::Any,
     };
-    let c = draw_case(rng, &rel).map_err(bare)?;
+    let c = draw_case(src, &rel).map_err(bare)?;
     let mut run = || -> Result<u8, String> {
-        let ((alo_e, alo_m), (ahi_e, ahi_m)) = draw_partner(rng, gen_prec(c.prec)?, c.ea, c.ma)?;
-        let ((blo_e, blo_m), (bhi_e, bhi_m)) = draw_partner(rng, gen_prec(c.prec)?, c.eb, c.mb)?;
+        let ((alo_e, alo_m), (ahi_e, ahi_m)) = draw_partner(src, gen_prec(c.prec)?, c.ea, c.ma)?;
+        let ((blo_e, blo_m), (bhi_e, bhi_m)) = draw_partner(src, gen_prec(c.prec)?, c.eb, c.mb)?;
         let (alo, ahi) = (mag_from(alo_m, alo_e)?, mag_from(ahi_m, ahi_e)?);
         let (blo, bhi) = (mag_from(blo_m, blo_e)?, mag_from(bhi_m, bhi_e)?);
         // (binary op, second argument non-increasing) or the unary sqrt
@@ -702,8 +769,8 @@ fn want_finite(exp: i64, mant: u64) -> Out {
 }
 
 /// The identities of CONTRACT 2.3, 2.4, 14.6 on a drawn operand `x`, one and two as `Mag`s.
-pub fn identity_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
-    let c = draw_case(rng, &Rel::Any).map_err(bare)?;
+pub fn identity_case(ops: &Ops, src: &mut Src) -> Result<u8, Bad> {
+    let c = draw_case(src, &Rel::Any).map_err(bare)?;
     let run = || -> Result<u8, String> {
         let x = mag_from(c.ma, c.ea)?;
         let (zero, one, two) = (Mag::zero(), mag_from(TOP, 1)?, mag_from(TOP, 2)?);
@@ -746,15 +813,19 @@ pub fn identity_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
 
 /// sqrt of exact squares: `s = t * 2^32 * 2^(es - 64)` with `t` a 32-bit integer with the top bit set has the exact square `t^2 * 2^(2 es - 64)`;
 /// and of the powers of two `2^(e - 1)` with odd `e`.
-pub fn sqrt_exact_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
-    let prec = draw_precision(rng, &PrecSource::Fast).map_err(bare)?;
+pub fn sqrt_exact_case(ops: &Ops, src: &mut Src) -> Result<u8, Bad> {
+    let prec = draw_precision(src.rng, &PrecSource::Fast).map_err(bare)?;
     let dom = ExpDomain {
         min: -(1 << 61),
         max: 1 << 61,
         subnormal: None,
     };
-    let es = draw_exponent(rng, &dom, 0, prec).map_err(bare)?.value;
-    let pick = rng.below(8);
+    // a forced exponent e puts the square near 2^e: es = e / 2 (inside `dom` for every forced value, which are within +-(2^62 - 1))
+    let es = match src.next_forced() {
+        Some(e) => e / 2,
+        None => draw_exponent(src.rng, &dom, 0, prec).map_err(bare)?.value,
+    };
+    let pick = src.below(8);
     let t_edge: [u64; 6] = [
         1 << 31,
         (1 << 31) + 1,
@@ -763,8 +834,8 @@ pub fn sqrt_exact_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
         3_037_000_500,
         3_037_000_501,
     ];
-    let edge_i = usize::try_from(rng.below(6)).map_err(|_| bare(String::from("edge index")))?;
-    let free_t = (1u64 << 31) + rng.below(1 << 31);
+    let edge_i = usize::try_from(src.below(6)).map_err(|_| bare(String::from("edge index")))?;
+    let free_t = (1u64 << 31) + src.below(1 << 31);
     let t = match (pick < 3, t_edge.get(edge_i)) {
         (true, Some(e)) => *e,
         _ => free_t,
@@ -819,10 +890,10 @@ pub fn sqrt_exact_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
 
 // ---- canonical form -----------------------------------------------------------------------------------------------------------
 
-fn operand(rng: &mut SplitMix64, prec: u32, anchor: i64) -> Result<Mag, String> {
-    let class = rng.below(8);
-    let e = exp_of(rng, prec, anchor)?;
-    let m = draw_mantissa(rng, prec)?.value;
+fn operand(src: &mut Src, prec: u32, anchor: i64) -> Result<Mag, String> {
+    let class = src.below(8);
+    let e = exp_of(src, prec, anchor)?;
+    let m = draw_mantissa(src.rng, prec)?.value;
     match class {
         0 => Ok(Mag::zero()),
         1 => Ok(Mag::infinity()),
@@ -879,11 +950,11 @@ fn meets(got: &Out, want: &Want, a: &Out, b: &Out) -> bool {
 
 /// Every result of every operation is canonical (the check is inside `out_of`), whatever mix of finite, zero and Infinity operands, and a
 /// zero or Infinity operand gives the specified value (0 + 0, x + 0, 0 - x, x - Infinity, 0 * Infinity, 0 / 0, x / 0, sqrt(Infinity), ...).
-pub fn canonical_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
-    let c = draw_case(rng, &Rel::Sum).map_err(bare)?;
+pub fn canonical_case(ops: &Ops, src: &mut Src) -> Result<u8, Bad> {
+    let c = draw_case(src, &Rel::Sum).map_err(bare)?;
     let mut run = || -> Result<u8, String> {
-        let a = operand(rng, gen_prec(c.prec)?, c.ea)?;
-        let b = operand(rng, gen_prec(c.prec)?, c.eb)?;
+        let a = operand(src, gen_prec(c.prec)?, c.ea)?;
+        let b = operand(src, gen_prec(c.prec)?, c.eb)?;
         let (oa, ob) = (out_of(&a)?, out_of(&b)?);
         for (name, f) in [
             ("add_up", ops.add_up),
@@ -944,14 +1015,14 @@ fn prec_i128(prec: usize) -> Result<i128, String> {
 
 // ---- ulp helpers --------------------------------------------------------------------------------------------------------------
 
-fn draw_prec_wide(rng: &mut SplitMix64) -> Result<usize, String> {
-    match rng.below(8) {
-        0..=2 => draw_precision(rng, &PrecSource::Schedule).map(api_prec),
+fn draw_prec_wide(src: &mut Src) -> Result<usize, String> {
+    match src.below(8) {
+        0..=2 => draw_precision(src.rng, &PrecSource::Schedule).map(api_prec),
         3 => Ok(0),
         4 => Ok(usize::MAX),
         5 => Ok(1 << 31),
         6 => Ok((1 << 31) - 1),
-        _ => usize::try_from(rng.below(1 << 32)).map_err(|_| String::from("precision draw")),
+        _ => usize::try_from(src.below(1 << 32)).map_err(|_| String::from("precision draw")),
     }
 }
 
@@ -972,14 +1043,14 @@ fn expect_pow2(label: &str, got: &Out, k: i128) -> Result<u8, String> {
 
 /// `ulp_mag`, `half_ulp` (exact powers of two with the clamps), `smaller_than_half_ulp` (exact comparison with `2^(mid - prec - 1)`), their
 /// relations (`ulp_mag(e, p) = half_ulp(e, p - 1)`) and the monotonicity of `ulp_mag` (up in the exponent, down in the precision).
-pub fn ulp_case(ops: &Ops, rng: &mut SplitMix64) -> Result<u8, Bad> {
-    let pw = draw_prec_wide(rng).map_err(bare)?;
-    let anchor_prec = draw_precision(rng, &PrecSource::Fast).map_err(bare)?;
-    let mid = exp_of(rng, anchor_prec, 0).map_err(bare)?;
-    let sel = rng.below(8);
-    let free_e = exp_of(rng, anchor_prec, mid).map_err(bare)?;
-    let xm = draw_mantissa(rng, anchor_prec).map_err(bare)?.value;
-    let delta = i128::from(rng.below(5)) - 2;
+pub fn ulp_case(ops: &Ops, src: &mut Src) -> Result<u8, Bad> {
+    let pw = draw_prec_wide(src).map_err(bare)?;
+    let anchor_prec = draw_precision(src.rng, &PrecSource::Fast).map_err(bare)?;
+    let mid = exp_of(src, anchor_prec, 0).map_err(bare)?;
+    let sel = src.below(8);
+    let free_e = exp_of(src, anchor_prec, mid).map_err(bare)?;
+    let xm = draw_mantissa(src.rng, anchor_prec).map_err(bare)?.value;
+    let delta = i128::from(src.below(5)) - 2;
     let thr = ex(mid) - prec_i128(pw).map_err(bare)? - 1;
     let near = i64::try_from(thr + delta).unwrap_or(free_e);
     let c = Case {
