@@ -178,6 +178,48 @@ pub fn edge_table(prec: u32) -> Result<Vec<Edge>, String> {
             d(Sign::Plus, false, 1, TOP, RadiusClass::RandomMag, -59, TOP),
             Grid::Finite,
         ),
+        // Forced (generator v5): one tick inside each zf exponent bound, and cosmology scale (2^405 = 0.1b*2^406, 2^-405 = 0.1b*2^-404).
+        e(
+            "max-exponent-1,1ulp",
+            d(
+                Sign::Plus,
+                false,
+                ZF_EXPONENT_MAX - 1,
+                u64::MAX,
+                RadiusClass::OneUlp,
+                0,
+                0,
+            ),
+            Grid::Finite,
+        ),
+        e(
+            "min-exponent+1,1ulp",
+            d(
+                Sign::Plus,
+                false,
+                ZF_EXPONENT_MIN + 1,
+                TOP,
+                RadiusClass::OneUlp,
+                0,
+                0,
+            ),
+            Grid::Finite,
+        ),
+        e(
+            "2^405,1ulp",
+            d(Sign::Plus, false, 406, TOP, RadiusClass::OneUlp, 0, 0),
+            Grid::Finite,
+        ),
+        e(
+            "2^-405,1ulp",
+            d(Sign::Plus, false, -404, TOP, RadiusClass::OneUlp, 0, 0),
+            Grid::Finite,
+        ),
+        e(
+            "-2^-405,r=0",
+            d(Sign::Minus, false, -404, TOP, RadiusClass::Zero, 0, 0),
+            Grid::Finite,
+        ),
     ];
     v.push(Edge {
         name: "below-min-normal(placeholder),1ulp",

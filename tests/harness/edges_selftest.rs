@@ -35,7 +35,7 @@ fn dy(neg: bool, mant: u128, exp: i128, off: Term) -> Result<Point, String> {
 fn every_precision_has_unique_rows_and_the_right_grid() -> Result<(), String> {
     for prec in PS {
         let rows = edge_table(prec)?;
-        expect_eq("row count", &rows.len(), &20)?;
+        expect_eq("row count", &rows.len(), &25)?;
         for (i, r) in rows.iter().enumerate() {
             for s in rows.iter().skip(i + 1) {
                 if r.name == s.name || r.desc.encode() == s.desc.encode() {
@@ -82,6 +82,10 @@ fn row_values_are_exact() -> Result<(), String> {
     eq("1+2^-60,r=0", dy(false, 1, 0, Term::new(false, 1, -60)?)?)?;
     eq("1-2^-60,r=0", dy(false, 1, 0, Term::new(true, 1, -60)?)?)?;
     eq("zero-ball(-0,r=0)", dy(false, 0, 0, z()?)?)?;
+    // forced cosmology-scale rows: 2^405 = 0.1b*2^406, 2^-405 = 0.1b*2^-404
+    eq("2^405,1ulp", dy(false, 1, 405, z()?)?)?;
+    eq("2^-405,1ulp", dy(false, 1, -405, z()?)?)?;
+    eq("-2^-405,r=0", dy(true, 1, -405, z()?)?)?;
     let edge = |name: &str| -> Result<Point, String> {
         let pts = sample_points(&find(&rows, name)?.desc, 53, &mut SplitMix64::new(0), 4)?;
         pts.into_iter()

@@ -13,7 +13,8 @@
 
 use crate::common::expect_eq;
 use crate::common::generators::{
-    draw_exponent, draw_exponent_pair, draw_mantissa, draw_precision, ExpDomain, PrecSource,
+    draw_exponent, draw_exponent_pair, draw_mantissa, draw_precision, forced_exponents, ExpDomain,
+    PrecSource, ZF_EXPONENT_MAX, ZF_EXPONENT_MIN,
 };
 use crate::common::modular;
 use crate::common::replay::{
@@ -323,12 +324,41 @@ const PROPS: [FuzzMagProp; 2] = [
 
 // ---- runner -----------------------------------------------------------------------------------------------------------------
 
-/// What a passing run did.
+/// What a passing run did: `cases` drawn ones, then `forced` cases from `forced_cases`; `checks` counts both.
 #[derive(Debug, PartialEq, Eq)]
 struct RunStats {
+    forced: u64,
     cases: u64,
     checks: u64,
 }
+
+/// Precision of the forced cases.
+const FORCED_PREC: u32 = 53;
+
+/// The forced cases: every ordered pair `(a, b)` of `forced_exponents` (the zf bounds and the cosmology-scale exponents), each with the
+/// mantissas 2^63 and all ones on both sides (20 * 20 * 4 = 1,600 cases). They are run after the random cases of every non-replay run (so a
+/// random failure still reports its replay line first),
+/// so these exponents are always exercised, not only when a band happens to draw them.
+fn forced_cases() -> Vec<MagCase> {
+    let exps = forced_exponents();
+    let mut out: Vec<MagCase> = Vec::new();
+    for ea in exps.iter() {
+        for eb in exps.iter() {
+            for ma in [TOP_MANT, u64::MAX] {
+                for mb in [TOP_MANT, u64::MAX] {
+                    out.push(MagCase {
+                        a: MagArg::Finite { exp: *ea, mant: ma },
+                        b: MagArg::Finite { exp: *eb, mant: mb },
+                        prec: FORCED_PREC,
+                    });
+                }
+            }
+        }
+    }
+    out
+}
+
+const TOP_MANT: u64 = 1 << 63;
 
 fn fails(ops: &Ops, prop: &FuzzMagProp, case: &MagCase) -> bool {
     match case.mags() {
@@ -364,12 +394,14 @@ fn report(
     Ok(format!("{} -- {}", line.format_line()?, why))
 }
 
-/// Runs every property on every case of `cfg` (`0..cases`, or just the replayed case). `Err` is the report of the first failure.
+/// Runs every property on every case of `cfg` (`0..cases`, or just the replayed case), then, outside a replay, on every forced case.
+/// `Err` is the report of the first failure: a replay line for a drawn case, `forced case <i> ...` for a forced one.
 fn run(ops: &Ops, props: &[FuzzMagProp], cfg: &FuzzConfig) -> Result<RunStats, String> {
     let base_seed = match &cfg.replay {
         Some(t) => t.seed,
         None => cfg.seed,
     };
+    let mut forced = 0u64;
     let mut cases = 0u64;
     let mut checks = 0u64;
     for index in cfg.case_range()? {
@@ -384,7 +416,31 @@ fn run(ops: &Ops, props: &[FuzzMagProp], cfg: &FuzzConfig) -> Result<RunStats, S
         }
         cases += 1;
     }
-    Ok(RunStats { cases, checks })
+    if cfg.replay.is_none() {
+        for (i, case) in forced_cases().into_iter().enumerate() {
+            let (a, b) = case.mags()?;
+            for prop in props.iter() {
+                checks += 1;
+                if let Err(why) = (prop.check)(ops, &a, &b) {
+                    return Err(format!(
+                        "forced case {} op={} prec={} a={} b={} -- {}",
+                        i,
+                        prop.name,
+                        case.prec,
+                        case.a.encode(),
+                        case.b.encode(),
+                        why
+                    ));
+                }
+            }
+            forced += 1;
+        }
+    }
+    Ok(RunStats {
+        forced,
+        cases,
+        checks,
+    })
 }
 
 fn gate_seed() -> Result<u64, String> {
@@ -516,8 +572,14 @@ fn fuzz_mag_gate() -> Result<(), String> {
     let cfg = config_from_env(gate_seed()?, GATE_CASES)?;
     let stats = run(&Ops::lib(), &PROPS, &cfg)?;
     let want_cases = u64::try_from(cfg.case_range()?.count()).map_err(|_| String::from("count"))?;
+    let want_forced = if cfg.replay.is_none() { 1_600 } else { 0 };
+    expect_eq("forced cases run", &stats.forced, &want_forced)?;
     expect_eq("cases run", &stats.cases, &want_cases)?;
-    expect_eq("checks run", &stats.checks, &(want_cases * 2))
+    expect_eq(
+        "checks run",
+        &stats.checks,
+        &((want_cases + want_forced) * 2),
+    )
 }
 
 #[test]
@@ -676,6 +738,75 @@ fn a_wrong_op_is_caught_with_a_replay_line_that_reproduces_it() -> Result<(), St
     Ok(())
 }
 
+/// `mul_lower` that is wrong (above `mul_up`) only for one pair of operand exponents.
+fn wrong_only_at(a: &Mag, b: &Mag, ea: i64, eb: i64) -> Mag {
+    if a.exp() == Some(ea) && b.exp() == Some(eb) {
+        broken_mul_lower(a, b)
+    } else {
+        a.mul_lower(b)
+    }
+}
+
+fn wrong_at_the_zf_bounds(a: &Mag, b: &Mag) -> Mag {
+    wrong_only_at(a, b, ZF_EXPONENT_MAX - 1, ZF_EXPONENT_MIN + 1)
+}
+
+fn wrong_at_cosmology_scale(a: &Mag, b: &Mag) -> Mag {
+    wrong_only_at(a, b, 405, -1000)
+}
+
+#[test]
+fn a_wrong_op_only_at_the_zf_bounds_or_cosmology_scale_is_caught_by_the_forced_cases(
+) -> Result<(), String> {
+    // 5,000 random cases essentially never draw these exact exponent pairs (MAG edges are the i64 extremes; 405 and -1000 are not near a
+    // power of two), so only the forced cases catch them, and they do in every run
+    let cfg = FuzzConfig {
+        seed: gate_seed()?,
+        cases: 5_000,
+        replay: None,
+    };
+    for (label, f) in [
+        ("zf bounds", wrong_at_the_zf_bounds as fn(&Mag, &Mag) -> Mag),
+        ("cosmology scale", wrong_at_cosmology_scale),
+    ] {
+        let ops = Ops {
+            mul_lower: f,
+            ..Ops::lib()
+        };
+        match run(&ops, &PROPS, &cfg) {
+            Ok(s) => return Err(format!("{}: the wrong mul_lower passed {:?}", label, s)),
+            Err(m) if m.starts_with("forced case ") && m.contains("op=lower_not_above_upper") => {}
+            Err(m) => return Err(format!("{}: unexpected report {:?}", label, m)),
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn forced_cases_cover_every_pair_of_forced_exponents() -> Result<(), String> {
+    let cases = forced_cases();
+    expect_eq("forced case count", &cases.len(), &1_600)?;
+    let exps = forced_exponents();
+    for ea in exps.iter() {
+        for eb in exps.iter() {
+            let hit = cases.iter().any(|c| {
+                c.a == MagArg::Finite {
+                    exp: *ea,
+                    mant: u64::MAX,
+                } && c.b
+                    == MagArg::Finite {
+                        exp: *eb,
+                        mant: TOP_MANT,
+                    }
+            });
+            if !hit {
+                return Err(format!("no forced case at exponents ({}, {})", ea, eb));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn a_wrong_add_up_is_caught_by_the_dominance_property() -> Result<(), String> {
     fn forgetful(a: &Mag, b: &Mag) -> Mag {
@@ -727,6 +858,7 @@ fn the_run_is_env_driven_and_replay_runs_exactly_one_case() -> Result<(), String
         "replay runs one case",
         &stats,
         &RunStats {
+            forced: 0,
             cases: 1,
             checks: 2,
         },

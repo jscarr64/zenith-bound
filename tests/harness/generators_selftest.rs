@@ -7,10 +7,10 @@ use crate::common::expect_eq;
 use crate::common::generators::{
     check_exp_mix, check_mant_mix, draw_ball, draw_exponent, draw_exponent_pair,
     draw_exponent_with, draw_gap, draw_mantissa, draw_mantissa_with, draw_mode, draw_precision,
-    gap_pair, tie_mantissa, uniform_in, BallDesc, ExpBand, ExpDomain, GapClass, MantPattern,
-    ModeOrNone, PrecSource, RadiusClass, RoundingMode, Sign, EXP_MIX, EXP_MIX_SPEC_PERCENT, GUARD,
-    MANT_MIX, MAX_PREC, PS, PS_FAST, RADIUS_MIX, TOP, ZF_EXPONENT_MAX, ZF_EXPONENT_MIN,
-    ZF_MIN_NORMAL_EXPONENT,
+    forced_exponents, gap_pair, tie_mantissa, uniform_in, BallDesc, ExpBand, ExpDomain, GapClass,
+    MantPattern, ModeOrNone, PrecSource, RadiusClass, RoundingMode, Sign, EXP_MIX,
+    EXP_MIX_SPEC_PERCENT, GUARD, MANT_MIX, MAX_PREC, PS, PS_FAST, RADIUS_MIX, TOP, ZF_EXPONENT_MAX,
+    ZF_EXPONENT_MIN, ZF_MIN_NORMAL_EXPONENT,
 };
 use crate::common::rng::SplitMix64;
 use crate::common::seeds::{seed_for, CASE_CLASS_GATE, GENERATOR_VERSION};
@@ -308,6 +308,41 @@ fn edge_tables_hold_the_extremes_the_subnormal_boundary_and_the_raw_off_by_ones(
     }
     if !ExpDomain::MAG.in_raw_range(i64::MIN) || !ExpDomain::MAG.in_raw_range(i64::MAX) {
         return Err(String::from("MAG raw range excludes an i64 extreme"));
+    }
+    Ok(())
+}
+
+#[test]
+fn forced_exponents_are_the_zf_bounds_then_cosmology_scale_with_both_signs() -> Result<(), String> {
+    // hand-derived: +-(2^62 - 1) and one inside each, then 2^8 .. 2^20 magnitudes (Jeff's cosmology range) each with its negation
+    let m = (1i64 << 62) - 1;
+    let want: Vec<i64> = vec![
+        -m,
+        -m + 1,
+        m - 1,
+        m,
+        256,
+        -256,
+        405,
+        -405,
+        1000,
+        -1000,
+        1024,
+        -1024,
+        4097,
+        -4097,
+        65_536,
+        -65_536,
+        1_048_575,
+        -1_048_575,
+        1_048_576,
+        -1_048_576,
+    ];
+    expect_eq("forced exponents", &forced_exponents(), &want)?;
+    for e in forced_exponents() {
+        if !ExpDomain::MID.in_raw_range(e) || e < ZF_EXPONENT_MIN || e > ZF_EXPONENT_MAX {
+            return Err(format!("forced exponent {} is outside the zf range", e));
+        }
     }
     Ok(())
 }

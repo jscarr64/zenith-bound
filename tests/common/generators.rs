@@ -29,6 +29,27 @@ pub const TOP: u64 = 1 << 63;
 /// the real zf constant names (`EXPONENT_MIN` / `EXPONENT_MAX`); when it is pinned, bind these to them (the pinned fe5c15d is still i32).
 pub const ZF_EXPONENT_MAX: i64 = (1i64 << 62) - 1;
 pub const ZF_EXPONENT_MIN: i64 = -ZF_EXPONENT_MAX;
+/// Cosmology-scale exponents (2^8 ..= 2^20; Jeff 2026-10-23 12:20 PM CT; 405 is cosmology's 2^+-405), forced into every run, not only
+/// reached through the Uniform band. 405 and 1000 are not within one of a power of two, so the PowerOfTwo band does not hit them either.
+pub const COSMOLOGY_EXPONENTS: [i64; 8] =
+    [256, 405, 1000, 1024, 4097, 65_536, 1_048_575, 1_048_576];
+
+/// The forced exponents, in this fixed order: the four zf bounds `MIN`, `MIN + 1`, `MAX - 1`, `MAX`, then each of `COSMOLOGY_EXPONENTS`
+/// followed by its negation (20 values, all inside both `ExpDomain::MAG` and `ExpDomain::MID`). Fuzz suites run them before the random cases.
+pub fn forced_exponents() -> Vec<i64> {
+    let mut out = vec![
+        ZF_EXPONENT_MIN,
+        ZF_EXPONENT_MIN + 1,
+        ZF_EXPONENT_MAX - 1,
+        ZF_EXPONENT_MAX,
+    ];
+    for e in COSMOLOGY_EXPONENTS {
+        out.push(e);
+        out.push(-e);
+    }
+    out
+}
+
 /// PLACEHOLDER for zf's `MIN_NORMAL_EXPONENT` until the zf pin exists (`seeds::ZF_PIN`): `EXPONENT_MIN + 4096`, the lowest exponent at
 /// which a 4096-bit precision still fits above `EXPONENT_MIN`. Replace with zf's constant (it changes the edge table, so bump the generator version).
 pub const ZF_MIN_NORMAL_EXPONENT: i64 = ZF_EXPONENT_MIN + 4096;
