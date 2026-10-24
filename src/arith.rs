@@ -48,7 +48,13 @@ impl Ball {
         check_prec("Ball::add", prec)?;
         let (m, r, _) = self.into_parts();
         let rad = r.add_up(other.rad());
-        finish("Ball::add", m.add(other.mid(), prec, MID_RM), rad, prec, false)
+        finish(
+            "Ball::add",
+            m.add(other.mid(), prec, MID_RM),
+            rad,
+            prec,
+            false,
+        )
     }
 
     /// `(m ± r) - (n ± s) = round(m - n) ± (r + s + ε)` (CONTRACT 9.3, 16.S1.1).
@@ -59,7 +65,13 @@ impl Ball {
         check_prec("Ball::sub", prec)?;
         let (m, r, _) = self.into_parts();
         let rad = r.add_up(other.rad());
-        finish("Ball::sub", m.sub(other.mid(), prec, MID_RM), rad, prec, false)
+        finish(
+            "Ball::sub",
+            m.sub(other.mid(), prec, MID_RM),
+            rad,
+            prec,
+            false,
+        )
     }
 
     /// `(m ± r)(n ± s) = round(m n) ± (|m| s + |n| r + r s + ε)` (CONTRACT 9.3, 16.S1.1).
@@ -183,7 +195,9 @@ impl Ball {
             (false, true, Ordering::Equal) => (Ordering::Equal, Ordering::Greater),
             (true, false, Ordering::Greater) => (Ordering::Less, Ordering::Less),
             (true, false, Ordering::Equal) => (Ordering::Less, Ordering::Equal),
-            (false, false, Ordering::Equal | Ordering::Greater) => (Ordering::Equal, Ordering::Equal),
+            (false, false, Ordering::Equal | Ordering::Greater) => {
+                (Ordering::Equal, Ordering::Equal)
+            }
             (_, _, Ordering::Less) | (true, true, _) => (Ordering::Less, Ordering::Greater),
         };
         match (lo, strict, hi) {
@@ -201,7 +215,9 @@ impl Ball {
                 endpoint_ball(OP, hi_up.sqrt_up(), prec)
             }
             (Ordering::Less, true, _) => Err(domain(OP, "m - r < 0 under Strict")),
-            (Ordering::Less, false, Ordering::Less) => Err(domain(OP, "m + r < 0: the ball misses [0, inf)")),
+            (Ordering::Less, false, Ordering::Less) => {
+                Err(domain(OP, "m + r < 0: the ball misses [0, inf)"))
+            }
             (Ordering::Less, false, Ordering::Equal) => Ball::exact(ExactNum::from(0i64), prec),
         }
     }
@@ -301,7 +317,13 @@ fn eps(mid: &ExactNum, prec: Precision, lost: bool) -> Mag {
 }
 
 /// Classify the midpoint, add ε to the propagated radius and build the ball.
-fn finish(op: &'static str, raw: ExactNum, prop: Mag, prec: Precision, lost: bool) -> BoundResult<Ball> {
+fn finish(
+    op: &'static str,
+    raw: ExactNum,
+    prop: Mag,
+    prec: Precision,
+    lost: bool,
+) -> BoundResult<Ball> {
     match classify(op, raw)? {
         Mid::Overflow => Ball::all_reals(prec),
         Mid::Value(m) => {
