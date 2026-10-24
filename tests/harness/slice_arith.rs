@@ -796,7 +796,7 @@ fn enclosure_rows_contained() -> Result<(), String> {
         .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
     {
         let f: Vec<&str> = line.split_whitespace().collect();
-        let op = f.first().copied().ok_or("empty row")?;
+        let op: &str = f.first().ok_or("empty row")?;
         let prec: usize = f.get(1).ok_or("prec")?.parse().map_err(|_| "prec")?;
         let v = |i: usize| -> Result<ExactNum, String> {
             match (f.get(i), f.get(i + 1), f.get(i + 2)) {
