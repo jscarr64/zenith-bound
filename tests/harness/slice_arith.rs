@@ -423,20 +423,14 @@ fn prec_out_of_range_is_invalid_argument() -> Result<(), String> {
 #[test]
 fn overflow_is_all_reals() -> Result<(), String> {
     // 2^(EMAX-1) + 2^(EMAX-1) = 2^EMAX overflows zf; so do its product and square, and powi of 2^(EMAX/2+1).
-    let big = || -> Result<Ball, String> {
-        ok("big", Ball::exact(pow2(i64::from(EXPONENT_MAX) - 1)?, 53))
-    };
+    let big = || -> Result<Ball, String> { ok("big", Ball::exact(pow2(EXPONENT_MAX - 1)?, 53)) };
     let results = [
         big()?.add(&big()?, 53),
         big()?.sub(&-big()?, 53),
         big()?.mul(&big()?, 53),
         big()?.mul_exact(&num(4), 53),
         big()?.sqr(53),
-        ok(
-            "half",
-            Ball::exact(pow2(i64::from(EXPONENT_MAX / 2) + 1)?, 53),
-        )?
-        .powi(2, 53),
+        ok("half", Ball::exact(pow2(EXPONENT_MAX / 2 + 1)?, 53))?.powi(2, 53),
     ];
     for (i, r) in results.into_iter().enumerate() {
         let b = ok("overflow", r)?;
@@ -452,7 +446,7 @@ fn underflow_is_exact_or_enclosed() -> Result<(), String> {
     // 2^(2k) for k near EMIN/2 lies in or below zf's bottom binade. zf keeps a shallow one exactly (EMIN with leading
     // zero bits: rad 0 is then right, and the midpoint must be exactly 2^(2k)); a deeper one is lost, and then the radius
     // must be positive and the ball must reach from 0 up past its midpoint (16.S1.2: bottom ε). Never a silent flush.
-    let half = i64::from(EXPONENT_MIN / 2);
+    let half = EXPONENT_MIN / 2;
     for k in [half - 2, half - 40, half - 200, half - 5000] {
         let x = || -> Result<Ball, String> { ok("tiny", Ball::exact(pow2(k)?, 53)) };
         for (what, r) in [("mul", x()?.mul(&x()?, 53)), ("sqr", x()?.sqr(53))] {
@@ -862,8 +856,18 @@ fn want_invalid(what: &str, r: Result<Ball, BoundError>) -> Result<(), String> {
 #[test]
 fn div_rows() -> Result<(), String> {
     // 6 / 3 = 2 exactly; -7 / 2 = -3.5 exactly; radius 0.
-    want_exact("6/3", &ok("6/3", pt(6, 53)?.div(&pt(3, 53)?, 53))?, &num(2), &Mag::zero())?;
-    want_exact("-7/2", &ok("-7/2", pt(-7, 53)?.div(&pt(2, 53)?, 53))?, &dy(-7, -1)?, &Mag::zero())?;
+    want_exact(
+        "6/3",
+        &ok("6/3", pt(6, 53)?.div(&pt(3, 53)?, 53))?,
+        &num(2),
+        &Mag::zero(),
+    )?;
+    want_exact(
+        "-7/2",
+        &ok("-7/2", pt(-7, 53)?.div(&pt(2, 53)?, 53))?,
+        &dy(-7, -1)?,
+        &Mag::zero(),
+    )?;
     // 1/3 at 53 bits: inexact, so the radius is positive and the ball holds both 256-bit brackets of 1/3.
     let b = ok("1/3", pt(1, 53)?.div(&pt(3, 53)?, 53))?;
     if b.rad().is_zero() {
@@ -873,18 +877,30 @@ fn div_rows() -> Result<(), String> {
         want_contains("1/3", &b, &x)?;
     }
     // (6 ± 1) / (3 ± 1) = [5/4, 7/2]: both endpoints are exact dyadics and must be inside.
-    let b = ok("(6±1)/(3±1)", ball(num(6), mag(TOP, 1)?, 53)?.div(&ball(num(3), mag(TOP, 1)?, 53)?, 53))?;
+    let b = ok(
+        "(6±1)/(3±1)",
+        ball(num(6), mag(TOP, 1)?, 53)?.div(&ball(num(3), mag(TOP, 1)?, 53)?, 53),
+    )?;
     want_contains("5/4", &b, &dy(5, -2)?)?;
     want_contains("7/2", &b, &dy(7, -1)?)?;
     // -(6 ± 1) / (3 ± 1) = [-7/2, -5/4] and (6 ± 1) / -(3 ± 1) the same.
-    let b = ok("neg num", ball(num(-6), mag(TOP, 1)?, 53)?.div(&ball(num(3), mag(TOP, 1)?, 53)?, 53))?;
+    let b = ok(
+        "neg num",
+        ball(num(-6), mag(TOP, 1)?, 53)?.div(&ball(num(3), mag(TOP, 1)?, 53)?, 53),
+    )?;
     want_contains("-7/2", &b, &dy(-7, -1)?)?;
     want_contains("-5/4", &b, &dy(-5, -2)?)?;
-    let b = ok("neg den", ball(num(6), mag(TOP, 1)?, 53)?.div(&ball(num(-3), mag(TOP, 1)?, 53)?, 53))?;
+    let b = ok(
+        "neg den",
+        ball(num(6), mag(TOP, 1)?, 53)?.div(&ball(num(-3), mag(TOP, 1)?, 53)?, 53),
+    )?;
     want_contains("-7/2 b", &b, &dy(-7, -1)?)?;
     want_contains("-5/4 b", &b, &dy(-5, -2)?)?;
     // 1 / (4 ± 1) = [1/5, 1/3]: brackets of both endpoints.
-    let b = ok("1/(4±1)", pt(1, 53)?.div(&ball(num(4), mag(TOP, 1)?, 53)?, 53))?;
+    let b = ok(
+        "1/(4±1)",
+        pt(1, 53)?.div(&ball(num(4), mag(TOP, 1)?, 53)?, 53),
+    )?;
     for x in brackets(&|rm| num(1).div(&num(5), 256, rm)) {
         want_contains("1/5", &b, &x)?;
     }
@@ -898,21 +914,51 @@ fn div_rows() -> Result<(), String> {
 fn div_by_zero_and_zero_straddling() -> Result<(), String> {
     want_domain("1/0", pt(1, 53)?.div(&pt(0, 53)?, 53))?;
     want_domain("0/0", pt(0, 53)?.div(&pt(0, 53)?, 53))?;
-    want_all_reals("1/(0±1)", pt(1, 53)?.div(&ball(num(0), mag(TOP, 1)?, 53)?, 53))?;
+    want_all_reals(
+        "1/(0±1)",
+        pt(1, 53)?.div(&ball(num(0), mag(TOP, 1)?, 53)?, 53),
+    )?;
     // |n| == s: the denominator reaches 0 exactly.
-    want_all_reals("1/(1±1)", pt(1, 53)?.div(&ball(num(1), mag(TOP, 1)?, 53)?, 53))?;
-    want_all_reals("1/(-1±1)", pt(1, 53)?.div(&ball(num(-1), mag(TOP, 1)?, 53)?, 53))?;
-    want_all_reals("1/all", pt(1, 53)?.div(&ok("all", Ball::all_reals(53))?, 53))?;
-    want_all_reals("all/2", ok("all", Ball::all_reals(53))?.div(&pt(2, 53)?, 53))?;
+    want_all_reals(
+        "1/(1±1)",
+        pt(1, 53)?.div(&ball(num(1), mag(TOP, 1)?, 53)?, 53),
+    )?;
+    want_all_reals(
+        "1/(-1±1)",
+        pt(1, 53)?.div(&ball(num(-1), mag(TOP, 1)?, 53)?, 53),
+    )?;
+    want_all_reals(
+        "1/all",
+        pt(1, 53)?.div(&ok("all", Ball::all_reals(53))?, 53),
+    )?;
+    want_all_reals(
+        "all/2",
+        ok("all", Ball::all_reals(53))?.div(&pt(2, 53)?, 53),
+    )?;
     // 0 / 2 = 0 exactly.
-    want_exact("0/2", &ok("0/2", pt(0, 53)?.div(&pt(2, 53)?, 53))?, &num(0), &Mag::zero())?;
+    want_exact(
+        "0/2",
+        &ok("0/2", pt(0, 53)?.div(&pt(2, 53)?, 53))?,
+        &num(0),
+        &Mag::zero(),
+    )?;
     Ok(())
 }
 
 #[test]
 fn inv_rows() -> Result<(), String> {
-    want_exact("1/4", &ok("inv 4", pt(4, 53)?.inv(53))?, &dy(1, -2)?, &Mag::zero())?;
-    want_exact("1/-2", &ok("inv -2", pt(-2, 53)?.inv(53))?, &dy(-1, -1)?, &Mag::zero())?;
+    want_exact(
+        "1/4",
+        &ok("inv 4", pt(4, 53)?.inv(53))?,
+        &dy(1, -2)?,
+        &Mag::zero(),
+    )?;
+    want_exact(
+        "1/-2",
+        &ok("inv -2", pt(-2, 53)?.inv(53))?,
+        &dy(-1, -1)?,
+        &Mag::zero(),
+    )?;
     let b = ok("inv 3", pt(3, 53)?.inv(53))?;
     if b.rad().is_zero() {
         return Err(format!("inv 3: zero radius {:?}", b));
@@ -943,9 +989,24 @@ fn inv_rows() -> Result<(), String> {
 
 #[test]
 fn hypot_rows() -> Result<(), String> {
-    want_exact("hypot 3 4", &ok("h34", pt(3, 53)?.hypot(&pt(4, 53)?, 53))?, &num(5), &Mag::zero())?;
-    want_exact("hypot -3 4", &ok("h-34", pt(-3, 53)?.hypot(&pt(4, 53)?, 53))?, &num(5), &Mag::zero())?;
-    want_exact("hypot 0 0", &ok("h00", pt(0, 53)?.hypot(&pt(0, 53)?, 53))?, &num(0), &Mag::zero())?;
+    want_exact(
+        "hypot 3 4",
+        &ok("h34", pt(3, 53)?.hypot(&pt(4, 53)?, 53))?,
+        &num(5),
+        &Mag::zero(),
+    )?;
+    want_exact(
+        "hypot -3 4",
+        &ok("h-34", pt(-3, 53)?.hypot(&pt(4, 53)?, 53))?,
+        &num(5),
+        &Mag::zero(),
+    )?;
+    want_exact(
+        "hypot 0 0",
+        &ok("h00", pt(0, 53)?.hypot(&pt(0, 53)?, 53))?,
+        &num(0),
+        &Mag::zero(),
+    )?;
     let b = ok("hypot 1 1", pt(1, 53)?.hypot(&pt(1, 53)?, 53))?;
     if b.rad().is_zero() {
         return Err(format!("hypot 1 1: zero radius {:?}", b));
@@ -954,7 +1015,10 @@ fn hypot_rows() -> Result<(), String> {
         want_contains("sqrt 2", &b, &x)?;
     }
     // hypot(3 ± 1, 4 ± 1) = [hypot(2, 3), hypot(4, 5)].
-    let b = ok("h ball", ball(num(3), mag(TOP, 1)?, 53)?.hypot(&ball(num(4), mag(TOP, 1)?, 53)?, 53))?;
+    let b = ok(
+        "h ball",
+        ball(num(3), mag(TOP, 1)?, 53)?.hypot(&ball(num(4), mag(TOP, 1)?, 53)?, 53),
+    )?;
     for x in brackets(&|rm| num(2).hypot(&num(3), 256, rm)) {
         want_contains("hypot 2 3", &b, &x)?;
     }
@@ -962,28 +1026,86 @@ fn hypot_rows() -> Result<(), String> {
         want_contains("hypot 4 5", &b, &x)?;
     }
     // hypot(0 ± 1, 0 ± 1) reaches sqrt 2 at the corner.
-    let b = ok("h zero balls", ball(num(0), mag(TOP, 1)?, 53)?.hypot(&ball(num(0), mag(TOP, 1)?, 53)?, 53))?;
+    let b = ok(
+        "h zero balls",
+        ball(num(0), mag(TOP, 1)?, 53)?.hypot(&ball(num(0), mag(TOP, 1)?, 53)?, 53),
+    )?;
     for x in brackets(&|rm| num(1).hypot(&num(1), 256, rm)) {
         want_contains("corner", &b, &x)?;
     }
-    want_all_reals("hypot all", ok("all", Ball::all_reals(53))?.hypot(&pt(1, 53)?, 53))?;
-    want_all_reals("hypot , all", pt(1, 53)?.hypot(&ok("all", Ball::all_reals(53))?, 53))?;
+    want_all_reals(
+        "hypot all",
+        ok("all", Ball::all_reals(53))?.hypot(&pt(1, 53)?, 53),
+    )?;
+    want_all_reals(
+        "hypot , all",
+        pt(1, 53)?.hypot(&ok("all", Ball::all_reals(53))?, 53),
+    )?;
     Ok(())
 }
 
 #[test]
 fn div_inv_hypot_overflow_and_prec() -> Result<(), String> {
     let big = || -> Result<Ball, String> { ok("big", Ball::exact(pow2(EXPONENT_MAX - 1)?, 53)) };
-    want_all_reals("big/2^-2", big()?.div(&ok("q", Ball::exact(pow2(-2)?, 53))?, 53))?;
-    want_all_reals("inv tiny", ok("tiny", Ball::exact(pow2(EXPONENT_MIN)?, 53))?.inv(53))?;
+    want_all_reals(
+        "big/2^-2",
+        big()?.div(&ok("q", Ball::exact(pow2(-2)?, 53))?, 53),
+    )?;
+    want_all_reals(
+        "inv tiny",
+        ok("tiny", Ball::exact(pow2(EXPONENT_MIN)?, 53))?.inv(53),
+    )?;
     want_all_reals("hypot big big", big()?.hypot(&big()?, 53))?;
-    // An underflowing quotient is still enclosed: 2^(EMIN+1) / 2^10.
-    let b = ok("under", ok("t", Ball::exact(pow2(EXPONENT_MIN + 1)?, 53))?.div(&pt(1024, 53)?, 53))?;
-    want_contains("under 0", &b, &num(0))?;
+    // A quotient in the subnormal range is exact: 2^(EMIN+1) / 2^10, checked by multiplying back.
+    let b = ok(
+        "under",
+        ok("t", Ball::exact(pow2(EXPONENT_MIN + 1)?, 53))?.div(&pt(1024, 53)?, 53),
+    )?;
+    if !b.rad().is_zero() || b.mid().mul_full_prec(&num(1024)) != pow2(EXPONENT_MIN + 1)? {
+        return Err(format!("subnormal quotient: {:?}", b));
+    }
+    // 2^EMIN / 3 loses bits below the grid; the ball is still a sound enclosure of a positive value.
+    let b = ok(
+        "under3",
+        ok("t", Ball::exact(pow2(EXPONENT_MIN)?, 53))?.div(&pt(3, 53)?, 53),
+    )?;
+    if b.rad().is_zero() {
+        return Err(format!("2^EMIN/3: zero radius {:?}", b));
+    }
     for p in [0usize, usize::MAX] {
         want_invalid("div prec", pt(1, 53)?.div(&pt(3, 53)?, p))?;
         want_invalid("inv prec", pt(3, 53)?.inv(p))?;
         want_invalid("hypot prec", pt(3, 53)?.hypot(&pt(4, 53)?, p))?;
     }
     Ok(())
+}
+
+/// CONTRACT 8.3 / O3 / O21: zenith-float's `Exponent` is `i64` with range ±(2^62−1); both ends are reachable midpoint
+/// exponents and one past either end is refused.
+#[test]
+fn exponent_min_max_are_i64_62_bit() -> Result<(), String> {
+    let max: i64 = EXPONENT_MAX;
+    if max != (1i64 << 62) - 1 || EXPONENT_MIN != -max {
+        return Err(format!(
+            "EXPONENT_MIN {} EXPONENT_MAX {}",
+            EXPONENT_MIN, max
+        ));
+    }
+    // 0.1b * 2^e at both ends builds and keeps its exponent; one beyond is refused.
+    for e in [EXPONENT_MIN, EXPONENT_MAX] {
+        let x =
+            ExactNum::from_mag_parts(TOP, e, 64).map_err(|err| format!("exp {}: {:?}", e, err))?;
+        if x.exponent() != Some(e) {
+            return Err(format!("exp {}: got {:?}", e, x.exponent()));
+        }
+        ok("ball at the end", Ball::exact(x, 53))?;
+    }
+    if ExactNum::from_mag_parts(TOP, EXPONENT_MAX + 1, 64).is_ok() {
+        return Err("EXPONENT_MAX + 1 accepted".into());
+    }
+    // A Mag one binade above the zf range has no exact zenith-float image.
+    match mag(TOP, EXPONENT_MAX + 1)?.to_exact_num() {
+        Err(BoundError::Representation { .. }) => Ok(()),
+        other => Err(format!("Mag above EXPONENT_MAX: {:?}", other.map(|_| ()))),
+    }
 }

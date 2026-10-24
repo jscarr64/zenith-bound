@@ -28,11 +28,11 @@ fn mag(mant: u64, exp: i64) -> Result<Mag, String> {
 }
 
 fn emin() -> i64 {
-    i64::from(EXPONENT_MIN)
+    EXPONENT_MIN
 }
 
 fn emax() -> i64 {
-    i64::from(EXPONENT_MAX)
+    EXPONENT_MAX
 }
 
 #[test]
