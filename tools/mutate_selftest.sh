@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Self-test for tools/mutate.sh: a tiny fixture crate (a toy function and a toy suite) is generated under /tmp at run time as its own git repo.
+# Self-test for tools/mutate.sh: a tiny fixture crate (a toy function and a toy suite) is generated under $TMPDIR (default /tmp) at run time as its own git repo.
 # Proves the runner KILLS a real mutant, reports a surviving mutant as SURVIVED (exit nonzero), accepts it only when documented as
 # equivalent, flags a non-building mutant and a non-applying patch as INVALID, counts a timeout as a kill, FAILS with 0 mutants,
 # and ALWAYS removes its worktree. The repo under test is never touched.
@@ -7,7 +7,7 @@
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap mutate_selftest "$@"   # run log (tools/runlog.sh)
 runlog_detach_children
 set -u
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/mutate-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "${TMPDIR:-/tmp}/mutate-selftest.XXXXXX")"; runlog_on_exit "rm -rf \"$t\""
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }
 r="$t/fix"; mkdir -p "$r/src" "$r/tests" "$r/tools/mutants"; cd "$r" || exit 1
 git init -q . && git config user.email a@b && git config user.name t
