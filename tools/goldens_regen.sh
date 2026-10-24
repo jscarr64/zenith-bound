@@ -54,6 +54,7 @@ for d in tests/goldens/slices/*/; do
   for f in "$d"*.txt; do
     [ -f "$f" ] || continue
     case "$f" in *_heavy.txt) continue ;; esac   # heavy goldens: .gitignored, pinned outside SHA256SUMS
+    if [ "$marked" = 1 ]; then echo "goldens-regen: slice $s: SHA256SUMS marked '# EMPTY' but has $(basename "$f")"; rc=1; continue; fi
     grep -q -E "^[0-9a-f]{64}  $(basename "$f")\$" "$d/SHA256SUMS" || { echo "goldens-regen: slice $s: $(basename "$f") is not in its SHA256SUMS"; rc=1; }
   done
 done

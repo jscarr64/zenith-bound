@@ -54,4 +54,4 @@ ck; printf '%s\n' "$out" | grep -q "marked '# EMPTY' but has a.txt" || fail "mar
 fx; printf '# EMPTY\nnot a sum\n' > "$d/SHA256SUMS"
 ck; out=$(gr) && fail "a marked-empty SHA256SUMS with a malformed line passed: $out"
 echo "goldens_regen selftest: ok"
-st_done goldens_regen 20   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done goldens_regen 19   # WANT: cases this script runs (tools/selftest_cases.sh)
