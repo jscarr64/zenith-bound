@@ -341,7 +341,7 @@ fn ties_round_to_even() -> Result<(), String> {
 fn overflow_and_error_paths_answer() -> Result<(), String> {
     let p = 53;
     // 2^(EMAX-1) has zf exponent EMAX (the top binade): its double and square overflow.
-    let top = pow2(i64::from(EXPONENT_MAX).checked_sub(1).ok_or("t")?)?;
+    let top = pow2(EXPONENT_MAX.checked_sub(1).ok_or("t")?)?;
     let big = ok("exact", Ball::exact(top.add_full_prec(&num(0)), p))?;
     // overflowing mids give the all-reals ball, never an Err or a finite wrong ball.
     for (name, r) in all_ops(
@@ -357,7 +357,7 @@ fn overflow_and_error_paths_answer() -> Result<(), String> {
         }
     }
     // tiny mids: products below EXPONENT_MIN answer (Ok) and contain 0 or the image.
-    let tiny = pow2(i64::from(EXPONENT_MIN).checked_add(2).ok_or("m")?)?;
+    let tiny = pow2(EXPONENT_MIN.checked_add(2).ok_or("m")?)?;
     let tb = ok("exact", Ball::exact(tiny.add_full_prec(&num(0)), p))?;
     for (name, r) in all_ops(
         &|| ok("exact", Ball::exact(tiny.add_full_prec(&num(0)), p)),

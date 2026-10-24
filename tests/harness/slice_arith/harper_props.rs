@@ -185,7 +185,7 @@ fn radius_covers_true_error_exact_inputs() -> Result<(), String> {
             }
             if !exact && *single {
                 inexact = inexact.checked_add(1).ok_or("n")?;
-                let e = i64::from(res.mid().exponent().ok_or("exp")?);
+                let e = res.mid().exponent().ok_or("exp")?;
                 let want = Mag::half_ulp(e, prec);
                 if res.rad() != &want {
                     return Err(format!(
@@ -236,7 +236,7 @@ fn powi_exact_input_within_one_ulp() -> Result<(), String> {
             continue;
         }
         want_contains("powi", &res, &want).map_err(|e| format!("case {}: {}", case, e))?;
-        let me = i64::from(res.mid().exponent().ok_or("exp")?);
+        let me = res.mid().exponent().ok_or("exp")?;
         let ulp = Mag::half_ulp(me, prec.checked_sub(1).ok_or("p-1")?);
         if res.rad() > &ulp {
             return Err(format!(
