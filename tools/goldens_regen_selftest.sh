@@ -74,5 +74,26 @@ printf '#!/bin/sh\ncase "$*" in *"{64}  [^/"*) echo "grep: shim: simulated I/O e
 lgr grep2 PATH="$t/shim:$PATH"
 ck; [ "$grc" != 0 ] || fail "a grep error (rc 2) in the malformed-line check passed: $out"
 ck; grep -q "grep failed (rc 2)" <<< "$out" || fail "grep rc 2: no clear message: $out"
+# Spence (2026-10-24): heavy mode. Regular gates pass --skip-heavy to slice generators (HEAVY.SHA256 pin/sha check only, no recompute);
+# ZB_HEAVY_RECOMPUTE=1 recomputes the heavy rows; ZB_GATE_MODE=merge (merge points) REFUSES unless ZB_HEAVY_RECOMPUTE=1. The mode is logged.
+printf '#!/bin/sh\necho "$*" >> "%s/genargs"\n' "$t" > "$t/fakepy"; chmod +x "$t/fakepy"; printf '#!/bin/sh\nexit 0\n' > "$t/okguard"; chmod +x "$t/okguard"
+hm() { : > "$t/genargs"; out=$(env "$@" GOLDENS_PYTHON="$t/fakepy" POPGUARD="$t/okguard" GOLDENS_ROOT="$root" RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 "$here/goldens_regen.sh" --slices-only 2>&1); grc=$?; }
+fx; printf 'scripts/fake.py\n' > "$d/GENERATORS"; printf '# EMPTY\n' > "$d/SHA256SUMS"
+hm ZB_GATE_MODE= ZB_HEAVY_RECOMPUTE=
+ck; [ "$grc" = 0 ] || fail "regular heavy mode failed (rc $grc): $out"
+ck; grep -qx 'goldens-regen: heavy mode=pins (gate mode=regular; HEAVY.SHA256 pin/sha check only, no recompute)' <<< "$out" || fail "pins mode not logged: $out"
+ck; grep -qx -- "scripts/fake.py --check .* --skip-heavy" "$t/genargs" || fail "regular mode did not pass --skip-heavy: $(cat "$t/genargs")"
+hm ZB_GATE_MODE= ZB_HEAVY_RECOMPUTE=1
+ck; [ "$grc" = 0 ] || fail "recompute mode failed (rc $grc): $out"
+ck; grep -qx 'goldens-regen: heavy mode=recompute (gate mode=regular; ZB_HEAVY_RECOMPUTE=1)' <<< "$out" || fail "recompute mode not logged: $out"
+ck; grep -q -- '--skip-heavy' "$t/genargs" && fail "recompute mode passed --skip-heavy: $(cat "$t/genargs")"
+hm ZB_GATE_MODE=merge ZB_HEAVY_RECOMPUTE=
+ck; [ "$grc" = 2 ] || fail "merge-gate mode without ZB_HEAVY_RECOMPUTE=1 exited $grc, want 2: $out"
+ck; grep -q 'goldens-regen: REFUSING: ZB_GATE_MODE=merge needs ZB_HEAVY_RECOMPUTE=1' <<< "$out" || fail "merge refusal unclear: $out"
+ck; [ -s "$t/genargs" ] && fail "merge refusal still ran a generator: $(cat "$t/genargs")"
+hm ZB_GATE_MODE=merge ZB_HEAVY_RECOMPUTE=1
+ck; [ "$grc" = 0 ] && grep -qx 'goldens-regen: heavy mode=recompute (gate mode=merge; ZB_HEAVY_RECOMPUTE=1)' <<< "$out" || fail "merge-gate recompute failed or not logged (rc $grc): $out"
+hm ZB_GATE_MODE=bogus ZB_HEAVY_RECOMPUTE=
+ck; [ "$grc" = 2 ] || fail "an unknown ZB_GATE_MODE exited $grc, want 2: $out"
 echo "goldens_regen selftest: ok"
-st_done goldens_regen 25   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done goldens_regen 36   # WANT: cases this script runs (tools/selftest_cases.sh)
