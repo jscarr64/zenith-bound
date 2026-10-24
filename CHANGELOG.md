@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- runlog selftest joins the gate (2026-10-24): poplog 729c861 (Rusty) prunes a row only when the pid is gone (ESRCH), so the EPERM
+  pid-1 row now survives and `runlog_selftest.sh` passes all 50 cases; full_gate.sh's gate-selftest step now runs it.
+
 - No /tmp in tools (2026-10-24, Jeff: a reboot wiped /tmp and with it a dependency pin and work dirs): new `tools/scratch.sh`
   (`zb_scratch`, sourced by runlog.sh) gives the temp parent, `$ZB_SCRATCH` or `$HOME/.cache/zenith-bound/scratch`. full_gate.sh
   and deep_mag.sh logs (`T`), mutate.sh `MUTATE_TMP`, the fuzz_deep/deep_mag target dirs, runlog.sh, fresh_test_run.sh,

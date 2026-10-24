@@ -71,7 +71,7 @@ run no-panic-scan "no_hits ':[0-9]+:\s*(//|\*)' -rn --include='*.rs' -E '\bunwra
 run no-clone-scan "no_hits ':[0-9]+:\s*(//|\*)' -rn --include='*.rs' -E '\.clone\(|\.clone_from\(|\.to_vec\(|\.cloned\(|\.copied\(|\.to_owned\(|Clone::clone|derive\([^)]*(Clone|Copy)|impl(<[^>]*>)?\s+(Clone|Copy)\s+for'"
 run derive-scan "no_hits '' -rPzl --include='*.rs' '#\\[derive\\([^)]*\\b(Clone|Copy)\\b'"
 run manifest-scan "no_hits ':[0-9]+:\s*(//|\*|//!)' -rn --include='*.rs' -F 'env!(\"CARGO_MANIFEST_DIR\")'"
-run gate-selftest "require mktemp ln sed grep wc stat tee touch && tools/full_gate_selftest.sh && tools/fresh_test_run_selftest.sh && tools/no_tmp_selftest.sh"
+run gate-selftest "require mktemp ln sed grep wc stat tee touch && tools/full_gate_selftest.sh && tools/fresh_test_run_selftest.sh && tools/no_tmp_selftest.sh && tools/runlog_selftest.sh"
 run pubfn-coverage "require awk grep git && tools/pubfn_coverage_selftest.sh && tools/pubfn_coverage.sh"
 run goldens-regen "require sha256sum grep cmp && tools/goldens_regen.sh"
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
