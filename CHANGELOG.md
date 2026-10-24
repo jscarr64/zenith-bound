@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- goldens_regen.sh SHA256SUMS line check quiet/loud (2026-10-24): the malformed-line `grep -v` returns 1 when every line is valid,
+  which tripped `ERR rc=1 line=65` on a clean run. rc 1 is now normal (clean rc 0, no ERR); a real malformed line still fails with
+  its text, and a grep rc 2 fails with "grep failed (rc 2)". goldens_regen_selftest has 25 cases (+6).
+
 - mutate.sh inrange forces base 10 itself (Spence nit on b5ac93f): `10#` on the id and the range bounds, so 0213 is 213 (not octal
   139) and 0219 is not an arithmetic error. mutate_include_selftest has 36 cases (+1).
 
