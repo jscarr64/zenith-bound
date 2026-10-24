@@ -1,5 +1,5 @@
 //! Error type of zenith-bound (variant set: CONTRACT O11-W; struct form and the two
-//! linear-algebra variants: 2026-10-23 rulings a and b; DimensionMismatch: S0, 2026-10-24).
+//! linear-algebra variants: 2026-10-23 rulings a and b; DimensionMismatch: S0, 2026-10-24; NotSymmetric: LA plan, 2026-10-24).
 
 use core::fmt;
 
@@ -69,6 +69,13 @@ pub enum BoundError {
         /// A short reason.
         detail: &'static str,
     },
+    /// A matrix required to be symmetric is not (symmetric eigenvalue enclosures, LA5a; LA plan, 2026-10-24).
+    NotSymmetric {
+        /// The operation that refused.
+        op: &'static str,
+        /// A short reason.
+        detail: &'static str,
+    },
 }
 
 impl BoundError {
@@ -83,6 +90,7 @@ impl BoundError {
             BoundError::Singular { op, .. } => op,
             BoundError::NotConverged { op, .. } => op,
             BoundError::DimensionMismatch { op, .. } => op,
+            BoundError::NotSymmetric { op, .. } => op,
         }
     }
 
@@ -97,6 +105,7 @@ impl BoundError {
             BoundError::Singular { detail, .. } => detail,
             BoundError::NotConverged { detail, .. } => detail,
             BoundError::DimensionMismatch { detail, .. } => detail,
+            BoundError::NotSymmetric { detail, .. } => detail,
         }
     }
 
@@ -110,6 +119,7 @@ impl BoundError {
             BoundError::Singular { .. } => "matrix singular",
             BoundError::NotConverged { .. } => "iteration did not converge",
             BoundError::DimensionMismatch { .. } => "dimensions do not match",
+            BoundError::NotSymmetric { .. } => "matrix not symmetric",
         }
     }
 }

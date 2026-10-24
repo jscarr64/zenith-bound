@@ -368,6 +368,17 @@ B2's order maps onto the layers like this: (1) contract + (2) real balls = **L0*
 
 **L2c Ball arrays and linear algebra (all in 2.0, Jeff 2026-10-23).** L2c-1 `BallArray` rank-N + Vec/Mat + complex mirrors, elementwise ops; L2c-2 norms (`norm_inf`/`norm_1`/`norm_frob_up` → `Mag`), mid/rad split, componentwise↔normwise (enlarging only); L2c-3 dot/matvec/matmul by `|A|·rB + rA·(|B| + rB)` plus a rounding bound, all in `Mag`, sequential order (Part J); L2c-4 triangular solves; L2c-5 LU (pivots on mids) + determinant; L2c-6 verified Cholesky + `is_spd -> Tri` (`NotPositiveDefinite` when certified, `Resource` when undecided); L2c-7 `logdet_spd`, `quad_form` (rᵀC⁻¹r = ‖L⁻¹r‖²), Cholesky solve (needs L1 `ln`); L2c-8 Householder QR + least squares. Order: 1→2→3→4→(5 ‖ 6→7 ‖ 8). Units 1–6 and 8 need only L0b.
 
+**L2c LA slices (LA plan, 2026-10-24).** Every LA slice depends on S6 (`matrix`, `BallArray`) and S1 (`arith`). Exact LA golds: owner Cassie.
+
+| Slice | Scope | Depends on |
+|---|---|---|
+| LA1 | Cholesky + logdet | S6, S1 |
+| LA2 | LU (square only) + det + solve | S6, S1 |
+| LA3 | QR, incl. rectangular least squares | S6, S1 |
+| LA4 | GLS | S6, S1, LA1, LA3 |
+| LA5a | Symmetric eigenvalue enclosures | S6, S1, LA3 |
+| LA5b | General nonsymmetric eigenvalues, `ComplexBall` output | S6, S1, S3 (elementary) |
+
 **L2d Selected specials (after a–c).** Priority by Accumath use: gamma/lgamma, erf/erfc, Bessel J0/J1, zeta. **B3 rule:** erf, J0, J1 use **derivative bounds** (`erf' = 2/√π·e^{−x²}`, `J0' = −J1`, `J1' = J0 − J1/x`, each bounded over the ball). Higher specials (pFq, elliptic, polylog, expint, Airy, the rest) use **either** a series with a rigorous remainder **or** zf's correctly rounded value at the midpoint plus a separately proven bound (derivative or remainder). Anything without a proof returns `Err(Resource)` or an all-reals ball (O1; never a guess). The 10-13 method table for specials still applies:
 
 | Function | Method | Error term needed |
