@@ -208,9 +208,14 @@ Owner: slice S1 (Spence). Code: `src/arith.rs`. Tests: `tests/harness/slice_arit
 
 ### Slice S2 (`src/bridge.rs`)
 
-_Empty (S0 stub). Owner: slice S2._
+Owner: slice S2 (Spence). Code: `src/bridge.rs`. Tests: `tests/harness/slice_bridge.rs`. Mutants 300-399. Scope moved in 2026-10-24: TEST_PLAN L0a-4, `Mag::cmp_exact_num` (clause 4.2), `Mag::cmp_exact_diff` (15.2, 10.2c), the `from_exact_num(_lower)` / `to_exact_num` sets and P9.
 
-Scope moved in (2026-10-24): TEST_PLAN L0a-4, `Mag::cmp_exact_num` (clause 4.2) and `Mag::cmp_exact_diff` (the exact diff-compare of 15.2 and 10.2c), with the `from_exact_num(_lower)` / `to_exact_num` sets and P9. Clauses to be written by S2.
+- **16.S2.1 cmp_exact_num.** `r.cmp_exact_num(x)` is `Some(r.cmp(|x|))`, decided exactly: Infinity is above every finite `|x|`; zero equals only zero; otherwise `(exp, mant)` of `r` against `x`'s exponent and top 64 mantissa bits, and on a tie a set sticky bit (any lower bit of `x`) puts `r` below. Exponents compare as i64, so a radius outside zenith-float's i32 range compares correctly and is never converted. NaN or infinite `x` is `None`.
+- **16.S2.2 cmp_exact_diff.** `r.cmp_exact_diff(a, b)` is `Some(r.cmp(|a − b|))`, decided exactly. A zero operand reduces to 16.S2.1 on the other. NaN or infinite operands are `None`; so is any exact zenith-float step that reports itself inexact (never observed; a guard, not a rounding).
+- **16.S2.3 Wide gaps.** Operands whose exponents differ by at most 128 are subtracted exactly with `sub_full_prec`. For a wider gap, with `e` the exponent of the larger operand, `|a − b|` lies in `(2^(e−2), 2^(e+1))`: a radius exponent `≤ e − 2` is `Less`, `≥ e + 2` is `Greater`, and zero radius is `Less`. Otherwise the radius (within a factor 4, so inside zenith-float's range) is converted and only the exact `|big| − r` and, when its exponent is within one of the smaller operand's, one exact sum with the smaller operand are formed. Cost is bounded by the operands' precisions, never by their exponent gap.
+- **16.S2.4 Conversions and P9.** `from_exact_num(x) ≥ |x| ≥ from_exact_num_lower(x)`, with the carry at an all-ones top word going to the next binade; `to_exact_num` of a radius outside zenith-float's range is `Representation`, never a wrap; `to_exact_num(from_exact_num(x)) ≥ |x|` (P9).
+- **16.S2.5 Tests.** Hand-worked rows for ties, sticky, zero, Infinity, NaN/Inf, radii outside the i32 range and gaps up to the whole zf range; random rows against zenith-float's exact `sub_full_prec` + `abs_cmp` with the radius at, one ulp from, or one binade from `|a − b|`, and gaps 0 to 600 (both paths).
+- **16.S2.6 Pending R14.** The constant and export bridge needs zenith-float R14 (`get_exact_prec` and export hooks), which is in no zenith-float ref as of 2026-10-24 (main abb2d5a, pinned fe5c15d and every branch). It is stubbed: its harness rows are `#[ignore = "pending zenith-float R14 ..."]` and land with R14.
 
 ### Slice S3 (`src/elementary.rs`)
 

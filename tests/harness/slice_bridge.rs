@@ -4,7 +4,7 @@
 //! CONTRACT 4.2, 10.2c, 15.2 and 16.S2.1 to 16.S2.6 (TEST_PLAN L0a-4, moved here 2026-10-24). Oracles: hand-worked rows
 //! (value in the comment beside each), and for random in-range cases zenith-float's exact `sub_full_prec` plus `abs_cmp`
 //! against the radius converted by `to_exact_num` (in range only; the out-of-range rows are worked by hand).
-//! COVERS: Mag::cmp_exact_num, Mag::cmp_exact_diff
+//! COVERS: Mag::cmp_exact_num, Mag::cmp_exact_diff, Mag::from_exact_num, Mag::from_exact_num_lower, Mag::to_exact_num
 
 use core::cmp::Ordering;
 
@@ -262,4 +262,41 @@ fn bridge_constant_bound_pending_r14() -> Result<(), String> {
 #[ignore = "pending zenith-float R14 (get_exact_prec and export hooks): 16.S2.6"]
 fn bridge_export_round_trip_pending_r14() -> Result<(), String> {
     Err("pending zenith-float R14: the export bridge is stubbed (16.S2.6)".into())
+}
+
+// ---- from_exact_num / from_exact_num_lower / to_exact_num sets and P9 (16.S2.4) ----------------------------------
+
+#[test]
+fn from_to_exact_num_sets_and_p9() -> Result<(), String> {
+    // Carry at all ones: 1 - 2^-100 rounds up to exactly 1 = Mag(TOP, 1), down to Mag(u64::MAX, 0).
+    let y = num(1).sub_full_prec(&pow2(-100)?);
+    want("up(1-2^-100) == 1", Mag::from_exact_num(&y).cmp_exact_num(&num(1)), Ordering::Equal)?;
+    if Mag::from_exact_num_lower(&y) != mag(u64::MAX, 0)? {
+        return Err(format!("lower(1-2^-100) = {:?}", Mag::from_exact_num_lower(&y)));
+    }
+    // A radius beyond zf's i32 exponent is an error, never a wrap.
+    let hi = i64::from(EXPONENT_MAX);
+    for e in [hi.checked_add(1).ok_or("e")?, 1i64 << 40] {
+        if mag(TOP, e)?.to_exact_num().is_ok() {
+            return Err(format!("to_exact_num(2^{}) should be Representation", e));
+        }
+    }
+    // P9: from_exact_num(x) >= |x| >= from_exact_num_lower(x), and the round trip contains the original.
+    let mut rng = SplitMix64::new(0x5200_0009);
+    for case in 0..3000 {
+        let e = i64::try_from(rng.below(4001)).map_err(|_| "e")?.checked_sub(2000).ok_or("e")?;
+        let x = rand_num(&mut rng, e, 80)?;
+        let up = Mag::from_exact_num(&x);
+        let down = Mag::from_exact_num_lower(&x);
+        let c_up = up.cmp_exact_num(&x);
+        let c_down = down.cmp_exact_num(&x);
+        if c_up == Some(Ordering::Less) || c_up.is_none() || c_down == Some(Ordering::Greater) || c_down.is_none() {
+            return Err(format!("case {}: up {:?} down {:?} for {:?}", case, c_up, c_down, x));
+        }
+        let back = up.to_exact_num().map_err(|e| format!("case {}: {:?}", case, e))?;
+        if back.abs_cmp(&x).ok_or("abs_cmp")? < 0 {
+            return Err(format!("case {}: round trip lost containment", case));
+        }
+    }
+    Ok(())
 }
