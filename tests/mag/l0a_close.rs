@@ -66,10 +66,9 @@ fn l0a2_all_ones_mantissas_match_the_model() -> Result<(), String> {
     for e in [-70_i64, -1, 0, 1, 64, 4000] {
         let a = MagV::Finite { exp: e, mant: ONES };
         let b = MagV::Finite { exp: 3, mant: ONES };
-        let a = MagV::Finite { exp: e, mant: ONES - 1 }; // RED: model fed a different operand
         let ma = from_magv(&a)?;
         let mb = from_magv(&b)?;
-        model(&format!("sqrt_up(ONES@{})", e), &ma.sqrt_up(), direct::sqrt_up(&a))?;
+        model(&format!("sqrt_up(ONES@{})", e), &ma.sqrt_up(), direct::sqrt_up(&b))?; // RED: model fed the other operand
         model(&format!("sqrt_lower(ONES@{})", e), &ma.sqrt_lower(), direct::sqrt_lower(&a))?;
         model(&format!("mul_up(ONES@{}, ONES@3)", e), &ma.mul_up(&mb), direct::mul_up(&a, &b))?;
         model(&format!("mul_lower(ONES@{}, ONES@3)", e), &ma.mul_lower(&mb), direct::mul_lower(&a, &b))?;
@@ -197,8 +196,8 @@ fn l0a4_p9_from_exact_num_encloses_abs() -> Result<(), String> {
                 let sx = if neg { -sample(e, tail)? } else { sample(e, tail)? };
                 let up = exact(&Mag::from_exact_num(&sx))?;
                 let lo = exact(&Mag::from_exact_num_lower(&sx))?;
-                nonneg(&format!("from_exact_num >= |x| (e {}, tail {}, neg {})", e, tail, neg), &x.sub(&up, P, RoundingMode::ToEven))?;
-                nonneg(&format!("|x| >= from_exact_num_lower (e {}, tail {}, neg {})", e, tail, neg), &x.sub(&lo, P, RoundingMode::ToEven))?;
+                nonneg(&format!("from_exact_num >= |x| (e {}, tail {}, neg {})", e, tail, neg), &up.sub(&x, P, RoundingMode::ToEven))?;
+                nonneg(&format!("|x| >= from_exact_num_lower (e {}, tail {}, neg {})", e, tail, neg), &lo.sub(&x, P, RoundingMode::ToEven))?;
             }
         }
     }
