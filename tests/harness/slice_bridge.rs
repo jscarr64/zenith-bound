@@ -665,6 +665,19 @@ fn bridge_export_round_trip() -> Result<(), String> {
             }
         }
     }
+    // NaN and ±Inf: the upper bound is Infinity, the lower bound zero.
+    for (what, v) in [("nan", nan()), ("+inf", inf()), ("-inf", neg(&inf()))] {
+        if Mag::from_exact_num(&v) != Mag::infinity()
+            || Mag::from_exact_num_lower(&v) != Mag::zero()
+        {
+            return Err(format!(
+                "{}: up {:?} lo {:?}",
+                what,
+                Mag::from_exact_num(&v),
+                Mag::from_exact_num_lower(&v)
+            ));
+        }
+    }
     // Random three-word mantissas across the full range (and the subnormal floor): lo <= |x| <= up, up - lo <= 1 ulp.
     let mut rng = SplitMix64::new(0x5200_0016);
     for case in 0..3000 {
