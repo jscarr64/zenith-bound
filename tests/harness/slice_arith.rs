@@ -1687,3 +1687,7 @@ fn exact_top_binade_midpoint_is_not_overflow() -> Result<(), String> {
         &Mag::zero(),
     )
 }
+
+// ---- Harper S1 coverage rows (child module under tests/harness/slice_arith/) ----------------------------------------
+
+mod harper_s1cov;
