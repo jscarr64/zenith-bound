@@ -1,9 +1,9 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index f86eb99..264462a 100644
+index 1f8372d..746cd7d 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -18,7 +18,7 @@ use crate::policy::DomainPolicy;
- use crate::precision::{Precision, MAX_PRECISION, MIN_PRECISION};
+@@ -19,7 +19,7 @@ use crate::precision::{Precision, MAX_PRECISION, MIN_PRECISION};
+ use crate::tri::Tri;
  
  /// Every Ball midpoint rounds to nearest, ties to even (CONTRACT 15.1, O19).
 -const MID_RM: RoundingMode = RoundingMode::ToEven;
