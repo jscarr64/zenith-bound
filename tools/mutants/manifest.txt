@@ -190,3 +190,4 @@ src/mag/lower.rs:sub_checked	176-N19	176-N19.patch	mag
 src/mag/lower.rs:sub_checked	177-N20	177-N20.patch	mag
 src/mag/ulp.rs:place_pow2	178-U-underflow-zero	178-U-underflow-zero.patch	harness
 src/mag/add.rs:successor	179-C-add-nocarry	179-C-add-nocarry.patch	harness
+src/mag/cmp.rs:Mag::cmp	180-C-cmp-zero-eq	180-C-cmp-zero-eq.patch	harness
