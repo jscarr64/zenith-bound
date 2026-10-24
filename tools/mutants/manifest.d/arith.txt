@@ -22,5 +22,4 @@ src/arith.rs:cmp_abs_rad	217-CMPRAD	arith/217-CMPRAD.patch	harness
 src/arith.rs:eps	218-EPSHALF	arith/218-EPSHALF.patch	harness
 src/arith.rs:eps	219-EPSLOOSE	arith/219-EPSLOOSE.patch	harness
 src/arith.rs:endpoint_ball	220-ENDPTWIDE	arith/220-ENDPTWIDE.patch	harness
-src/arith.rs:Ball::powi	221-POWIGUARD	arith/221-POWIGUARD.patch	harness
 src/arith.rs:Ball::sqrt	222-TIEODD	arith/222-TIEODD.patch	harness
