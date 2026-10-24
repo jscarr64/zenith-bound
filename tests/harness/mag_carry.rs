@@ -1,6 +1,7 @@
 //! TEST_PLAN 8.1 "Carry across the exponent" (L0a-2): `add_up` where the mantissa sum, or its round-up, reaches `2^64` renormalises to
 //! `mant = 2^63`, `exp + 1`, including at the zf exponent bound `ZF_EXPONENT_MAX` (whose `+ 1` is still a `Mag` exponent) and at
-//! `exp = i64::MAX`, where the carry overflows to `Infinity` (CONTRACT 1.3, 3.2, 14.3). Oracle: hand-derived exact values. A `Mag` is
+//! `exp = i64::MAX`, where the carry overflows to `Infinity` (CONTRACT 3.3: a round-up overflow is `Infinity`, never a saturated finite value;
+//! also 1.3, 14.3). The saturating `add_up` is mutant 179-C-add-nocarry (tools/mutants), which this file must kill. Oracle: hand-derived exact values. A `Mag` is
 //! `mant * 2^(exp - 64)`; `u64::MAX` at `e` plus `2^63` at `e - 63` (one unit of the first) is exactly `2^e` = `2^63` at `e + 1`; with
 //! the second operand at `e - 100` instead the exact sum lies strictly between `u64::MAX` at `e` and `2^e`, so rounding up gives `2^e`;
 //! `u64::MAX` at `e` doubled is exactly `u64::MAX` at `e + 1` (no carry, the control).
@@ -54,27 +55,7 @@ fn check_carry_rows(add: fn(&Mag, &Mag) -> Mag) -> Result<usize, String> {
     Ok(rows)
 }
 
-/// An `add_up` that saturates the mantissa at `u64::MAX` instead of carrying into the exponent.
-fn add_up_without_the_carry(a: &Mag, b: &Mag) -> Mag {
-    let r = Mag::add_up(a, b);
-    match (r.mant(), a.exp(), b.exp()) {
-        (Some(TOP), Some(ea), Some(eb)) => Mag::finite(u64::MAX, ea.max(eb)).unwrap_or(r),
-        (None, Some(ea), Some(eb)) if r.is_infinity() => {
-            Mag::finite(u64::MAX, ea.max(eb)).unwrap_or(r)
-        }
-        _ => r,
-    }
-}
-
 #[test]
 fn add_up_carries_into_the_exponent_and_overflows_to_infinity_at_i64_max() -> Result<(), String> {
     expect_eq("carry rows", &check_carry_rows(Mag::add_up)?, &15)
-}
-
-#[test]
-fn the_carry_rows_reject_an_add_up_that_saturates_instead_of_carrying() -> Result<(), String> {
-    match check_carry_rows(add_up_without_the_carry) {
-        Ok(n) => Err(format!("the saturating add_up passed all {} carry rows", n)),
-        Err(_) => Ok(()),
-    }
 }
