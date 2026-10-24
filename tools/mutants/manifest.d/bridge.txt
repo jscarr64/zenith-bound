@@ -33,3 +33,11 @@ src/mag/convert.rs:Mag::to_exact_num	329-SUBLOST	bridge/329-SUBLOST.patch	harnes
 src/mag/convert.rs:Mag::to_exact_num	330-EMAXEQ	bridge/330-EMAXEQ.patch	harness
 src/mag/convert.rs:Mag::to_exact_num	331-SUBSHR	bridge/331-SUBSHR.patch	harness
 src/mag/convert.rs:Mag::from_exact_num	332-INFZERO	bridge/332-INFZERO.patch	harness
+src/bridge.rs:constant_ball	333-SWAPRM	bridge/333-SWAPRM.patch	harness
+src/bridge.rs:constant_ball	334-PMINUS	bridge/334-PMINUS.patch	harness
+src/bridge.rs:constant_ball	335-MIDDOWN	bridge/335-MIDDOWN.patch	harness
+src/bridge.rs:constant_ball	336-RADULP	bridge/336-RADULP.patch	harness
+src/bridge.rs:constant_ball	337-HALFSHIFT	bridge/337-HALFSHIFT.patch	harness
+src/bridge.rs:constant_ball	338-WIDEPREC	bridge/338-WIDEPREC.patch	harness
+src/bridge.rs:constant_ball	339-UPONLY	bridge/339-UPONLY.patch	harness
+src/bridge.rs:constant_ball	340-PPLUS	bridge/340-PPLUS.patch	harness
