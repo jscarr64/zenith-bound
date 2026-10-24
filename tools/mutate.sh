@@ -15,7 +15,7 @@
 #        MUTATE_EQUIVALENT=FILE     default: EQUIVALENT.txt next to the manifest
 #        MUTATE_TIMEOUT=DURATION    per `cargo test` run of a suite (default 20m); a timeout counts as a kill
 #        MUTATE_BUILD_TIMEOUT=DUR   per build (default 20m)
-#        MUTATE_TMP=DIR             parent of the throwaway worktree and target dir (default /tmp)
+#        MUTATE_TMP=DIR             parent of the throwaway worktree and target dir (default "$(zb_scratch)", tools/scratch.sh)
 #        MUTATE_PERSIST=DIR         parent of that fixed worktree (default: the parent of MUTATE_TARGET, so not /tmp, which a reboot wipes)
 #        MUTATE_TARGET=DIR          optional PERSISTENT cargo target dir, kept across mutants and runs (outside the repo). The worktree then has a
 #                                   fixed path ($MUTATE_PERSIST/zb-mutate.persist, still created fresh from committed HEAD and removed after each
@@ -103,7 +103,7 @@ if [ "$list" = 2 ]; then
   printf 'killed %s\nkilled+equivalent %s\n' "$fk" "$fke"; exit 0
 fi
 
-base=${MUTATE_TMP:-/tmp}; case "$base" in /home/jsc64/MathWorks*|"$repo"*) echo "mutate: MUTATE_TMP must be outside the repo"; exit 2 ;; esac
+base=${MUTATE_TMP:-$(zb_scratch)}; case "$base" in /home/jsc64/MathWorks*|"$repo"*) echo "mutate: MUTATE_TMP must be outside the repo"; exit 2 ;; esac
 persist=${MUTATE_TARGET:-}
 if [ -n "$persist" ]; then
   case "$persist" in /*) ;; *) echo "mutate: MUTATE_TARGET must be an absolute path"; exit 2 ;; esac

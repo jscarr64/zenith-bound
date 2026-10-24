@@ -11,7 +11,7 @@ set -u
 export LC_ALL=C
 here=$(cd "$(dirname "$0")" && pwd)
 fail() { echo "fresh_test_run selftest FAIL: $*"; exit 1; }
-t=$(mktemp -d /tmp/zb-fresh-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
+t=$(mktemp -d "$(zb_scratch)"/zb-fresh-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 ck; git init -q "$t/wa" && git init -q "$t/wb" || fail "git init failed"   # two worktrees (Paul's rule: one target dir per worktree)
 # wa claims the target dir while it is empty (a non-empty unmarked dir is never claimed), then the build fixture fills it
 ck; (cd "$t/wa" && CARGO_TARGET_DIR="$t/target" bash "$here/fresh_test_run.sh" --claim) > "$t/out" 2>&1 || fail "--claim of a missing target dir failed: $(cat "$t/out")"

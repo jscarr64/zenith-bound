@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "${BASH_SOURCE[0]%/*}/scratch.sh"   # zb_scratch: temp files and dirs under $HOME, never the system temp dir
 # zb's thin layer over the shared Pop logger ~/pop-logs/bin/poplog.sh (Rusty's; see ~/pop-logs/README.md; Jeff's rules of 9:42 and 9:59 AM CT
 # 2026-10-23, and 10:33 AM CT: rely on poplog, no workarounds). poplog writes the log (header, steps, counts, heartbeat, footer), owns the
 # canonical RUNNING.tsv row and its lock, tees step output to stdout, joins nested runs to the parent's log (SUB-RUN sections) and fails the
@@ -73,7 +74,7 @@ runlog_step() { # runlog_step [--tests] NAME -- CMD...
     poplog_run_step "$name" -- "$@"; return $?
   fi
   # zb layer: a test step must run at least one test, independently of poplog's own check
-  f=$(mktemp /tmp/zb-runlog-tests.XXXXXX) || return 2
+  f=$(mktemp "$(zb_scratch)"/zb-runlog-tests.XXXXXX) || return 2
   if [ -z "$RUNLOG_ON" ]; then _rl_tee "$f" "$@"; else poplog_run_step "$name" --tests -- _rl_tee "$f" "$@"; fi; rc=$?
   n=$(_rl_ran "$f"); rm -f "$f"
   if [ "$rc" = 0 ] && [ "$n" = 0 ]; then echo "runlog: step $name ran 0 tests: FAIL" >&2; return 1; fi

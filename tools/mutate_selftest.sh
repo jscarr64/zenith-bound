@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Self-test for tools/mutate.sh: a tiny fixture crate (a toy function and a toy suite) is generated under $TMPDIR (default /tmp) at run time as its own git repo.
+# Self-test for tools/mutate.sh: a tiny fixture crate (a toy function and a toy suite) is generated under $(zb_scratch) at run time as its own git repo.
 # Proves the runner KILLS a real mutant, reports a surviving mutant as SURVIVED (exit nonzero), accepts it only when documented as
 # equivalent, flags a non-building mutant and a non-applying patch as INVALID, counts a timeout as a kill, FAILS with 0 mutants,
 # and ALWAYS removes its worktree. The repo under test is never touched.
@@ -7,7 +7,7 @@
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap mutate_selftest "$@"   # run log (tools/runlog.sh)
 runlog_detach_children
 set -u
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "${TMPDIR:-/tmp}/mutate-selftest.XXXXXX")"; runlog_on_exit "rm -rf \"$t\""
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "$(zb_scratch)"/mutate-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }
 r="$t/fix"; mkdir -p "$r/src" "$r/tests" "$r/tools/mutants"; cd "$r" || exit 1
 git init -q . && git config user.email a@b && git config user.name t
@@ -58,7 +58,7 @@ export MUTATE_REPO="$r" MUTATE_TMP="$t"
 # Every run() is one case; the count is asserted at the end, so a selftest that silently skips its cases cannot read ok (Paul, 2026-10-23:
 # the zb-green-mutate-dirty2 step ran 0 tests and exited 0).
 printf '# fixture floor\nkilled\t0\nkilled+equivalent\t1\n' > "$t/mfloor.txt"
-run() { printf 'x\n' >> "$t/cases"; MUTATE_FLOOR_ZERO_OK="${MZERO-1}" MUTATE_FLOOR="${MFLOOR:-$t/mfloor.txt}" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@" 2>&1; }   # mutate.sh FAIL lines go to stderr (9e8612d); the cases grep both streams
+run() { printf 'x\n' >> "$t/cases"; MUTATE_FLOOR_ZERO_OK="${MZERO-1}" MUTATE_FLOOR="${MFLOOR:-$t/mfloor.txt}" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" "$@"; }
 leftovers() { git -C "$r" worktree list | grep -c 'zb-mutate\.' ; find "$t" -maxdepth 1 \( -name "zb-mutate.*" -o -name "zb-mutate-target.*" \) | wc -l; }
 cm() { git -C "$r" add -A; git -C "$r" commit -qm fixture-edit >/dev/null 2>&1 || :; }   # commit a fixture edit: mutate.sh refuses a dirty tree
 setm() { cp "$r/$1" "$r/tools/mutants/manifest.txt"; cm; }   # committed: mutate.sh refuses a dirty tree

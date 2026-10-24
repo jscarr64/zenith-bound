@@ -6,7 +6,7 @@
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap pubfn_coverage_selftest "$@"   # run log (tools/runlog.sh)
 runlog_detach_children
 set -u
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d /tmp/pubfn-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "$(zb_scratch)"/pubfn-selftest.XXXXXX)"; runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }
 chk() { PUBFN_ROOT="$1" PUBFN_EXEMPT="${2:-$1/tools/pubfn_coverage_exempt.txt}" "$here/pubfn_coverage.sh" "${@:3}"; }
 

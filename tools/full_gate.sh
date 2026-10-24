@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Canonical full gate for zenith-bound. usage: tools/full_gate.sh TAG
 # Every step runs under `timeout` (STEP_TIMEOUT, default 20m); the rc of each step is written to $T/TAG.rc and its
-# output to $T/TAG-<step>.log (T defaults to /tmp/zb-gate-logs). REPO selects the checkout (default: this one);
+# output to $T/TAG-<step>.log (T defaults to $(zb_scratch)/zb-gate-logs, tools/scratch.sh: never /tmp). REPO selects the checkout (default: this one);
 # CARGO_TARGET_DIR is REQUIRED and belongs to one worktree (Paul, 2026-10-23: /tmp/target-<agent>-<worktree>, e.g.
 # /tmp/target-harper-zb-harper-s7); it may be reused across runs of that worktree. target-dir (right after toolchain, before any build)
 # fails if it is unset or owned by another worktree (marker $CARGO_TARGET_DIR/.worktree-owner, written by the first worktree to use it);
@@ -27,7 +27,7 @@
 set -u
 # PYTHONNOUSERSITE=1: nothing from ~/.local outside a venv (the golden generators run in ~/.local/oracle-venv; see tools/goldens_regen.sh).
 export PYTHONNOUSERSITE=1
-T=${T:-/tmp/zb-gate-logs}; mkdir -p "$T"
+T=${T:-$(zb_scratch)/zb-gate-logs}; mkdir -p "$T"
 cd "${REPO:-$(cd "$(dirname "$0")/.." && pwd)}" || exit 2
 tag=${1:?usage: tools/full_gate.sh TAG}; : > "$T/$tag.rc"
 # NO VACUOUS PASS: every step starts with `require <tools>` (exit 127 naming the missing tool), and the scans go through no_hits, which

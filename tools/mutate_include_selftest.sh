@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Self-test for the per-slice include files of tools/mutate.sh (S0, 2026-10-24): tools/mutants/manifest.d/<slice>.txt (rows),
 # tools/mutants/equivalent.d/<slice>.txt (documented equivalents) and tools/mutants/floor.d/<slice>.txt (floor shares).
-# Runs only `mutate.sh --list` and `mutate.sh --floor` (no cargo, no worktree) on a fixture under ${TMPDIR:-/tmp}.
+# Runs only `mutate.sh --list` and `mutate.sh --floor` (no cargo, no worktree) on a fixture under $(zb_scratch).
 # Proves: include rows are listed after the central manifest; an id outside its file's `# range: LO-HI` FAILS; a file without a
 # range line FAILS; two files with overlapping ranges FAIL; an id duplicated across files FAILS; floor shares add to floor.txt.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap mutate_include_selftest "$@"   # run log (tools/runlog.sh)
 set -u
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "${TMPDIR:-/tmp}/mutate-include-selftest.XXXXXX")"; runlog_on_exit "rm -rf \"$t\""
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d "$(zb_scratch)/mutate-include-selftest.XXXXXX")"; runlog_on_exit "rm -rf \"$t\""
 . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }
 m="$t/mutants"; mkdir -p "$m/manifest.d" "$m/floor.d" "$m/equivalent.d"

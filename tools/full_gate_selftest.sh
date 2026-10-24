@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Self-test of tools/full_gate.sh: no step may pass VACUOUSLY when the tool it calls is missing (a `! grep ...` step passes if grep is absent),
-# and the scan steps must still catch a planted hit and pass a clean tree. Runs the gate on throwaway fixtures under /tmp with GATE_STEPS.
+# and the scan steps must still catch a planted hit and pass a clean tree. Runs the gate on throwaway fixtures under $(zb_scratch) with GATE_STEPS.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap full_gate_selftest "$@"   # run log (tools/runlog.sh)
 runlog_detach_children
@@ -8,7 +8,7 @@ set -u
 export LC_ALL=C
 root=$(cd "$(dirname "$0")/.." && pwd)
 fail() { echo "full_gate selftest FAIL: $*"; exit 1; }
-t=$(mktemp -d /tmp/zb-gate-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
+t=$(mktemp -d "$(zb_scratch)"/zb-gate-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 SCANS="unsafe-scan no-float-scan no-panic-scan no-clone-scan derive-scan manifest-scan"
 # The fixture gates run outside this self-test's own run log (their planted failures must not fail it), with no poplog at all.
 fe=(env -u POPLOG_FILE -u POPLOG_STATE_DIR -u POPLOG_PID -u POPLOG_PROGRESS_FILE RUNLOG_POPLOG=/nonexistent RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1)

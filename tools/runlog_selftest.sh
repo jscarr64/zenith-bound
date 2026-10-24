@@ -13,7 +13,7 @@ set -u
 export LC_ALL=C
 here=$(cd "$(dirname "$0")" && pwd)
 fail() { echo "runlog selftest FAIL: $*"; exit 1; }
-t=$(mktemp -d /tmp/zb-runlog-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
+t=$(mktemp -d "$(zb_scratch)"/zb-runlog-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 # the other agent's row needs a live pid that this user may signal: poplog (b6e2dcf) prunes a row when `kill -0 PID` fails, and
 # `kill -0 1` fails with EPERM for a non-root user, so a fake pid such as 1 was pruned and this case failed. Started here, outside the
 # fixture subshell, so the exit hook that kills it is this script's own
