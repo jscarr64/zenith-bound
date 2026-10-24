@@ -765,8 +765,9 @@ fn a_wrong_op_only_at_the_zf_bounds_or_cosmology_scale_is_caught_by_the_forced_c
         cases: 5_000,
         replay: None,
     };
+    let zf_bounds: fn(&Mag, &Mag) -> Mag = wrong_at_the_zf_bounds;
     for (label, f) in [
-        ("zf bounds", wrong_at_the_zf_bounds as fn(&Mag, &Mag) -> Mag),
+        ("zf bounds", zf_bounds),
         ("cosmology scale", wrong_at_cosmology_scale),
     ] {
         let ops = Ops {
