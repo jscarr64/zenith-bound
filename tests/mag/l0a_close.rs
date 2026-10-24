@@ -178,8 +178,13 @@ fn nonneg(what: &str, d: &ExactNum) -> Result<(), String> {
     }
 }
 
+/// tail -1: (2^64-1) * 2^e + 2^(e-200), whose round-up carries into the next exponent (mutant 190);
 /// tail 0: (2^64-1) * 2^e, exact in a Mag; tail t > 0: 2^e + 2^(e-1) + 2^(e-t), which needs t+1 bits
 fn sample(e: i64, tail: i64) -> Result<ExactNum, String> {
+    if tail < 0 {
+        let ones = ExactNum::from_word(u64::MAX, P).mul(&pow2(e)?, P, RoundingMode::ToEven);
+        return Ok(ones.add(&pow2(e.checked_sub(200).ok_or("e-200")?)?, P, RoundingMode::ToEven));
+    }
     if tail == 0 {
         return Ok(ExactNum::from_word(u64::MAX, P).mul(&pow2(e)?, P, RoundingMode::ToEven));
     }
@@ -190,7 +195,7 @@ fn sample(e: i64, tail: i64) -> Result<ExactNum, String> {
 #[test]
 fn l0a4_p9_from_exact_num_encloses_abs() -> Result<(), String> {
     for e in [-300_i64, -65, -1, 0, 1, 63, 64, 200] {
-        for tail in [0_i64, 1, 2, 63, 64, 65, 100, 300] {
+        for tail in [-1_i64, 0, 1, 2, 63, 64, 65, 100, 300] {
             for neg in [false, true] {
                 let x = sample(e, tail)?;
                 let sx = if neg { -sample(e, tail)? } else { sample(e, tail)? };
@@ -208,7 +213,8 @@ fn l0a4_p9_from_exact_num_encloses_abs() -> Result<(), String> {
 
 #[test]
 fn l0a6_second_operand_matters() -> Result<(), String> {
-    // the golden runner once fed the first operand twice; these rows differ only in the second operand
+    // the golden runner once fed the first operand twice; these rows differ only in the second operand.
+    // Killed mutants: 183 (mul_up ignores b), 184 (div ignores b), 185 (add_up ignores b)
     let a = fin(TOP, 1)?;
     let b = fin(0xC000_0000_0000_0000, 1)?;
     if a.mul_up(&a) == a.mul_up(&b) || a.add_up(&a) == a.add_up(&b) || a.div_up(&a) == a.div_up(&b) {

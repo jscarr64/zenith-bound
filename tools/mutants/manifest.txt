@@ -193,3 +193,11 @@ src/mag/add.rs:successor	179-C-add-nocarry	179-C-add-nocarry.patch	harness
 src/mag/cmp.rs:Mag::cmp	180-C-cmp-zero-eq	180-C-cmp-zero-eq.patch	harness
 src/mag/sqrt.rs:sqrt_checked	181-S-sqrt-nosticky	181-S-sqrt-nosticky.patch	harness
 src/mag/mod.rs:Mag::finite	182-F-finite-minexp	182-F-finite-minexp.patch	harness
+src/mag/mul.rs:Mag::mul_up	183-W-mulup-ignores-b	183-W-mulup-ignores-b.patch	mag
+src/mag/div.rs:div_parts	184-W-div-ignores-b	184-W-div-ignores-b.patch	mag
+src/mag/add.rs:Mag::add_up	185-W-addup-ignores-b	185-W-addup-ignores-b.patch	mag
+src/mag/lower.rs:Mag::mul_lower	186-W-mullower-ignores-b	186-W-mullower-ignores-b.patch	mag
+src/mag/convert.rs:Mag::from_exact_num	187-X-up-nosticky	187-X-up-nosticky.patch	mag
+src/mag/convert.rs:Mag::from_exact_num_lower	188-X-lower-roundsup	188-X-lower-roundsup.patch	mag
+src/mag/convert.rs:Mag::from_exact_num	189-X-up-negative-zero	189-X-up-negative-zero.patch	mag
+src/mag/convert.rs:Mag::from_exact_num	190-X-up-carry-noexp	190-X-up-carry-noexp.patch	mag
