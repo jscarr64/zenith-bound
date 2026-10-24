@@ -94,20 +94,6 @@ fn check_row(line: &str) -> Result<(), String> {
     let lo = value(&v, 16)?;
     let hi = value(&v, 19)?;
     let rref = value(&v, 22)?;
-    // hypot's contract radius is the 1-Lipschitz r + s (16.S1.8), which can exceed the hull spread by an unbounded factor
-    // (a divisor-free ball whose second argument straddles 0 widely: spread ~ s^2/h, radius s). Its TIGHT check is
-    // against max(RREF, ARAD + BRAD) — the contract's own formula — so tau measures src slack, not formula slack;
-    // LOOSE stays on RREF. Rows 2026-10-24: 2 of 124 hypot rows exceed 4·RREF this way (reported, not a bug).
-    let tight_ref = if op == "hypot" {
-        let lip = value(&v, 7)?.add_full_prec(&value(&v, 13)?);
-        match lip.partial_cmp(&rref) {
-            Some(Ordering::Greater) => lip,
-            Some(Ordering::Less | Ordering::Equal) => rref.add_full_prec(&num(0)),
-            None => return Err("hypot ARAD + BRAD vs RREF unordered".into()),
-        }
-    } else {
-        rref.add_full_prec(&num(0))
-    };
     let a = ok(
         "a",
         Ball::from_mid_rad(amid.add_full_prec(&num(0)), arad, prec),
@@ -145,12 +131,12 @@ fn check_row(line: &str) -> Result<(), String> {
             rref
         ));
     }
-    if !within(res.rad(), t, &tight_ref)? {
+    if !within(res.rad(), t, &rref)? {
         return Err(format!(
-            "TIGHT: rad {:?} > {}·ref {:?}",
+            "TIGHT: rad {:?} > {}·RREF {:?}",
             res.rad(),
             t,
-            tight_ref
+            rref
         ));
     }
     if let Some(a2) = strict_twin {
@@ -181,7 +167,8 @@ fn oracle_rows_contained_tight_loose() -> Result<(), String> {
         rows = rows.checked_add(1).ok_or("rows")?;
         if let Err(e) = check_row(line) {
             bad.push(format!(
-                "{}\n    row: {}",
+                "row {}: {}\n    row: {}",
+                rows,
                 e,
                 line.get(..160).unwrap_or(line)
             ));
@@ -200,4 +187,39 @@ fn oracle_rows_contained_tight_loose() -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// The two hypot rows (data rows 1313 and 1343, 1-based, comments skipped) whose radius exceeds 4·RREF under the
+/// 1-Lipschitz `r + s` radius: the second argument's ball straddles 0 widely, so the true spread is far below `s`.
+/// Spence's monotone enclosure (hypot(min|X|, min|Y|) .. hypot(max|X|, max|Y|)) is to make them pass; RED until then.
+const HYPOT_WIDE_ROWS: [usize; 2] = [1313, 1343];
+
+#[test]
+fn hypot_wide_rows_1313_1343_tight() -> Result<(), String> {
+    let path = golden_dir()
+        .join("slices")
+        .join("arith")
+        .join("arith_oracle_rows.txt");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{:?}: {}", path, e))?;
+    let data: Vec<&str> = text
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .collect();
+    let mut bad: Vec<String> = Vec::new();
+    for id in HYPOT_WIDE_ROWS {
+        let line = data
+            .get(id.checked_sub(1).ok_or("row id 0")?)
+            .ok_or_else(|| format!("row {} missing", id))?;
+        if !line.starts_with("hypot ") {
+            return Err(format!("row {} is not a hypot row: {}", id, line));
+        }
+        if let Err(e) = check_row(line) {
+            bad.push(format!("row {}: {}", id, e));
+        }
+    }
+    if bad.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("{:#?}", bad))
+    }
 }
