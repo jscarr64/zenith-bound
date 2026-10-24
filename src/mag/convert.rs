@@ -13,41 +13,36 @@ use zenith_float_num::{Error, ExactNum, RawKind, RawParts, EXPONENT_MAX, EXPONEN
 /// zf precision for `to_exact_num`: a `Mag` mantissa has 64 bits, so one 64-bit word is always exact.
 const EXACT_PREC: usize = 64;
 
-/// The top 64 bits of `|x|` as a `Mag`, from its raw parts.
-enum Top {
-    /// `|x|` is zero.
-    Zero,
-    /// `|x|` is NaN or infinite.
-    NotFinite,
-    /// `0.mant * 2^exp` is `|x|` rounded down; `sticky` when bits below it are set.
-    Finite { mant: u64, sticky: bool, exp: i64 },
-    /// The `Mag` exponent would fall below `i64::MIN` (not reachable from zf's range; kept total).
-    Underflow,
-}
-
-fn top_of(x: &ExactNum) -> Top {
+/// The top 64 bits of finite nonzero `|x|` as `(mant, sticky, exp)`: `0.mant * 2^exp` is `|x|` rounded down and
+/// `sticky` says bits below it are set. `None` for zero, NaN and ±Inf (callers test NaN and ±Inf first). A `Mag`
+/// exponent below `i64::MIN` (not reachable from zf's range; kept total) reads as `0.1 * 2^i64::MIN` when `upper`
+/// (a bound above) and as `None` (zero, a bound below) otherwise.
+fn top_of(x: &ExactNum, upper: bool) -> Option<(u64, bool, i64)> {
     let p = x.as_raw_parts();
     match p.kind {
-        RawKind::NaN | RawKind::Inf => Top::NotFinite,
-        RawKind::Zero => Top::Zero,
-        RawKind::Finite => top_of_words(p.words, p.exponent),
+        RawKind::NaN | RawKind::Inf | RawKind::Zero => None,
+        RawKind::Finite => match top_of_words(p.words, p.exponent) {
+            Ok(top) => top,
+            Err(()) => upper.then_some((TOP, false, i64::MIN)),
+        },
     }
 }
 
-fn top_of_words(words: &[u64], exponent: i64) -> Top {
+/// `Ok(None)` when every word is zero, `Err(())` on exponent underflow.
+fn top_of_words(words: &[u64], exponent: i64) -> Result<Option<(u64, bool, i64)>, ()> {
     // `skipped` zero words above the leading word, `idx` the leading word's index.
     let Some(skipped) = words.iter().rev().position(|w| *w != 0) else {
-        return Top::Zero;
+        return Ok(None);
     };
     let Some(idx) = words
         .len()
         .checked_sub(1)
         .and_then(|n| n.checked_sub(skipped))
     else {
-        return Top::Zero;
+        return Ok(None);
     };
     let Some(&hi) = words.get(idx) else {
-        return Top::Zero;
+        return Ok(None);
     };
     let lo = idx
         .checked_sub(1)
@@ -72,20 +67,19 @@ fn top_of_words(words: &[u64], exponent: i64) -> Top {
         .and_then(|s| s.checked_mul(64))
         .and_then(|s| s.checked_add(i64::from(lz)));
     match shift.and_then(|s| exponent.checked_sub(s)) {
-        Some(exp) => Top::Finite { mant, sticky, exp },
-        None => Top::Underflow,
+        Some(exp) => Ok(Some((mant, sticky, exp))),
+        None => Err(()),
     }
 }
 
 impl Mag {
     /// Least `Mag` at or above `|x|` (CONTRACT 3.3). NaN and ±Inf give `Infinity`; zero gives zero.
     pub fn from_exact_num(x: &ExactNum) -> Mag {
-        let (mant, sticky, exp) = match top_of(x) {
-            Top::NotFinite => return Mag::infinity(),
-            Top::Zero => return Mag::zero(),
-            Top::Finite { mant, sticky, exp } => (mant, sticky, exp),
-            // `|x| < 2^i64::MIN`, so `0.1 * 2^i64::MIN` bounds it above.
-            Top::Underflow => (TOP, false, i64::MIN),
+        if x.is_nan() || x.is_inf() {
+            return Mag::infinity();
+        }
+        let Some((mant, sticky, exp)) = top_of(x, true) else {
+            return Mag::zero();
         };
         if !sticky {
             return Mag::from_canonical(exp, mant);
@@ -101,9 +95,9 @@ impl Mag {
 
     /// Greatest `Mag` at or below `|x|` (CONTRACT 3.4). NaN and ±Inf give zero; zero gives zero.
     pub fn from_exact_num_lower(x: &ExactNum) -> Mag {
-        match top_of(x) {
-            Top::Finite { mant, exp, .. } => Mag::from_canonical(exp, mant),
-            Top::NotFinite | Top::Zero | Top::Underflow => Mag::zero(),
+        match top_of(x, false) {
+            Some((mant, _, exp)) => Mag::from_canonical(exp, mant),
+            None => Mag::zero(),
         }
     }
 
