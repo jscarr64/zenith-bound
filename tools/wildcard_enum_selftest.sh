@@ -19,16 +19,16 @@ export LC_ALL=C
 root=${WILDCARD_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 fail() { echo "wildcard-enum selftest FAIL: $*"; exit 1; }
 [ -f "$root/Cargo.toml" ] || fail "no Cargo.toml in $root"
-t=$(mktemp -d /tmp/wildcard-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""
+t=$(mktemp -d /tmp/wildcard-selftest.XXXXXX); runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 
 lints() { # the [lints.*] tables of the repo's Cargo.toml; arg: keep | strip (no wildcard_enum_match_arm line) | stripsingle (no match_wildcard_for_single_variants line)
   awk '/^\[lints\./ { on = 1 } /^\[/ && !/^\[lints\./ { on = 0 } on' "$root/Cargo.toml" | {
     case "${1:-keep}" in strip) grep -v '^wildcard_enum_match_arm' ;; stripsingle) grep -v '^match_wildcard_for_single_variants' ;; *) cat ;; esac
   }
 }
-grep -q '^wildcard_enum_match_arm = "deny"$' "$root/Cargo.toml" || fail "Cargo.toml [lints.clippy] has no wildcard_enum_match_arm = \"deny\" line"
-grep -q '^match_wildcard_for_single_variants = "deny"$' "$root/Cargo.toml" || fail "Cargo.toml [lints.clippy] has no match_wildcard_for_single_variants = \"deny\" line"
-lints | grep -c '^\[lints.clippy\]' > /dev/null || fail "Cargo.toml has no [lints.clippy] table"
+ck; grep -q '^wildcard_enum_match_arm = "deny"$' "$root/Cargo.toml" || fail "Cargo.toml [lints.clippy] has no wildcard_enum_match_arm = \"deny\" line"
+ck; grep -q '^match_wildcard_for_single_variants = "deny"$' "$root/Cargo.toml" || fail "Cargo.toml [lints.clippy] has no match_wildcard_for_single_variants = \"deny\" line"
+ck; lints | grep -c '^\[lints.clippy\]' > /dev/null || fail "Cargo.toml has no [lints.clippy] table"
 
 mkcrate() { # mkcrate <dir> <strip|keep> <bad|good>
   mkdir -p "$1/src"
@@ -75,17 +75,18 @@ RS
 run() { (cd "$1" && CARGO_TARGET_DIR="$1/target" cargo clippy --offline --all-targets -- -D warnings 2>&1); }
 
 mkcrate "$t/bad" keep bad;  out=$(run "$t/bad");  rc=$?
-[ "$rc" != 0 ] || fail "the bad sample passed clippy with the repo's lints: $out"
-echo "$out" | grep -c 'wildcard match will also match any future added variants\|wildcard_enum_match_arm' > /dev/null || fail "the bad sample failed, but not on the wildcard lint: $out"
+ck; [ "$rc" != 0 ] || fail "the bad sample passed clippy with the repo's lints: $out"
+ck; echo "$out" | grep -c 'wildcard match will also match any future added variants\|wildcard_enum_match_arm' > /dev/null || fail "the bad sample failed, but not on the wildcard lint: $out"
 mkcrate "$t/stripped" strip bad; out=$(run "$t/stripped"); rc=$?
-[ "$rc" = 0 ] || fail "the bad sample fails even without the wildcard lint line (so the lint line proves nothing): $out"
+ck; [ "$rc" = 0 ] || fail "the bad sample fails even without the wildcard lint line (so the lint line proves nothing): $out"
 mkcrate "$t/good" keep good; out=$(run "$t/good"); rc=$?
-[ "$rc" = 0 ] || fail "the good sample was rejected: $out"
+ck; [ "$rc" = 0 ] || fail "the good sample was rejected: $out"
 mkcrate "$t/single" keep single; out=$(run "$t/single"); rc=$?
-[ "$rc" != 0 ] || fail "the single-variant sample passed clippy with the repo's lints: $out"
-echo "$out" | grep -c 'wildcard matches only a single variant' > /dev/null || fail "the single-variant sample failed, but not on the single-variant lint: $out"
+ck; [ "$rc" != 0 ] || fail "the single-variant sample passed clippy with the repo's lints: $out"
+ck; echo "$out" | grep -c 'wildcard matches only a single variant' > /dev/null || fail "the single-variant sample failed, but not on the single-variant lint: $out"
 mkcrate "$t/single2" stripsingle single; out=$(run "$t/single2"); rc=$?
-[ "$rc" = 0 ] || fail "the single-variant sample fails even without the single-variant lint line (so that line proves nothing): $out"
+ck; [ "$rc" = 0 ] || fail "the single-variant sample fails even without the single-variant lint line (so that line proves nothing): $out"
 mkcrate "$t/wildonly" strip single; out=$(run "$t/wildonly"); rc=$?
-[ "$rc" != 0 ] || fail "the single-variant sample passes with only the single-variant lint stripped from the other side: the two lints are not independent: $out"
+ck; [ "$rc" != 0 ] || fail "the single-variant sample passes with only the single-variant lint stripped from the other side: the two lints are not independent: $out"
+st_done wildcard-enum 11   # WANT: cases this script runs (tools/selftest_cases.sh)
 echo "wildcard-enum selftest: ok (both deny lines present; bad and single-variant samples rejected; stripped configs accept them; good sample accepted)"

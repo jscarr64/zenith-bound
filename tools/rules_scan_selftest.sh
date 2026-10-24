@@ -4,7 +4,7 @@
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap rules_scan_selftest "$@"   # run log (tools/runlog.sh)
 runlog_detach_children
 set -u
-here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d)"; runlog_on_exit "rm -rf \"$t\""
+here="$(cd "$(dirname "$0")" && pwd)"; t="$(mktemp -d)"; runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
 scan() { "$here/rules_scan.sh" "$@"; }
 fail() { echo "SELFTEST FAIL: $*"; exit 1; }
 mkdiff() { # mkdiff <path> <added line...>  -> fixture diff on stdout
@@ -17,12 +17,12 @@ export RULES_SCAN_ROOT="$t"; mkdir -p "$t/tools"; : > "$t/tools/rules_allowlist.
 export RULES_SCAN_SKIP_COUNT=1   # fixture diffs have no tree to count
 
 mkdiff $LIB 'let a = 1 + 2;' 'let s = a.max(b);' > "$t/clean.diff"
-scan --diff-file "$t/clean.diff" >/dev/null || fail "clean diff flagged"
+ck; scan --diff-file "$t/clean.diff" >/dev/null || fail "clean diff flagged"
 
 while IFS='|' read -r name line; do
   mkdiff $LIB "$line" > "$t/d.diff"
-  out="$(scan --diff-file "$t/d.diff")" && fail "not flagged: $name"
-  echo "$out" | grep -c "\[$name\]" > /dev/null || fail "wrong pattern label for $name: $out"
+  ck; out="$(scan --diff-file "$t/d.diff")" && fail "not flagged: $name"
+  ck; echo "$out" | grep -c "\[$name\]" > /dev/null || fail "wrong pattern label for $name: $out"
 done <<'CASES'
 clone|let y = x.clone();
 clone_from|y.clone_from(&x);
@@ -74,68 +74,68 @@ CASES
 # S9: the neg-of-sub forms are refused in test paths as well, and clean subtractions are not flagged
 for p in tests/props.rs tests/model/mod.rs; do
   mkdiff $p 'let d = a.sub(&b).neg();' > "$t/p.diff"
-  out="$(scan --diff-file "$t/p.diff")" && fail "neg_sub_method not flagged in test path: $p"
-  echo "$out" | grep -c "\[neg_sub_method\]" > /dev/null || fail "wrong pattern label for neg_sub_method in $p: $out"
+  ck; out="$(scan --diff-file "$t/p.diff")" && fail "neg_sub_method not flagged in test path: $p"
+  ck; echo "$out" | grep -c "\[neg_sub_method\]" > /dev/null || fail "wrong pattern label for neg_sub_method in $p: $out"
   mkdiff $p 'let d = -(b - a);' > "$t/p.diff"
-  out="$(scan --diff-file "$t/p.diff")" && fail "neg_sub_op not flagged in test path: $p"
-  echo "$out" | grep -c "\[neg_sub_op\]" > /dev/null || fail "wrong pattern label for neg_sub_op in $p: $out"
+  ck; out="$(scan --diff-file "$t/p.diff")" && fail "neg_sub_op not flagged in test path: $p"
+  ck; echo "$out" | grep -c "\[neg_sub_op\]" > /dev/null || fail "wrong pattern label for neg_sub_op in $p: $out"
 done
 mkdiff $LIB 'let d = a.sub(&b, p, rm);' 'let d = x - (a - b);' 'let d = -1 - (a - b);' 'let d = a.sub_lower(&b);' 'let n = x.neg();' 'let d = a.sub(&b).abs();' 'let d = -a;' 'let d = -(a + b);' 'let d = a - -b;' 'fn f(x: u8) -> (u8, u8) { (x - 1, x) }' 'let d = (a - b).neg();' 'let d = neg(a).sub(b);' 'let s = "-(b - a) and a.sub(b).neg()";' '// -(b - a)' 'let d = x.neg().sub(y);' > "$t/negok.diff"
-scan --diff-file "$t/negok.diff" >/dev/null || fail "clean subtraction forms flagged: $(scan --diff-file "$t/negok.diff")"
+ck; scan --diff-file "$t/negok.diff" >/dev/null || fail "clean subtraction forms flagged: $(scan --diff-file "$t/negok.diff")"
 
 # the zero-unwrap rule applies to test code and test helpers too
 for p in tests/props.rs tests/model/mod.rs benches/b.rs examples/e.rs; do
   mkdiff $p 'let v = r.unwrap();' > "$t/p.diff"
-  out="$(scan --diff-file "$t/p.diff")" && fail "unwrap not flagged in test/bench/example path: $p"
-  echo "$out" | grep -c "\[unwrap\]" > /dev/null || fail "wrong pattern label for unwrap in $p: $out"
+  ck; out="$(scan --diff-file "$t/p.diff")" && fail "unwrap not flagged in test/bench/example path: $p"
+  ck; echo "$out" | grep -c "\[unwrap\]" > /dev/null || fail "wrong pattern label for unwrap in $p: $out"
 done
 
 mkdiff tests/props.rs 'let y = x.clone();' > "$t/p.diff"
-out="$(scan --diff-file "$t/p.diff")" && fail "clone not flagged in test path: tests/props.rs"
-echo "$out" | grep -c "\[clone\]" > /dev/null || fail "wrong pattern label for clone in tests/props.rs: $out"
+ck; out="$(scan --diff-file "$t/p.diff")" && fail "clone not flagged in test path: tests/props.rs"
+ck; echo "$out" | grep -c "\[clone\]" > /dev/null || fail "wrong pattern label for clone in tests/props.rs: $out"
 
 # the assert family and the unwrap variants are banned in test code too
 for p in tests/props.rs tests/model/mod.rs benches/b.rs examples/e.rs; do
   mkdiff $p 'assert!(x);' > "$t/p.diff"
-  out="$(scan --diff-file "$t/p.diff")" && fail "assert not flagged in test/bench/example path: $p"
-  echo "$out" | grep -c "\[assert\]" > /dev/null || fail "wrong pattern label for assert in $p: $out"
+  ck; out="$(scan --diff-file "$t/p.diff")" && fail "assert not flagged in test/bench/example path: $p"
+  ck; echo "$out" | grep -c "\[assert\]" > /dev/null || fail "wrong pattern label for assert in $p: $out"
   mkdiff $p 'let v = r.unwrap_or_default();' > "$t/p.diff"
-  out="$(scan --diff-file "$t/p.diff")" && fail "unwrap_or_default not flagged in test/bench/example path: $p"
-  echo "$out" | grep -c "\[unwrap_variant\]" > /dev/null || fail "wrong pattern label for unwrap_or_default in $p: $out"
+  ck; out="$(scan --diff-file "$t/p.diff")" && fail "unwrap_or_default not flagged in test/bench/example path: $p"
+  ck; echo "$out" | grep -c "\[unwrap_variant\]" > /dev/null || fail "wrong pattern label for unwrap_or_default in $p: $out"
 done
 
 # a derive spanning several lines is flagged when a following line of the block names Clone or Copy
 for names in 'Clone,' 'Copy,' 'Debug, Clone,'; do
   mkdiff tests/props.rs '#[derive(' '    Debug,' "    $names" ')]' 'struct A;' > "$t/p.diff"
-  out="$(scan --diff-file "$t/p.diff")" && fail "multi-line derive with $names not flagged"
-  echo "$out" | grep -c "\[derive_clone\]" > /dev/null || fail "wrong pattern label for multi-line derive with $names: $out"
+  ck; out="$(scan --diff-file "$t/p.diff")" && fail "multi-line derive with $names not flagged"
+  ck; echo "$out" | grep -c "\[derive_clone\]" > /dev/null || fail "wrong pattern label for multi-line derive with $names: $out"
 done
 mkdiff tests/props.rs '#[derive(' '    Debug,' '    PartialEq,' ')]' 'struct A;' 'let c = Clone;' > "$t/p.diff"
-scan --diff-file "$t/p.diff" >/dev/null || fail "multi-line derive without Clone/Copy flagged: $(scan --diff-file "$t/p.diff")"
+ck; scan --diff-file "$t/p.diff" >/dev/null || fail "multi-line derive without Clone/Copy flagged: $(scan --diff-file "$t/p.diff")"
 
 mkdiff tests/props.rs 'let a: f64 = 1.0;' > "$t/p.diff"
-out="$(scan --diff-file "$t/p.diff")" && fail "f64 not flagged in test path: tests/props.rs"
-echo "$out" | grep -c "\[f64\]" > /dev/null || fail "wrong pattern label for f64 in tests/props.rs: $out"
+ck; out="$(scan --diff-file "$t/p.diff")" && fail "f64 not flagged in test path: tests/props.rs"
+ck; echo "$out" | grep -c "\[f64\]" > /dev/null || fail "wrong pattern label for f64 in tests/props.rs: $out"
 
 mkdiff tests/props.rs 'panic!("x");' > "$t/p.diff"
-out="$(scan --diff-file "$t/p.diff")" && fail "panic not flagged in test path: tests/props.rs"
-echo "$out" | grep -c "\[panic\]" > /dev/null || fail "wrong pattern label for panic in tests/props.rs: $out"
+ck; out="$(scan --diff-file "$t/p.diff")" && fail "panic not flagged in test path: tests/props.rs"
+ck; echo "$out" | grep -c "\[panic\]" > /dev/null || fail "wrong pattern label for panic in tests/props.rs: $out"
 
 # not flagged: comment, string, removed line, context line, deny attr, unwrap_or, unwrap_or_else, expect_err_x, assertion helpers without the macro bang
 mkdiff $LIB '// x.clone() unsafe unwrap() f64' '/// doc: panic! #[allow]' 'let s = "x.clone() unwrap() f32";' '#![forbid(unsafe_code)]' 'let v = r.unwrap_or(0);' 'let v = r.expect_err_x;' 'let v = r.unwrap_or_else(f);' 'let r = assert_eq_x(a, b);' 'let s = "assert!(x) unwrap_or_default()";' > "$t/ok.diff"
-scan --diff-file "$t/ok.diff" >/dev/null || fail "comment/string/benign lines flagged: $(scan --diff-file "$t/ok.diff")"
+ck; scan --diff-file "$t/ok.diff" >/dev/null || fail "comment/string/benign lines flagged: $(scan --diff-file "$t/ok.diff")"
 for p in README.md docs/CONTRACT.md scripts/gen.py tools/t.py; do
   mkdiff $p 'let y = x.clone(); unsafe {} r.unwrap(); let a: f64 = 1.0;' > "$t/p.diff"
-  scan --diff-file "$t/p.diff" >/dev/null || fail "non-lib path flagged: $p"
+  ck; scan --diff-file "$t/p.diff" >/dev/null || fail "non-lib path flagged: $p"
 done
 printf 'diff --git a/%s b/%s\n--- a/%s\n+++ b/%s\n@@ -1,2 +1,1 @@\n-let y = x.clone();\n context\n' $LIB $LIB $LIB $LIB > "$t/rm.diff"
-scan --diff-file "$t/rm.diff" >/dev/null || fail "removed line flagged"
+ck; scan --diff-file "$t/rm.diff" >/dev/null || fail "removed line flagged"
 
 # allowlist: file:hash<TAB>reason
 mkdiff $LIB 'let y = x.clone();' > "$t/d.diff"
-key="$(scan --diff-file "$t/d.diff" | grep -o 'allow-key=[^ ]*' | head -1 | cut -d= -f2)"; [ -n "$key" ] || fail "no allow-key printed"
+ck; key="$(scan --diff-file "$t/d.diff" | grep -o 'allow-key=[^ ]*' | head -1 | cut -d= -f2)"; [ -n "$key" ] || fail "no allow-key printed"
 printf '%s\tproof + Jeff approval\n' "$key" > "$t/tools/rules_allowlist.txt"
-scan --diff-file "$t/d.diff" >/dev/null || fail "allowlisted site still flagged"
+ck; scan --diff-file "$t/d.diff" >/dev/null || fail "allowlisted site still flagged"
 : > "$t/tools/rules_allowlist.txt"
 
 # hidden-copy count: fn bodies under src/ that rebuild a value from the fields of another value of its type
@@ -143,12 +143,12 @@ hc="$t/hc"; mkdir -p "$hc/src" "$hc/tools"
 hidden() { RULES_SCAN_ROOT="$hc" "$here/rules_scan.sh" --hidden-copies; }
 flagged_hc() { # flagged_hc <label> <rust source>: exactly one site expected
   printf '%s\n' "$2" > "$hc/src/x.rs"
-  out="$(hidden)" && fail "hidden copy not flagged: $1"
-  echo "$out" | grep -c "hidden_copy_count 1\$" > /dev/null || fail "hidden copy count is not 1 for $1: $out"
+  ck; out="$(hidden)" && fail "hidden copy not flagged: $1"
+  ck; echo "$out" | grep -c "hidden_copy_count 1\$" > /dev/null || fail "hidden copy count is not 1 for $1: $out"
 }
 clean_hc() { # clean_hc <label> <rust source>
   printf '%s\n' "$2" > "$hc/src/x.rs"
-  out="$(hidden)" || fail "false hidden-copy flag: $1: $out"
+  ck; out="$(hidden)" || fail "false hidden-copy flag: $1: $out"
 }
 flagged_hc "replicate by name" 'impl M { fn replicate(&self) -> M { M::zero() } }'
 flagged_hc "copy by name" 'fn copy_of(x: &M) -> M { M::zero() }'
@@ -167,18 +167,18 @@ fn f(x: &P) -> bool { matches!(x, P { a: 0, .. }) }
 fn g(x: &Inner) -> Option<(i64, u64)> { match x { Inner::Finite { exp, mant } if *mant != 0 => Some((*exp, *mant)), _ => None } }'
 clean_hc "comment and string" 'fn f() -> M { // M::from_canonical(x.exp, x.mant) and fn replicate
   let _s = "M::from_canonical(x.exp, x.mant)"; M::zero() }'
-: > "$hc/src/x.rs"; hidden >/dev/null || fail "empty tree flagged"
+ck; : > "$hc/src/x.rs"; hidden >/dev/null || fail "empty tree flagged"
 # the same rules apply under tests/ benches/ examples/ (no test exemption); one fixture file at a time
 flagged_hc_at() { # flagged_hc_at <path> <label> <rust source>: exactly one site expected
   mkdir -p "$(dirname "$hc/$1")"; printf '%s\n' "$3" > "$hc/$1"
-  out="$(hidden)" && fail "hidden copy not flagged in $1: $2"
-  echo "$out" | grep -c "hidden_copy_count 1\$" > /dev/null || fail "hidden copy count is not 1 in $1 for $2: $out"
-  echo "$out" | grep -c "^$1:" > /dev/null || fail "hidden copy site is not reported under $1 for $2: $out"
+  ck; out="$(hidden)" && fail "hidden copy not flagged in $1: $2"
+  ck; echo "$out" | grep -c "hidden_copy_count 1\$" > /dev/null || fail "hidden copy count is not 1 in $1 for $2: $out"
+  ck; echo "$out" | grep -c "^$1:" > /dev/null || fail "hidden copy site is not reported under $1 for $2: $out"
   rm -f "$hc/$1"
 }
 clean_hc_at() { # clean_hc_at <path> <label> <rust source>
   mkdir -p "$(dirname "$hc/$1")"; printf '%s\n' "$3" > "$hc/$1"
-  out="$(hidden)" || fail "false hidden-copy flag in $1: $2: $out"
+  ck; out="$(hidden)" || fail "false hidden-copy flag in $1: $2: $out"
   rm -f "$hc/$1"
 }
 DUP='fn dup(x: &MagV) -> MagV { match x { MagV::Finite { exp, mant } => MagV::Finite { exp: *exp, mant: *mant }, MagV::Infinity => MagV::Infinity } }'
@@ -198,7 +198,7 @@ clean_hc_at tests/model/dyadic.rs "model to dyadic converter" 'pub fn from_magv(
 clean_hc_at tests/model/direct.rs "from-parts rebuild with computed arguments" 'fn f(a: i128, m: u128) -> Option<MagV> { Some(MagV::Finite { exp: i64::try_from(a).ok()?, mant: u64::try_from(m).ok()? }) }'
 clean_hc_at tests/model/direct.rs "comment and string" 'fn f() -> MagV { // MagV::new(x.exp, x.mant) and fn dup
   let _s = "fn dup(x: &MagV)"; zero() }'
-hidden >/dev/null || fail "tests fixtures left a flag behind: $(hidden)"
+ck; hidden >/dev/null || fail "tests fixtures left a flag behind: $(hidden)"
 
 # Rusty's six converter-exemption evasions (green3 review A2 A3 A4 A5 A25 A31): a field-by-field copy of a Mag/MagV must be flagged
 # even when the type is renamed, aliased or wrapped. Soft-fail so every plant is reported in one run.
@@ -268,27 +268,27 @@ git init -q . && git config user.email a@b && git config user.name t
 cp "$t/tools/rules_allowlist.txt" tools/; echo 0 > tools/clone_count_baseline.txt; echo 0 > tools/ref_sum_count_baseline.txt; echo 0 > tools/hidden_copy_count_baseline.txt; echo 0 > tools/sanctioned_rebuild_count_baseline.txt
 printf 'fn a() {}\n' > src/x.rs; git add -A; git commit -qm base; base=$(git rev-parse HEAD)
 export RULES_SCAN_ROOT="$g"; unset RULES_SCAN_SKIP_COUNT
-scan "$base..HEAD" >/dev/null || fail "empty range flagged"
+ck; scan "$base..HEAD" >/dev/null || fail "empty range flagged"
 printf 'fn a() {}\nfn b(x: &S) { let y = x.clone(); }\n' > src/x.rs
-scan --working >/dev/null && fail "working diff clone not flagged"
-git add -A; scan --staged >/dev/null && fail "staged diff clone not flagged"
-scan --working >/dev/null && fail "working mode (git diff HEAD) must still see staged additions"
-git commit -qm bad; scan "$base..HEAD" >/dev/null && fail "range clone not flagged"
+ck; scan --working >/dev/null && fail "working diff clone not flagged"
+ck; git add -A; scan --staged >/dev/null && fail "staged diff clone not flagged"
+ck; scan --working >/dev/null && fail "working mode (git diff HEAD) must still see staged additions"
+ck; git commit -qm bad; scan "$base..HEAD" >/dev/null && fail "range clone not flagged"
 # a #[cfg(test)] module gets no exemption
 printf 'fn a() {}\n#[cfg(test)]\nmod tests {\n    fn t(x: &S) { let y = x.clone(); let _ = r.unwrap(); }\n}\n' > src/x.rs
-git add -A; git commit -qm t; scan "$base..HEAD" >/dev/null && fail "cfg(test) additions not flagged"
+ck; git add -A; git commit -qm t; scan "$base..HEAD" >/dev/null && fail "cfg(test) additions not flagged"
 
 # clone-count baseline: may only go down
 printf 'fn a(x: &S) { let y = x.clone(); }\n' > src/x.rs; git add -A; git commit -qm c
 echo 1 > tools/clone_count_baseline.txt
-scan --count-only >/dev/null || fail "count == baseline should pass"
-echo 0 > tools/clone_count_baseline.txt; scan --count-only >/dev/null && fail "count above baseline passed"
+ck; scan --count-only >/dev/null || fail "count == baseline should pass"
+ck; echo 0 > tools/clone_count_baseline.txt; scan --count-only >/dev/null && fail "count above baseline passed"
 printf 'fn a(x: &S) { let y = x.clone(); let z = it.copied(); }\n' > src/x.rs; echo 2 > tools/clone_count_baseline.txt
-{ scan --count-only || true; } | grep -c "clone count 2 == baseline" > /dev/null || fail "a .copied( use must count with the clone family: $(scan --count-only)"
+ck; { scan --count-only || true; } | grep -c "clone count 2 == baseline" > /dev/null || fail "a .copied( use must count with the clone family: $(scan --count-only)"
 printf 'fn a(x: &S) { let y = x.clone(); }\n' > src/x.rs
-echo 5 > tools/clone_count_baseline.txt; { scan --count-only || true; } | grep -ci "lower" > /dev/null || fail "no hint to lower baseline"
-scan --update-baseline >/dev/null || fail "lowering baseline failed"; [ "$(tr -d '[:space:]' < tools/clone_count_baseline.txt)" = 1 ] || fail "baseline not lowered"
-echo 0 > tools/clone_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising baseline allowed"; [ "$(tr -d '[:space:]' < tools/clone_count_baseline.txt)" = 0 ] || fail "baseline raised"
+ck; echo 5 > tools/clone_count_baseline.txt; { scan --count-only || true; } | grep -ci "lower" > /dev/null || fail "no hint to lower baseline"
+ck; scan --update-baseline >/dev/null || fail "lowering baseline failed"; [ "$(tr -d '[:space:]' < tools/clone_count_baseline.txt)" = 1 ] || fail "baseline not lowered"
+ck; echo 0 > tools/clone_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising baseline allowed"; [ "$(tr -d '[:space:]' < tools/clone_count_baseline.txt)" = 0 ] || fail "baseline raised"
 
 # add_ref/sub_ref/mul_ref/div_ref use-count baseline: counts every use incl. tests (not definitions, comments, strings), may only go down
 cat > src/x.rs <<'EOF'
@@ -301,30 +301,30 @@ mod tests { fn t(a: &N, b: &N) { let s = N::add_ref(a, b); } }
 EOF
 git add -A; git commit -qm refs
 echo 5 > tools/ref_sum_count_baseline.txt; echo 7 > tools/clone_count_baseline.txt
-{ scan --count-only || true; } | grep -c "use count 5 == baseline" > /dev/null || fail "ref count should be 5 (definitions, comments, strings excluded; the test-module use counts): $(scan --count-only)"
-echo 4 > tools/ref_sum_count_baseline.txt; { scan --count-only || true; } | grep -c "ABOVE" > /dev/null || fail "ref count above baseline not reported"
-scan --count-only >/dev/null && fail "ref count above baseline passed"
-echo 9 > tools/ref_sum_count_baseline.txt; { scan --count-only || true; } | grep -ci "lower the baseline" > /dev/null || fail "no hint to lower ref baseline"
-scan --update-baseline >/dev/null; [ "$(tr -d '[:space:]' < tools/ref_sum_count_baseline.txt)" = 5 ] || fail "ref baseline not lowered"
-echo 0 > tools/ref_sum_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising ref baseline allowed"; [ "$(tr -d '[:space:]' < tools/ref_sum_count_baseline.txt)" = 0 ] || fail "ref baseline raised"
-rm -f tools/ref_sum_count_baseline.txt; scan --count-only >/dev/null && fail "missing ref baseline passed"
+ck; { scan --count-only || true; } | grep -c "use count 5 == baseline" > /dev/null || fail "ref count should be 5 (definitions, comments, strings excluded; the test-module use counts): $(scan --count-only)"
+ck; echo 4 > tools/ref_sum_count_baseline.txt; { scan --count-only || true; } | grep -c "ABOVE" > /dev/null || fail "ref count above baseline not reported"
+ck; scan --count-only >/dev/null && fail "ref count above baseline passed"
+ck; echo 9 > tools/ref_sum_count_baseline.txt; { scan --count-only || true; } | grep -ci "lower the baseline" > /dev/null || fail "no hint to lower ref baseline"
+ck; scan --update-baseline >/dev/null; [ "$(tr -d '[:space:]' < tools/ref_sum_count_baseline.txt)" = 5 ] || fail "ref baseline not lowered"
+ck; echo 0 > tools/ref_sum_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising ref baseline allowed"; [ "$(tr -d '[:space:]' < tools/ref_sum_count_baseline.txt)" = 0 ] || fail "ref baseline raised"
+ck; rm -f tools/ref_sum_count_baseline.txt; scan --count-only >/dev/null && fail "missing ref baseline passed"
 echo 0 > tools/ref_sum_count_baseline.txt
 
 # hidden-copy baseline: counts fn bodies, may only go down
 printf 'fn replicate(x: &S) -> S { S::new() }\nfn again(x: &S) -> S { S::new(x.a, x.b) }\n' > src/x.rs; git add -A; git commit -qm hc
 echo 2 > tools/hidden_copy_count_baseline.txt
-{ scan --count-only || true; } | grep -c "hidden-copy count 2 == baseline" > /dev/null || fail "hidden-copy count should be 2: $(scan --count-only)"
-echo 1 > tools/hidden_copy_count_baseline.txt; { scan --count-only || true; } | grep -c "hidden-copy count 2 is ABOVE" > /dev/null || fail "hidden-copy count above baseline not reported"
-scan --count-only >/dev/null && fail "hidden-copy count above baseline passed"
-echo 9 > tools/hidden_copy_count_baseline.txt; { scan --count-only || true; } | grep -ci "hidden-copy count 2 is below baseline" > /dev/null || fail "no hint to lower hidden-copy baseline"
-scan --update-baseline >/dev/null; [ "$(tr -d '[:space:]' < tools/hidden_copy_count_baseline.txt)" = 2 ] || fail "hidden-copy baseline not lowered"
-echo 0 > tools/hidden_copy_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising hidden-copy baseline allowed"; [ "$(tr -d '[:space:]' < tools/hidden_copy_count_baseline.txt)" = 0 ] || fail "hidden-copy baseline raised"
+ck; { scan --count-only || true; } | grep -c "hidden-copy count 2 == baseline" > /dev/null || fail "hidden-copy count should be 2: $(scan --count-only)"
+ck; echo 1 > tools/hidden_copy_count_baseline.txt; { scan --count-only || true; } | grep -c "hidden-copy count 2 is ABOVE" > /dev/null || fail "hidden-copy count above baseline not reported"
+ck; scan --count-only >/dev/null && fail "hidden-copy count above baseline passed"
+ck; echo 9 > tools/hidden_copy_count_baseline.txt; { scan --count-only || true; } | grep -ci "hidden-copy count 2 is below baseline" > /dev/null || fail "no hint to lower hidden-copy baseline"
+ck; scan --update-baseline >/dev/null; [ "$(tr -d '[:space:]' < tools/hidden_copy_count_baseline.txt)" = 2 ] || fail "hidden-copy baseline not lowered"
+ck; echo 0 > tools/hidden_copy_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising hidden-copy baseline allowed"; [ "$(tr -d '[:space:]' < tools/hidden_copy_count_baseline.txt)" = 0 ] || fail "hidden-copy baseline raised"
 # the hidden-copy count includes tests/: a dup-style helper there raises the count above a 0 baseline
 printf 'fn a() {}\n' > src/x.rs; mkdir -p tests; printf 'fn dup(x: &MagV) -> MagV { match x { MagV::Finite { exp, mant } => MagV::Finite { exp: *exp, mant: *mant }, MagV::Infinity => MagV::Infinity } }\n' > tests/m.rs; git add -A; git commit -qm hct
 echo 0 > tools/hidden_copy_count_baseline.txt
-{ scan --count-only || true; } | grep -c "hidden-copy count 1 is ABOVE" > /dev/null || fail "hidden copy in tests/ not counted: $(scan --count-only)"
-scan --count-only >/dev/null && fail "hidden copy in tests/ passed a 0 baseline"
-rm -f tools/hidden_copy_count_baseline.txt; scan --count-only >/dev/null && fail "missing hidden-copy baseline passed"
+ck; { scan --count-only || true; } | grep -c "hidden-copy count 1 is ABOVE" > /dev/null || fail "hidden copy in tests/ not counted: $(scan --count-only)"
+ck; scan --count-only >/dev/null && fail "hidden copy in tests/ passed a 0 baseline"
+ck; rm -f tools/hidden_copy_count_baseline.txt; scan --count-only >/dev/null && fail "missing hidden-copy baseline passed"
 
 # sanctioned-rebuild baseline (O18-C): counts Mag::from_canonical(..) calls in src/ fed by a part of another value; may only go down
 rb() { RULES_SCAN_ROOT="$g" "$here/rules_scan.sh" --sanctioned-rebuilds; }
@@ -357,64 +357,65 @@ impl Mag {
 EOF
 git add -A; git commit -qm rb2
 echo 2 > tools/sanctioned_rebuild_count_baseline.txt
-out="$(rb)"; echo "$out" | grep -c "sanctioned_rebuild_count 2\$" > /dev/null || fail "sanctioned rebuilds should be 2 (definition, computed and constant args, comment, string not counted; multi-line call counted): $out"
-{ scan --count-only || true; } | grep -c "sanctioned-rebuild count 2 == baseline" > /dev/null || fail "sanctioned-rebuild count should equal baseline 2: $(scan --count-only)"
+ck; out="$(rb)"; echo "$out" | grep -c "sanctioned_rebuild_count 2\$" > /dev/null || fail "sanctioned rebuilds should be 2 (definition, computed and constant args, comment, string not counted; multi-line call counted): $out"
+ck; { scan --count-only || true; } | grep -c "sanctioned-rebuild count 2 == baseline" > /dev/null || fail "sanctioned-rebuild count should equal baseline 2: $(scan --count-only)"
 cat >> src/x.rs <<'EOF'
 impl Mag { pub fn third(&self) -> Mag { match self.nonzero() { Some((e, m)) => Mag::from_canonical(e, m.get()), None => Mag::zero() } } }
 EOF
 git add -A; git commit -qm rb3
-{ scan --count-only || true; } | grep -c "sanctioned-rebuild count 3 is ABOVE the baseline 2" > /dev/null || fail "a third rebuild not reported: $(scan --count-only)"
-scan --count-only >/dev/null && fail "a third rebuild passed the baseline of 2"
+ck; { scan --count-only || true; } | grep -c "sanctioned-rebuild count 3 is ABOVE the baseline 2" > /dev/null || fail "a third rebuild not reported: $(scan --count-only)"
+ck; scan --count-only >/dev/null && fail "a third rebuild passed the baseline of 2"
 printf 'impl Mag { fn again(x: &Mag) -> Mag { Mag::from_canonical(x.exp, x.mant) } fn again2(x: &Mag) -> Mag { Mag::from_canonical(x.exp(), x.mant()) } }\n' > src/x.rs
-rb | grep -c "sanctioned_rebuild_count 2\$" > /dev/null || fail "field and accessor reads must count: $(rb)"
-echo 9 > tools/sanctioned_rebuild_count_baseline.txt; { scan --count-only || true; } | grep -ci "sanctioned-rebuild count 2 is below baseline 9" > /dev/null || fail "no hint to lower rebuild baseline"
-scan --update-baseline >/dev/null; [ "$(tr -d '[:space:]' < tools/sanctioned_rebuild_count_baseline.txt)" = 2 ] || fail "rebuild baseline not lowered"
-echo 0 > tools/sanctioned_rebuild_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising rebuild baseline allowed"; [ "$(tr -d '[:space:]' < tools/sanctioned_rebuild_count_baseline.txt)" = 0 ] || fail "rebuild baseline raised"
-rm -f tools/sanctioned_rebuild_count_baseline.txt; scan --count-only >/dev/null && fail "missing rebuild baseline passed"
+ck; rb | grep -c "sanctioned_rebuild_count 2\$" > /dev/null || fail "field and accessor reads must count: $(rb)"
+ck; echo 9 > tools/sanctioned_rebuild_count_baseline.txt; { scan --count-only || true; } | grep -ci "sanctioned-rebuild count 2 is below baseline 9" > /dev/null || fail "no hint to lower rebuild baseline"
+ck; scan --update-baseline >/dev/null; [ "$(tr -d '[:space:]' < tools/sanctioned_rebuild_count_baseline.txt)" = 2 ] || fail "rebuild baseline not lowered"
+ck; echo 0 > tools/sanctioned_rebuild_count_baseline.txt; scan --update-baseline >/dev/null && fail "raising rebuild baseline allowed"; [ "$(tr -d '[:space:]' < tools/sanctioned_rebuild_count_baseline.txt)" = 0 ] || fail "rebuild baseline raised"
+ck; rm -f tools/sanctioned_rebuild_count_baseline.txt; scan --count-only >/dev/null && fail "missing rebuild baseline passed"
 
 # alias/rename ban on the whole tree (baseline-free, wrapped forms included): any hit fails --count-only and the gate's default run
 echo 0 > tools/sanctioned_rebuild_count_baseline.txt; echo 0 > tools/hidden_copy_count_baseline.txt; rm -rf tests
 printf 'use super::Mag;\ntype Word = u64;\n// type M2 = Mag; and Mag as M\nfn s() { let _x = "type M2 = Mag;"; }\n' > src/x.rs
-scan --count-only >/dev/null || fail "alias-free tree flagged: $(scan --count-only)"
+ck; scan --count-only >/dev/null || fail "alias-free tree flagged: $(scan --count-only)"
 printf 'type X =\n    Option<\n        Mag>;\n' > src/x.rs
-out="$(scan --count-only)" && fail "wrapped type alias in the tree passed --count-only"
-echo "$out" | grep -c "src/x.rs:1 \[type_alias\]" > /dev/null || fail "wrapped type alias not reported with its first line: $out"
+ck; out="$(scan --count-only)" && fail "wrapped type alias in the tree passed --count-only"
+ck; echo "$out" | grep -c "src/x.rs:1 \[type_alias\]" > /dev/null || fail "wrapped type alias not reported with its first line: $out"
 printf 'use super::{Mag\n    as M3};\n' > src/x.rs
-out="$(scan --count-only)" && fail "wrapped rename in the tree passed --count-only"
-echo "$out" | grep -c "src/x.rs:1 \[type_rename\]" > /dev/null || fail "wrapped rename not reported: $out"
+ck; out="$(scan --count-only)" && fail "wrapped rename in the tree passed --count-only"
+ck; echo "$out" | grep -c "src/x.rs:1 \[type_rename\]" > /dev/null || fail "wrapped rename not reported: $out"
 mkdir -p tests; printf 'pub use crate::model::dyadic::{\n    MagV,\n    Dy\n        as D,\n};\n' > tests/y.rs; printf 'fn a() {}\n' > src/x.rs
-out="$(scan --count-only)" && fail "wrapped pub use rename under tests/ passed --count-only"
-echo "$out" | grep -c "tests/y.rs:3 \[type_rename\]" > /dev/null || fail "rename under tests/ not reported at its line: $out"
+ck; out="$(scan --count-only)" && fail "wrapped pub use rename under tests/ passed --count-only"
+ck; echo "$out" | grep -c "tests/y.rs:3 \[type_rename\]" > /dev/null || fail "rename under tests/ not reported at its line: $out"
 rm -rf tests; printf 'fn a() {}\n' > src/x.rs
-scan --count-only >/dev/null || fail "tree not clean after the alias fixtures: $(scan --count-only)"
+ck; scan --count-only >/dev/null || fail "tree not clean after the alias fixtures: $(scan --count-only)"
 
 # API-freeze unit 4: no public signature in src/ names zf's i32 `Exponent` or `i32` (zb signatures use i64); baseline-free
 printf 'pub fn e(&self) -> Option<i64> { None }\npub(crate) fn p(x: i32) {}\nfn q(x: Exponent) {}\n// pub fn c(x: i32)\n' > src/x.rs
-scan --count-only >/dev/null || fail "i64 / private i32 flagged as narrow exponent: $(scan --count-only)"
+ck; scan --count-only >/dev/null || fail "i64 / private i32 flagged as narrow exponent: $(scan --count-only)"
 printf 'impl A {\n    pub fn exp(\n        &self,\n    ) -> Option<Exponent> { None }\n}\n' > src/x.rs
-out="$(scan --count-only)" && fail "pub fn returning Exponent passed"
-echo "$out" | grep -q "src/x.rs:2 \[pub_sig_narrow_exponent\]" || fail "wrapped Exponent signature not reported at its line: $out"
-printf 'pub fn s(e: i32) {}\n' > src/x.rs; scan --count-only >/dev/null && fail "pub fn taking i32 passed"
-printf 'pub struct S { pub e: i32 }\n' > src/x.rs; scan --count-only >/dev/null && fail "pub field of type i32 passed"
-printf 'pub const E: zenith_float_num::Exponent = 0;\npub type T = i32;\n' > src/x.rs; scan --count-only >/dev/null && fail "pub const/type naming Exponent/i32 passed"
+ck; out="$(scan --count-only)" && fail "pub fn returning Exponent passed"
+ck; echo "$out" | grep -q "src/x.rs:2 \[pub_sig_narrow_exponent\]" || fail "wrapped Exponent signature not reported at its line: $out"
+ck; printf 'pub fn s(e: i32) {}\n' > src/x.rs; scan --count-only >/dev/null && fail "pub fn taking i32 passed"
+ck; printf 'pub struct S { pub e: i32 }\n' > src/x.rs; scan --count-only >/dev/null && fail "pub field of type i32 passed"
+ck; printf 'pub const E: zenith_float_num::Exponent = 0;\npub type T = i32;\n' > src/x.rs; scan --count-only >/dev/null && fail "pub const/type naming Exponent/i32 passed"
 printf 'fn a() {}\n' > src/x.rs
-scan --count-only >/dev/null || fail "tree not clean after the narrow-exponent fixtures: $(scan --count-only)"
+ck; scan --count-only >/dev/null || fail "tree not clean after the narrow-exponent fixtures: $(scan --count-only)"
 
 # API-freeze unit 5: every prec in src/ uses the `Precision` alias, never a concrete integer width (params, fields, fn prec returns)
 printf 'pub type Precision = usize;\npub struct B { prec: Precision }\npub fn f(prec: Precision) -> Precision { prec }\npub trait E { fn prec(&self) -> Precision; }\n// fn g(prec: u32)\nfn h(n: u32) {}\n' > src/x.rs
-scan --count-only >/dev/null || fail "Precision alias flagged: $(scan --count-only)"
+ck; scan --count-only >/dev/null || fail "Precision alias flagged: $(scan --count-only)"
 for bad in 'pub fn f(prec: u32) {}' 'pub fn f(x: u8, mid_prec: usize) {}' 'struct B { prec: u64 }' 'pub trait E { fn prec(&self) -> u32; }' 'pub fn prec(\n    &self,\n) -> i64 { 0 }' 'fn f(prec: core::primitive::u128) {}'; do
   printf "$bad\n" > src/x.rs
-  out="$(scan --count-only)" && fail "concrete prec width passed: $bad"
-  echo "$out" | grep -q "src/x.rs:1 \[prec_concrete_width\]" || fail "concrete prec width not reported at line 1: $bad: $out"
+  ck; out="$(scan --count-only)" && fail "concrete prec width passed: $bad"
+  ck; echo "$out" | grep -q "src/x.rs:1 \[prec_concrete_width\]" || fail "concrete prec width not reported at line 1: $bad: $out"
 done
 printf 'fn a() {}\n' > src/x.rs
-scan --count-only >/dev/null || fail "tree not clean after the prec fixtures: $(scan --count-only)"
+ck; scan --count-only >/dev/null || fail "tree not clean after the prec fixtures: $(scan --count-only)"
 # no vacuous pass: --working and --staged outside a git repo (git diff fails) must exit nonzero, not report "0 flagged"
 nogit=$(mktemp -d /tmp/rules-nogit.XXXXXX)
 for mode in --working --staged; do
-  out="$(RULES_SCAN_ROOT="$nogit" python3 "$here/rules_scan.py" $mode 2>&1)" && { rm -rf "$nogit"; fail "$mode passed although git diff failed: $out"; }
-  echo "$out" | grep -c "git diff .*failed" > /dev/null || { rm -rf "$nogit"; fail "$mode: no git failure message: $out"; }
+  ck; out="$(RULES_SCAN_ROOT="$nogit" python3 "$here/rules_scan.py" $mode 2>&1)" && { rm -rf "$nogit"; fail "$mode passed although git diff failed: $out"; }
+  ck; echo "$out" | grep -c "git diff .*failed" > /dev/null || { rm -rf "$nogit"; fail "$mode: no git failure message: $out"; }
 done
 rm -rf "$nogit"
+st_done rules_scan 284   # WANT: cases this script runs (tools/selftest_cases.sh)
 echo "rules_scan selftest: ok"

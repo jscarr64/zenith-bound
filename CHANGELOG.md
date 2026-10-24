@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Selftest case counts (2026-10-23): `tools/selftest_cases.sh` (`st_init`/`ck`/`st_done`) makes 8 more gate selftests count the cases they
+  actually run and FAIL on a mismatch: digests 22, fresh_test_run 26, full_gate 72, pubfn_coverage 15, rules_scan 284, tightness 33,
+  toolchain_check 14, wildcard_enum 11. `runlog_selftest.sh` is not covered yet: it already FAILS at HEAD ("another agent's row was removed").
+
 - Mutant floor (Paul, 2026-10-23): a full `tools/mutate.sh` run (the gate's mutants step) FAILS if killed or killed+equivalent is below
   `tools/mutants/floor.txt` (159 killed / 176 killed+equivalent now; MUTATE_FLOOR overrides). `--only` skips the floor but still FAILS with
   0 mutants. Missing, garbage or CRLF floor rows FAIL. `tools/mutate_selftest.sh` and `tools/test_floor_selftest.sh` now count their
