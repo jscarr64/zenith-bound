@@ -1,0 +1,13 @@
+diff --git a/src/bridge.rs b/src/bridge.rs
+index 9bc9acc..dfbb980 100644
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -117,7 +117,7 @@ impl Mag {
+             return None;
+         }
+         // Sign of ts: small enters with + when it is a, with - when it is b.
+-        let ts_pos = small.is_negative() == a_big;
++        let ts_pos = small.is_negative() != a_big;
+         let ts_sign = if ts_pos { Ordering::Greater } else { Ordering::Less };
+         // y = u + ts; sign(|a - b| - self) = sb * sign(y).
+         let y_sign = match exp_of(&ur) {

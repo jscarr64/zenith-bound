@@ -1,0 +1,13 @@
+diff --git a/src/bridge.rs b/src/bridge.rs
+index 9bc9acc..d47ba33 100644
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -104,7 +104,7 @@ impl Mag {
+         if me <= e.checked_sub(2)? {
+             return Some(Ordering::Less);
+         }
+-        if me >= e.checked_add(2)? {
++        if me >= e.checked_add(1)? {
+             return Some(Ordering::Greater);
+         }
+         let m = self.to_exact_num().ok()?;

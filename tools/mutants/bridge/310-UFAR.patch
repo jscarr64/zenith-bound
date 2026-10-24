@@ -1,0 +1,13 @@
+diff --git a/src/bridge.rs b/src/bridge.rs
+index 9bc9acc..c1a64c7 100644
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -124,7 +124,7 @@ impl Mag {
+             None => ts_sign,
+             Some(eu) => {
+                 let u_sign = signed(sign(&ur), u_keep);
+-                if es <= eu.checked_sub(2)? {
++                if es <= eu.checked_sub(0)? {
+                     u_sign
+                 } else if eu <= es.checked_sub(2)? {
+                     ts_sign

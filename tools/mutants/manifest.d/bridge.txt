@@ -1,3 +1,23 @@
 # range: 300-399
 # Slice S2 (src/bridge.rs) mutants, owned by S2 alone. Rows as in ../manifest.txt (fn_path<TAB>mutant_id<TAB>patch<TAB>suite);
 # ids NNN-<name> with NNN in 300..=399; patches go in tools/mutants/bridge/ and the patch column reads bridge/NNN-<name>.patch.
+src/bridge.rs:Mag::cmp_exact_num	300-NUMSTICKY	bridge/300-NUMSTICKY.patch	harness
+src/bridge.rs:Mag::cmp_exact_num	301-NUMINF	bridge/301-NUMINF.patch	harness
+src/bridge.rs:Mag::cmp_exact_num	302-NUMZERO	bridge/302-NUMZERO.patch	harness
+src/bridge.rs:Mag::cmp_exact_num	303-NUMMANT	bridge/303-NUMMANT.patch	harness
+src/bridge.rs:Mag::cmp_exact_diff	305-DIFFZEROA	bridge/305-DIFFZEROA.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	306-GAPLOW	bridge/306-GAPLOW.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	307-GAPHIGH	bridge/307-GAPHIGH.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	308-TBPOS	bridge/308-TBPOS.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	309-TSPOS	bridge/309-TSPOS.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	310-UFAR	bridge/310-UFAR.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	311-SFAR	bridge/311-SFAR.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	312-FSPLUS	bridge/312-FSPLUS.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	313-UZERO	bridge/313-UZERO.patch	harness
+src/bridge.rs:Mag::cmp_exact_diff	314-EXACTGAP	bridge/314-EXACTGAP.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	315-ZERORAD	bridge/315-ZERORAD.patch	harness
+src/bridge.rs:Mag::cmp_exact_diff	316-DIFFINF	bridge/316-DIFFINF.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	317-REVERSE	bridge/317-REVERSE.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	318-UKEEP	bridge/318-UKEEP.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	319-BIGNEG	bridge/319-BIGNEG.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	320-ZSIGN	bridge/320-ZSIGN.patch	harness

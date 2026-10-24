@@ -1,0 +1,13 @@
+diff --git a/src/bridge.rs b/src/bridge.rs
+index 9bc9acc..c5cb84b 100644
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -61,7 +61,7 @@ impl Mag {
+         };
+         let (xm, sticky, xe) = x.top_u64_mantissa_and_sticky()?;
+         let tail = if sticky { Ordering::Less } else { Ordering::Equal };
+-        Some(me.cmp(&xe).then(mm.cmp(&xm)).then(tail))
++        Some(me.cmp(&xe).then(mm.cmp(&mm)).then(tail))
+     }
+ 
+     /// `self` against `|a - b|`, decided exactly (16.S2.2). Operands within [`EXACT_GAP`] binades are subtracted

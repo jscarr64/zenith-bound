@@ -1,0 +1,13 @@
+diff --git a/src/bridge.rs b/src/bridge.rs
+index 9bc9acc..10a9a9f 100644
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -99,7 +99,7 @@ impl Mag {
+         // |a - b| lies in (2^(e-2), 2^(e+1)) since |small| < 2^es <= 2^(e - EXACT_GAP).
+         let me = match self.exp() {
+             Some(me) => me,
+-            None => return Some(Ordering::Less),
++            None => return Some(Ordering::Greater),
+         };
+         if me <= e.checked_sub(2)? {
+             return Some(Ordering::Less);

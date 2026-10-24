@@ -1,0 +1,13 @@
+diff --git a/src/bridge.rs b/src/bridge.rs
+index 9bc9acc..3e8817f 100644
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -136,7 +136,7 @@ impl Mag {
+                     if z.inexact() {
+                         return None;
+                     }
+-                    signed(sign(&z), u_keep)
++                    signed(sign(&z), !u_keep)
+                 }
+             }
+         };

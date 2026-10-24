@@ -1,0 +1,13 @@
+diff --git a/src/bridge.rs b/src/bridge.rs
+index 9bc9acc..bab5328 100644
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -53,7 +53,7 @@ impl Mag {
+             return Some(Ordering::Greater);
+         }
+         if x.is_zero() {
+-            return Some(if self.is_zero() { Ordering::Equal } else { Ordering::Greater });
++            return Some(if self.is_zero() { Ordering::Greater } else { Ordering::Greater });
+         }
+         let (me, mm) = match (self.exp(), self.mant()) {
+             (Some(e), Some(m)) => (e, m),
