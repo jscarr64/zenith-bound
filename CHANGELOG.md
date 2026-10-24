@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- mutate.sh inrange forces base 10 itself (Spence nit on b5ac93f): `10#` on the id and the range bounds, so 0213 is 213 (not octal
+  139) and 0219 is not an arithmetic error. mutate_include_selftest has 36 cases (+1).
+
 - mutate.sh inrange quiet/loud (2026-10-24, Spence zb-s2 ceb4024 log 1422-zb-s2-const-steps: 368 `ERR rc=1 line=92`): inrange now
   returns 0 with empty output on a miss (an id outside every slice range is normal), and rc 2 + a message on a malformed range row.
   Call sites no longer mask it with `|| true`: a nonzero rc trips the ERR trap and fails the run. mutate_include_selftest has 35

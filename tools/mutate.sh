@@ -91,7 +91,7 @@ inrange() {
   while read -r olo ohi oname; do
     [ -n "$olo" ] || continue
     [[ $olo =~ ^[0-9]+$ && $ohi =~ ^[0-9]+$ && $1 =~ ^[0-9]+$ ]] || { echo "mutate: internal: inrange $1: bad range row '$olo $ohi $oname'" >&2; return 2; }
-    if (( $1 >= olo && $1 <= ohi )); then echo "$oname"; return 0; fi
+    if (( 10#$1 >= 10#$olo && 10#$1 <= 10#$ohi )); then   # base 10 forced here: a leading-zero id (0213) is never octal echo "$oname"; return 0; fi
   done <<< "$ranges"
   return 0
 }
