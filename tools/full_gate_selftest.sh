@@ -72,7 +72,29 @@ ck; grep -nE '^run [a-z-]+ .*cargo test[^"]*--no-run' "${BASH_SOURCE[0]%/*}/full
 # 4. mutants step: MUTATE_TARGET (caller-set or default) gets the same ownership claim as CARGO_TARGET_DIR (Spence, 2026-10-23); the fixture's
 # mutate.sh/mutate_selftest.sh are stubs that pass, so only the claim can fail the step
 mk mu; mkdir -p "$t/mu/tools" "$t/mu-bin"; cp "$root/tools/fresh_test_run.sh" "$root/tools/runlog.sh" "$t/mu/tools/"
-for f in mutate.sh mutate_selftest.sh; do printf '#!/bin/sh\necho stub %s\n' "$f" > "$t/mu/tools/$f"; chmod +x "$t/mu/tools/$f"; done
+printf '#!/bin/sh\necho stub mutate_selftest.sh\n' > "$t/mu/tools/mutate_selftest.sh"; chmod +x "$t/mu/tools/mutate_selftest.sh"
+# fake tools/mutate.sh: a runner that ALWAYS exits 0 (the fail-open case the gate must not trust). Slices: central (001-a 002-b), s1 (201-x),
+# s2 (empty). FAKE_MUT picks what the run prints: ok | timeout | missing | invalid | survived | floor (floor: central needs 3 kills).
+cat > "$t/mu/tools/mutate.sh" <<'FAKE'
+#!/usr/bin/env bash
+sc=${FAKE_MUT:-ok}; mode=run; slice=""
+while [ $# -gt 0 ]; do case $1 in --list) mode=list ;; --floor) mode=floor ;; --slices) mode=slices ;; --slice) slice=$2; shift ;; esac; shift; done
+ids() { case $1 in central) printf '001-a\n002-b\n' ;; s1) printf '201-x\n' ;; s2) ;; *) ids central; ids s1 ;; esac; }
+case $mode in
+  slices) printf 'central\ns1\ns2\n'; exit 0 ;;
+  list) ids "$slice"; exit 0 ;;
+  floor) case $slice in central) k=2; [ "$sc" = floor ] && k=3 ;; s1) k=1 ;; *) k=0 ;; esac; printf 'killed %s\nkilled+equivalent %s\n' "$k" "$k"; exit 0 ;;
+esac
+for id in $(ids "$slice"); do
+  if [ "$id" = 002-b ]; then
+    case $sc in timeout) sleep 6; continue ;; missing) continue ;; invalid) echo "INVALID $id: mutant does not build"; continue ;;
+      survived) echo "SURVIVED $id (f, suite s): the suite passed on the mutant"; continue ;; esac
+  fi
+  echo "KILLED $id (f, suite s): suite failed (rc 101)"; echo "TIME $id 0s"
+done
+exit 0
+FAKE
+chmod +x "$t/mu/tools/mutate.sh"; [ ! -f "$root/tools/mutate_slice.sh" ] || cp "$root/tools/mutate_slice.sh" "$t/mu/tools/"
 ck; printf '#!/bin/sh\nexit 0\n' > "$t/mu-bin/cargo"; chmod +x "$t/mu-bin/cargo"; git init -q "$t/mu" || fail "git init mu failed"
 mu() { "${fe[@]}" GATE_STEPS=mutants T="$t/logs" REPO="$t/mu" PATH="$t/mu-bin:$PATH" CARGO_TARGET_DIR="$t/mu-target" "$@" "$root/tools/full_gate.sh" "$tag" > /dev/null 2>&1; }
 mkdir -p "$t/mu-unmarked/debug/deps"; : > "$t/mu-unmarked/debug/deps/harness-deadbeef"
@@ -84,7 +106,20 @@ ck; tag=mu-foreign; mu env MUTATE_TARGET="$t/mu-foreign" && fail "mutants ran wi
 ck; grep -q SHARED "$t/logs/mu-foreign-mutants.log" || fail "mutants step does not name the SHARED MUTATE_TARGET: $(cat "$t/logs/mu-foreign-mutants.log")"
 ck; tag=mu-default; mu env || fail "mutants step failed on a fresh default MUTATE_TARGET: $(cat "$t/logs/mu-default-mutants.log")"
 ck; [ "$(cat "$t/mu-target/mutate/.worktree-owner" 2> /dev/null)" = "$(cd "$t/mu" && pwd -P)" ] || fail "default MUTATE_TARGET got no owner marker"
-st_done full_gate 72   # WANT: cases this script runs (tools/selftest_cases.sh)
+# 5. mutants per slice through tools/mutate_slice.sh (Spence-approved design, 2026-10-24): the gate must not trust the runner's exit code.
+# Each case runs the fail-open fake above; the mutants step must FAIL and say why. Failures are collected so a red run shows every miss.
+miss=""
+mcase() { # mcase SCENARIO ERE
+  ck; tag=mu-$1; if mu env FAKE_MUT="$1" MUTANT_BUDGET_S=1 MUTATE_SETUP_S=0; then miss+="[$1: gate exited 0] "; fi
+  ck; grep -qE -- "$2" "$t/logs/mu-$1-mutants.log" 2>/dev/null || miss+="[$1: mutants log lacks /$2/] "
+}
+mcase timeout 'TIMEOUT.*never ran: 002-b'
+mcase missing 'INCOMPLETE: 1 results for 2 ids.*missing: 002-b'
+mcase invalid 'FAIL INVALID: 002-b'
+mcase survived 'FAIL SURVIVED \(no equivalent entry\): 002-b'
+mcase floor 'FAIL BELOW floor'
+[ -z "$miss" ] || fail "mutants step did not catch: $miss"
+st_done full_gate 82   # WANT: cases this script runs (tools/selftest_cases.sh)
 # the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 from the caller's env (only the selftest fixture may use a 0 floor)
 grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -q 'env -u MUTATE_FLOOR_ZERO_OK tools/mutate\.sh' || fail "mutants step runs tools/mutate.sh without env -u MUTATE_FLOOR_ZERO_OK"
 echo "full_gate selftest: ok"
