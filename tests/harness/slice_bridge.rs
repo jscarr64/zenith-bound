@@ -535,6 +535,7 @@ fn raw(words: &[u64], exponent: i64, negative: bool) -> Result<ExactNum, String>
         negative,
         exponent,
         inexact: false,
+        op_inexact: false,
     };
     ExactNum::from_raw_parts(&parts)
         .map_err(|e| format!("from_raw_parts({:x?}, {}): {:?}", words, exponent, e))

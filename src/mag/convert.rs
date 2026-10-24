@@ -145,6 +145,7 @@ impl Mag {
             negative: false,
             exponent: exp.max(EXPONENT_MIN),
             inexact: false,
+            op_inexact: false,
         };
         ExactNum::from_raw_parts(&parts).map_err(|e| map_zf_error(OP, e))
     }
