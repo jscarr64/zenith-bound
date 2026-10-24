@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- L0a-2 edge rows (TEST_PLAN 8.1): `tests/harness/mag_rows.rs`, 6 tests: sqrt of 1, of powers of two and of all-ones mantissas (odd and
+  even exponent), mul of all-ones and of powers of two, and shift distances 0/63/64 in `Mag::finite`, `add_up` and `sub_lower`. New
+  mutants 181-S-sqrt-nosticky and 182-F-finite-minexp. Test floors raised 373 -> 379 (build-debug and build-release).
+
 - Test-count floor (Paul, 2026-10-23): new gate step `test-floor` runs `tools/test_floor.sh` on the build-debug and build-release logs.
   It fails if the summed `test result:` passed count is below the step's floor in `tools/test_floor.txt` (373 each), if there is no summary,
   or if fewer summaries than started test binaries appear (a truncated log; the 2052 gate on 7191a1f passed with 599 of 738). Raise a floor

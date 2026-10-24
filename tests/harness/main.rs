@@ -15,6 +15,7 @@ mod generators_selftest;
 mod goldens_selftest;
 mod grid_digests;
 mod mag_carry;
+mod mag_rows;
 mod mag_sort;
 mod modular_selftest;
 mod points_selftest;
