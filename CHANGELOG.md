@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Test-count floor (Paul, 2026-10-23): new gate step `test-floor` runs `tools/test_floor.sh` on the build-debug and build-release logs.
+  It fails if the summed `test result:` passed+failed is below the step's floor in `tools/test_floor.txt` (373 each), if there is no summary,
+  or if fewer summaries than started test binaries appear (a truncated log; the 2052 gate on 7191a1f passed with 599 of 738). Raise a floor
+  with the tests that add to it; lowering one needs a CHANGELOG note. Self-test: `tools/test_floor_selftest.sh`. poplog is unchanged (Rusty owns its guard).
+
 - `tools/mutate.sh` refuses a dirty tree (modified or untracked files; exit 2, `mutate: FAIL dirty tree`) and prints
   `mutate: testing committed HEAD <sha>` (Spence, 2026-10-23). Mutants run on a worktree of the committed HEAD: 2102-zb-mut180 reported
   180-C-cmp-zero-eq SURVIVED because it tested HEAD 7191a1f while the mag_sort tests were still uncommitted. Self-test: `tools/mutate_selftest.sh`

@@ -32,6 +32,8 @@ cd "${REPO:-$(cd "$(dirname "$0")/.." && pwd)}" || exit 2
 tag=${1:?usage: tools/full_gate.sh TAG}; : > "$T/$tag.rc"
 # NO VACUOUS PASS: every step starts with `require <tools>` (exit 127 naming the missing tool), and the scans go through no_hits, which
 # fails on a hit (rc 1) AND on a grep error or a missing grep (rc 2/127) instead of the old `! grep ... 2>/dev/null` (passed if grep was absent).
+# test-floor (tools/test_floor.sh, floors in tools/test_floor.txt) fails when build-debug/build-release logged fewer tests than the floor or a
+# binary without its `test result:` summary: a truncated step log cannot pass (Paul, 2026-10-23).
 # GATE_STEPS="a b" runs only the named steps (used by tools/full_gate_selftest.sh); unset runs all.
 require() { local c; for c in "$@"; do command -v "$c" > /dev/null 2>&1 || { echo "MISSING TOOL: $c (step cannot run)"; return 127; }; done; }
 no_hits() { # no_hits <exclude-ERE or ''> <grep args...>  (grep runs over the existing ones of src tests benches examples build.rs)
@@ -59,6 +61,7 @@ run target-dir "require git && tools/fresh_test_run.sh --claim"
 run build-tests "require cargo && cargo build --tests"
 run build-debug "require cargo && tools/fresh_test_run.sh cargo test -- --test-threads=\${RUST_TEST_THREADS:-8}"
 run build-release "require cargo && tools/fresh_test_run.sh cargo test --release -- --test-threads=\${RUST_TEST_THREADS:-8}"
+run test-floor "require awk grep && tools/test_floor_selftest.sh && tools/test_floor.sh build-debug \"$T/$tag-build-debug.log\" && tools/test_floor.sh build-release \"$T/$tag-build-release.log\""
 run rules-scan "require python3 git grep && tools/rules_scan_selftest.sh && tools/rules_scan.sh \${SCAN_ARGS:-\${RATCHET_BASE:-3c9f36f}..HEAD}"
 run fmt "require cargo rustfmt && cargo fmt --all -- --check"
 run clippy "require cargo cargo-clippy && cargo clippy --all-targets -- -D warnings"
