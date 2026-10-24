@@ -62,7 +62,10 @@ for d in tests/goldens/slices/*/; do
     echo "goldens-regen: slice $s: SHA256SUMS has neither entries nor a '# EMPTY' marker line"; rc=1
   else
     [ "$marked" = 0 ] || { echo "goldens-regen: slice $s: SHA256SUMS is marked '# EMPTY' but lists entries"; rc=1; }
-    bad=$(printf '%s\n' "$entries" | grep -v -E '^[0-9a-f]{64}  [^/[:space:]]+$' | head -3)
+    # grep -v rc 1 = every line valid (normal; must not trip ERR); rc 2 = grep itself failed (loud).
+    grc=0; bad=$(printf '%s\n' "$entries" | grep -v -E '^[0-9a-f]{64}  [^/[:space:]]+$') || grc=$?
+    case $grc in 0|1) ;; *) echo "goldens-regen: slice $s: grep failed (rc $grc) checking SHA256SUMS lines"; rc=1 ;; esac
+    bad=$(printf '%s\n' "$bad" | head -3)
     [ -z "$bad" ] || { echo "goldens-regen: slice $s: malformed SHA256SUMS line(s): $bad"; rc=1; }
     (cd "$d" && printf '%s\n' "$entries" | sha256sum --strict -c -) || { echo "goldens-regen: slice $s sha256sum -c FAILED"; rc=1; }
   fi
