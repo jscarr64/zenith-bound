@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Canonical full gate for zenith-bound. usage: tools/full_gate.sh TAG
 # Every step runs under `timeout` (STEP_TIMEOUT, default 20m); the rc of each step is written to $T/TAG.rc and its
-# output to $T/TAG-<step>.log (T defaults to /tmp/zb-gate-logs). REPO selects the checkout (default: this one);
+# output to $T/TAG-<step>.log (T defaults to $(zb_scratch)/zb-gate-logs, tools/scratch.sh: never /tmp). REPO selects the checkout (default: this one);
 # CARGO_TARGET_DIR is REQUIRED and belongs to one worktree (Paul, 2026-10-23: /tmp/target-<agent>-<worktree>, e.g.
 # /tmp/target-harper-zb-harper-s7); it may be reused across runs of that worktree. target-dir (right after toolchain, before any build)
 # fails if it is unset or owned by another worktree (marker $CARGO_TARGET_DIR/.worktree-owner, written by the first worktree to use it);
@@ -27,7 +27,7 @@
 set -u
 # PYTHONNOUSERSITE=1: nothing from ~/.local outside a venv (the golden generators run in ~/.local/oracle-venv; see tools/goldens_regen.sh).
 export PYTHONNOUSERSITE=1
-T=${T:-/tmp/zb-gate-logs}; mkdir -p "$T"
+T=${T:-$(zb_scratch)/zb-gate-logs}; mkdir -p "$T"
 cd "${REPO:-$(cd "$(dirname "$0")/.." && pwd)}" || exit 2
 tag=${1:?usage: tools/full_gate.sh TAG}; : > "$T/$tag.rc"
 # NO VACUOUS PASS: every step starts with `require <tools>` (exit 127 naming the missing tool), and the scans go through no_hits, which
@@ -71,12 +71,12 @@ run no-panic-scan "no_hits ':[0-9]+:\s*(//|\*)' -rn --include='*.rs' -E '\bunwra
 run no-clone-scan "no_hits ':[0-9]+:\s*(//|\*)' -rn --include='*.rs' -E '\.clone\(|\.clone_from\(|\.to_vec\(|\.cloned\(|\.copied\(|\.to_owned\(|Clone::clone|derive\([^)]*(Clone|Copy)|impl(<[^>]*>)?\s+(Clone|Copy)\s+for'"
 run derive-scan "no_hits '' -rPzl --include='*.rs' '#\\[derive\\([^)]*\\b(Clone|Copy)\\b'"
 run manifest-scan "no_hits ':[0-9]+:\s*(//|\*|//!)' -rn --include='*.rs' -F 'env!(\"CARGO_MANIFEST_DIR\")'"
-run gate-selftest "require mktemp ln sed grep wc stat tee touch && tools/full_gate_selftest.sh && tools/fresh_test_run_selftest.sh"
+run gate-selftest "require mktemp ln sed grep wc stat tee touch cargo git timeout && tools/full_gate_selftest.sh && tools/fresh_test_run_selftest.sh && tools/no_tmp_selftest.sh && tools/runlog_selftest.sh && tools/mutate_selftest.sh"
 run pubfn-coverage "require awk grep git && tools/pubfn_coverage_selftest.sh && tools/pubfn_coverage.sh"
-run goldens-regen "require sha256sum grep cmp && tools/goldens_regen.sh"
+run goldens-regen "require sha256sum grep cmp && tools/goldens_regen_selftest.sh && tools/goldens_regen.sh"
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"
-run mutants "require cargo git timeout grep && mt=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:?}/mutate} && CARGO_TARGET_DIR=\$mt tools/fresh_test_run.sh --claim && tools/mutate_selftest.sh && MUTATE_TARGET=\$mt tools/mutate.sh"
+run mutants "require cargo git timeout grep && mt=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:?}/mutate} && CARGO_TARGET_DIR=\$mt tools/fresh_test_run.sh --claim && tools/mutate_selftest.sh && MUTATE_TARGET=\$mt env -u MUTATE_FLOOR_ZERO_OK tools/mutate.sh"
 if [ "$gate_rc" = 0 ]; then echo "done" >> "$T/$tag.rc"; else echo "failed" >> "$T/$tag.rc"; fi
 exit "$gate_rc"

@@ -1,8 +1,8 @@
 diff --git a/src/error.rs b/src/error.rs
-index 97a3ab0..300c12c 100644
+index 4f2bc45..2777347 100644
 --- a/src/error.rs
 +++ b/src/error.rs
-@@ -95,7 +95,7 @@ impl BoundError {
+@@ -106,7 +106,7 @@ impl BoundError {
              BoundError::InvalidArgument { .. } => "invalid argument",
              BoundError::Domain { .. } => "input outside the domain",
              BoundError::Resource { .. } => "resource limit reached",
@@ -10,4 +10,4 @@ index 97a3ab0..300c12c 100644
 +            BoundError::NotPositiveDefinite { .. } => "matrix singular",
              BoundError::Singular { .. } => "matrix singular",
              BoundError::NotConverged { .. } => "iteration did not converge",
-         }
+             BoundError::DimensionMismatch { .. } => "dimensions do not match",

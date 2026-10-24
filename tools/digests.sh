@@ -68,6 +68,6 @@ do_compare() { # do_compare OUTDIR EXPECTED
 case "${1:-}" in
   run) if [ "$#" = 3 ]; then do_run "$2" "$3"; else do_run "$root/tools/digest_targets.txt" "${2:?usage: digests.sh run [MANIFEST] OUTDIR}"; fi ;;
   compare) do_compare "${2:?usage: digests.sh compare OUTDIR [EXPECTED]}" "${3:-$root/tools/digest_expected.txt}" ;;
-  all) w=$(mktemp -d /tmp/zb-digests.XXXXXX); runlog_on_exit "rm -rf \"$w\""; do_run "$root/tools/digest_targets.txt" "$w" && do_compare "$w" "$root/tools/digest_expected.txt" ;;
+  all) w=$(mktemp -d "$(zb_scratch)"/zb-digests.XXXXXX); runlog_on_exit "rm -rf \"$w\""; do_run "$root/tools/digest_targets.txt" "$w" && do_compare "$w" "$root/tools/digest_expected.txt" ;;
   *) echo "usage: tools/digests.sh run [MANIFEST] OUTDIR | compare OUTDIR [EXPECTED] | all"; exit 2 ;;
 esac
