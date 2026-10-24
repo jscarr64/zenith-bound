@@ -32,4 +32,4 @@ src/mag/convert.rs:Mag::to_exact_num	328-SUBEXP	bridge/328-SUBEXP.patch	harness
 src/mag/convert.rs:Mag::to_exact_num	329-SUBLOST	bridge/329-SUBLOST.patch	harness
 src/mag/convert.rs:Mag::to_exact_num	330-EMAXEQ	bridge/330-EMAXEQ.patch	harness
 src/mag/convert.rs:Mag::to_exact_num	331-SUBSHR	bridge/331-SUBSHR.patch	harness
-src/mag/convert.rs:Mag::from_exact_num	332-NANZERO	bridge/332-NANZERO.patch	harness
+src/mag/convert.rs:Mag::from_exact_num	332-ZEROINF	bridge/332-ZEROINF.patch	harness
