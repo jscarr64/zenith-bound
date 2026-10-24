@@ -38,6 +38,7 @@ fn small_works() {
     assert!(!is_small(10));
 }
 RS
+printf '/Cargo.lock\n/target\n' > .gitignore   # mutate.sh runs `cargo fetch` in the repo, which writes Cargo.lock
 git add -A; git commit -qm fixture
 mk() { # mk <name> <sed-expr>: a patch made by editing src/lib.rs, then reverting
   sed -i "$2" src/lib.rs; git diff > "tools/mutants/$1.patch"; git checkout -q src/lib.rs
@@ -141,8 +142,16 @@ out="$(MZERO= run)" && fail "a 0 mutant floor without MUTATE_FLOOR_ZERO_OK passe
 echo "$out" | grep -q "^mutate: FAIL BADCOUNT.*must be 1 or more" || fail "0 floor: wrong message: $out"
 printf '# empty\n' > "$r/tools/mutants/manifest.txt"; cm
 out="$(MFLOOR="$t/f.at" run)" && fail "0 mutants with a floor passed: $out"; echo "$out" | grep -c "0 mutants ran" > /dev/null || fail "0 mutants: wrong message: $out"
+# Paul (2026-10-24): a dependency fetch failure must never count as KILLED. mutate.sh fetches once up front (FAIL FETCH, exit 2, no
+# mutant runs) and builds/tests every mutant with --offline --frozen. The fixture's unfetchable git dependency is a missing local repo.
+setm m.killed; cp "$r/Cargo.toml" "$t/Cargo.toml.keep"
+printf 'nofetch = { git = "file://%s/no-such-repo" }\n' "$t" >> "$r/Cargo.toml"; cm
+out="$(run)" && fail "an unfetchable dependency passed: $out"
+echo "$out" | grep -q "^mutate: FAIL FETCH" || fail "fetch failure: no FAIL FETCH line: $out"
+echo "$out" | grep -q "^KILLED" && fail "fetch failure was counted as KILLED: $out"
+cp "$t/Cargo.toml.keep" "$r/Cargo.toml"; cm
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-want_cases=26; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+want_cases=27; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
 [ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
 echo "mutate selftest: ok ($ncases cases)"
