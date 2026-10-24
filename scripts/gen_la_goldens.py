@@ -42,7 +42,7 @@ SLICES = os.path.join(ROOT, "tests", "goldens", "slices")
 SLICE_OF = {"cholesky": "cholesky", "lu": "lu", "solve": "lu", "logdet": "lu", "qr": "qr", "gls": "gls", "eig": "eigen"}
 SLICE_ID = {"cholesky": "LA1", "lu": "LA2", "qr": "LA3", "gls": "LA4", "eigen": "LA5a"}
 GATE_MAX_DIM = 12
-GATE_EXTRA_BITS = ()   # extra Cholesky/QR enclosure widths on the gate tier only
+GATE_EXTRA_BITS = (4096,) # extra Cholesky/QR enclosure widths on the gate tier only
 GATE_MAX_BITS = 10 ** 4 + 64
 
 def is_heavy(*mats):
