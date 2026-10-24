@@ -711,22 +711,22 @@ What I could check: 2027-02-12 minus 2027-01-02 is 41 calendar days, which match
 
 ## 21. Build checklist (check items off as they land; each commit names the item id)
 
-_Audit 2026-10-23 (Harper, at 2d12c51): a box is ticked only where the named tool or test exists and runs in `tools/full_gate.sh`. Still open on purpose: S1 (`ZF_PIN` in `tests/common/seeds.rs` is still "pending"), S2/S3/S5 (partial), S14 (no `Ball` forbidden-impl scan), and every L-level item (each has rows still missing; L0a-2 carry rows landed at 2d12c51, permutation sort still missing)._
+_Audit 2026-10-23 (Harper, at 2d12c51): a box is ticked only where the named tool or test exists and runs in `tools/full_gate.sh`. Still open on purpose: S1 (`ZF_PIN` in `tests/common/seeds.rs` is still "pending"), S2/S3/S5 (partial), S12 (gate step exists; baseline empty until D2), S14 (no `Ball` forbidden-impl scan), and every L-level item (each has rows still missing; L0a-2 carry rows landed at 2d12c51, permutation sort still missing)._
 
 **Shared (S)**
 - [ ] S0 calibrate: time one op family in debug and release on Pop, set counts (D7)
 - [ ] S1 `tests/common/rng.rs` (splitmix64) and `seeds.rs` (BASE, per-suite seeds, generator version, zf pin SHA)  **Owner: Harper.** The L0 builder already committed SplitMix64 and draw generators in `tests/model/` (`fc5cbd3`): extend, do not duplicate (K17)
 - [ ] S2 `tests/common/generators.rs`: exponent-edge-weighted, mantissa patterns, controlled gaps, ball inputs, precision draws **Owner: unassigned** (Rusty declined, D1; not on Harper's list); part exists in `tests/model/draw.rs` (`fc5cbd3`)
 - [ ] S3 `tests/common/props.rs`: P1 to P10 and W1 to W6 checkers, `is_refusal` helper, `api.rs` wrapper (D10) Include Cassie's sample grid (`mid`, `mid ± r`, `mid ± r*j/8`, fixed-seed integer sample `mid + r*j/2^t`) in the P1 checker `[Cas-7]`
-- [x] S4 failure report line, `ZB_FUZZ_SEED`, `ZB_FUZZ_CASES`, `ZB_REPLAY`, deterministic shrinker  **Checked 2026-10-23 at 2d12c51:** tests/common/replay.rs + shrink.rs, tests/harness/replay_selftest.rs, shrink_selftest.rs.
+- [x] S4 failure report line, `ZB_FUZZ_SEED`, `ZB_FUZZ_CASES`, `ZB_REPLAY`, deterministic shrinker  **Checked 2026-10-23 at 4990e5b:** tests/common/replay.rs + shrink.rs, tests/harness/replay_selftest.rs, shrink_selftest.rs.
 - [ ] S5 model M1: gap-aware sound comparison and `MAX_ALIGN` handling, with self-tests that reject a wrong model
-- [x] S6 `tools/pubfn_coverage.sh`, exemptions file, `COVERS:` headers on existing tests, gate step  **Owner: Harper.**  **Checked 2026-10-23 at 2d12c51:** tools/pubfn_coverage.sh + pubfn_coverage_exempt.txt + pubfn_coverage_selftest.sh, gate step pubfn-coverage.
-- [x] S7 `tools/mutate.sh`, `tools/mutants/manifest.txt`, `EQUIVALENT.txt`, first 10 mutants  **Owner: Harper.**  **Checked 2026-10-23 at 2d12c51:** tools/mutate.sh + mutate_selftest.sh, tools/mutants/manifest.txt + EQUIVALENT.txt (176 patches), gate step mutants.
-- [x] S8 `scripts/goldlib.py`, `--check` mode, `tests/goldens/SHA256SUMS`, gate step `goldens-regen`  **Owner: Harper.**  **Checked 2026-10-23 at 2d12c51:** scripts/goldlib.py --check, tests/goldens/SHA256SUMS, tools/goldens_regen.sh, gate step goldens-regen.
-- [x] S9 rules-scan rule for `-(b-a)` / `.sub(..).neg()` plus self-test case (protected file path, section 16)  **Owner: Harper.**  **Checked 2026-10-23 at 2d12c51:** tools/rules_scan.py neg_sub_* rules, cases in tools/rules_scan_selftest.sh, gate step rules-scan.
-- [x] S10 clippy `wildcard_enum_match_arm` deny: check the tree stays clean first  **Checked 2026-10-23 at 2d12c51:** Cargo.toml wildcard_enum_match_arm = "deny", tools/wildcard_enum_selftest.sh, gate step wildcard-enum.
+- [x] S6 `tools/pubfn_coverage.sh`, exemptions file, `COVERS:` headers on existing tests, gate step  **Owner: Harper.**  **Checked 2026-10-23 at 4990e5b:** tools/pubfn_coverage.sh + pubfn_coverage_exempt.txt + pubfn_coverage_selftest.sh, gate step pubfn-coverage.
+- [x] S7 `tools/mutate.sh`, `tools/mutants/manifest.txt`, `EQUIVALENT.txt`, first 10 mutants  **Owner: Harper.**  **Checked 2026-10-23 at 4990e5b:** tools/mutate.sh + mutate_selftest.sh, tools/mutants/manifest.txt + EQUIVALENT.txt (176 patches), gate step mutants.
+- [x] S8 `scripts/goldlib.py`, `--check` mode, `tests/goldens/SHA256SUMS`, gate step `goldens-regen`  **Owner: Harper.**  **Checked 2026-10-23 at 4990e5b:** scripts/goldlib.py --check, tests/goldens/SHA256SUMS, tools/goldens_regen.sh, gate step goldens-regen.
+- [x] S9 rules-scan rule for `-(b-a)` / `.sub(..).neg()` plus self-test case (protected file path, section 16)  **Owner: Harper.**  **Checked 2026-10-23 at 4990e5b:** tools/rules_scan.py neg_sub_* rules, cases in tools/rules_scan_selftest.sh, gate step rules-scan.
+- [x] S10 clippy `wildcard_enum_match_arm` deny: check the tree stays clean first  **Checked 2026-10-23 at 4990e5b:** Cargo.toml wildcard_enum_match_arm = "deny", tools/wildcard_enum_selftest.sh, gate step wildcard-enum.
 - [ ] S11 zf-side oracle harness **Owner: unassigned** (Rusty declined, D1; not on Harper's list) (needs the zf pin)
-- [x] S12 tightness report and ratchet file  **Checked 2026-10-23 at 2d12c51:** tools/tightness_report.py + tightness_check.sh + tightness_selftest.sh, tools/tightness_baseline.txt (empty, PROVISIONAL until D2), gate step tightness.
+- [ ] S12 tightness report and ratchet file  **Open (Spence, 2026-10-23):** gate step exists; baseline empty until D2.
 - [ ] S13 cross-target grid-digest job (D8)
 - [ ] S14 whole-tree grep for forbidden impls on `Ball` (`PartialEq`, `PartialOrd`, `From<Ball>`, `From<f64>`), in the tools, no `trybuild` `[Cas-1]`
 - [x] S15 settle `Tri` semantics and the corner numbering (D14): done 2026-10-16 (CONTRACT 15.2, 10.2a to 10.2e); the `Tri` tests may now be written `[Cas-2]` `[Cas-6]`
