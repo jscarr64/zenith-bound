@@ -299,16 +299,28 @@ fn overflow_is_all_reals() -> Result<(), String> {
 }
 
 #[test]
-fn underflow_keeps_a_positive_radius() -> Result<(), String> {
-    // 2^(EMIN/2 - 2)^2 = 2^(EMIN - 4) lies below zf's normal range: the result encloses it and its radius is not 0.
-    let k = i64::from(EXPONENT_MIN / 2) - 2;
-    let x = || -> Result<Ball, String> { ok("tiny", Ball::exact(pow2(k)?, 53)) };
-    for (what, r) in [("mul", x()?.mul(&x()?, 53)), ("sqr", x()?.sqr(53))] {
-        let b = ok(what, r)?;
-        if b.rad().is_zero() {
-            return Err(format!("{}: underflow gave rad 0: {:?}", what, b));
+fn underflow_is_exact_or_enclosed() -> Result<(), String> {
+    // 2^(2k) for k near EMIN/2 lies in or below zf's bottom binade. zf keeps a shallow one exactly (EMIN with leading
+    // zero bits: rad 0 is then right, and the midpoint must be exactly 2^(2k)); a deeper one is lost, and then the radius
+    // must be positive and the ball must reach from 0 up past its midpoint (16.S1.2: bottom ε). Never a silent flush.
+    let half = i64::from(EXPONENT_MIN / 2);
+    for k in [half - 2, half - 40, half - 200, half - 5000] {
+        let x = || -> Result<Ball, String> { ok("tiny", Ball::exact(pow2(k)?, 53)) };
+        for (what, r) in [("mul", x()?.mul(&x()?, 53)), ("sqr", x()?.sqr(53))] {
+            let what = format!("{} k {}", what, k);
+            let b = ok(&what, r)?;
+            if b.rad().is_zero() {
+                let mut exact = pow2(k)?;
+                exact.set_inexact(false);
+                let sq = exact.mul_full_prec(&exact);
+                if sq.inexact_accumulated() || sq.is_zero() || b.mid().abs_cmp(&sq) != Some(0) || b.mid().is_negative() {
+                    return Err(format!("{}: rad 0 but the midpoint is not exactly 2^(2k): {:?}", what, b));
+                }
+            } else {
+                want_contains(&what, &b, &num(0))?;
+                want_contains(&what, &b, b.mid())?;
+            }
         }
-        want_contains(what, &b, &num(0))?;
     }
     Ok(())
 }
@@ -379,6 +391,15 @@ fn rand_ball(rng: &mut SplitMix64, prec: usize) -> Result<Ball, String> {
     ball(m, r, prec)
 }
 
+/// A random ball whose midpoint exponent lies within 200 of `e` (add/sub operands, see run_binary).
+fn near_ball(rng: &mut SplitMix64, e: i64, prec: usize) -> Result<Ball, String> {
+    let off = i64::try_from(rng.below(401)).map_err(|_| "off")?.checked_sub(200).ok_or("off")?;
+    let e = e.checked_add(off).ok_or("e")?;
+    let m = rand_mid(rng, e, prec)?;
+    let r = rand_rad(rng, e)?;
+    ball(m, r, prec)
+}
+
 /// Exact sample points of a ball: m, m - r, m + r, m + r/2 (only m when r is outside zf's range).
 fn points(b: &Ball) -> Result<Vec<ExactNum>, String> {
     let m = b.mid();
@@ -412,7 +433,13 @@ fn run_binary(op: &Op, seed: u64, cases: usize) -> Result<(), String> {
     let mut rng = SplitMix64::new(seed);
     for case in 0..cases {
         let prec = PRECS[usize::try_from(rng.below(9)).map_err(|_| "p")?];
-        let (a, b) = (rand_ball(&mut rng, prec)?, rand_ball(&mut rng, prec)?);
+        let a = rand_ball(&mut rng, prec)?;
+        // add/sub: b's exponent stays within 200 of a's. A gap of 2^29 made the exact oracle sum a 2^29-bit number
+        // (minutes per case) without testing anything new: past prec + 64 bits the smaller operand only feeds ε.
+        let b = match op {
+            Op::Add | Op::Sub => near_ball(&mut rng, a.mid().exponent().map_or(0, i64::from), prec)?,
+            Op::Mul | Op::MulExact | Op::Sqr | Op::Powi => rand_ball(&mut rng, prec)?,
+        };
         let (pa, pb) = (points(&a)?, points(&b)?);
         let n = rng.below(7).checked_add(1).ok_or("n")?;
         let what = format!("{:?} case {} prec {} a {:?} b {:?} n {}", op, case, prec, a, b, n);
@@ -525,7 +552,9 @@ fn containment_sqrt() -> Result<(), String> {
                     return Err(format!("{}: Strict accepted m - r < 0", what));
                 }
                 for x in pa.iter().filter(|x| !x.is_negative() || x.is_zero()) {
-                    let p = x.precision().unwrap_or(64).checked_add(128).ok_or("p")?;
+                    // The oracle brackets sqrt(x) 128 bits finer than BOTH the input and the target precision (case 69: a
+                    // 3264-bit x at prec 16384 was bracketed at only 3392 bits, far coarser than the ball's half ulp).
+                    let p = x.precision().unwrap_or(64).max(prec).checked_add(128).ok_or("p")?;
                     check(&what, &res, &x.sqrt(p, RoundingMode::Down))?;
                     check(&what, &res, &x.sqrt(p, RoundingMode::Up))?;
                 }
