@@ -26,6 +26,22 @@ for e in $STDOUT_GENERATORS; do
   { "$PY" "$g" > "$tmp/$f" && cmp "$tmp/$f" "tests/goldens/$f" && echo "check: OK $f"; } || { echo "goldens-regen: $g FAILED"; rc=1; }
 done
 (cd tests/goldens && sha256sum -c SHA256SUMS) || { echo "goldens-regen: sha256sum -c FAILED"; rc=1; }
+# per-slice golden dirs (S0, 2026-10-24): tests/goldens/slices/<slice>/ with its own GENERATORS and SHA256SUMS, so slices never share a file
+for d in tests/goldens/slices/*/; do
+  [ -d "$d" ] || continue
+  s=$(basename "$d")
+  [ -f "$d/SHA256SUMS" ] && [ -f "$d/GENERATORS" ] || { echo "goldens-regen: slice $s lacks SHA256SUMS or GENERATORS"; rc=1; continue; }
+  for g in $(grep -v -E '^[[:space:]]*(#|$)' "$d/GENERATORS"); do
+    runlog_step "$s-$(basename "$g" .py)" -- "$PY" "$g" --check "$tmp/slice-$s-$(basename "$g" .py)" || { echo "goldens-regen: $g FAILED"; rc=1; }
+  done
+  if grep -q -v -E '^[[:space:]]*(#|$)' "$d/SHA256SUMS"; then
+    (cd "$d" && grep -v -E '^[[:space:]]*(#|$)' SHA256SUMS | sha256sum -c -) || { echo "goldens-regen: slice $s sha256sum -c FAILED"; rc=1; }
+  fi
+  for f in "$d"*.txt; do
+    [ -f "$f" ] || continue
+    grep -q -E "^[0-9a-f]{64}  $(basename "$f")\$" "$d/SHA256SUMS" || { echo "goldens-regen: slice $s: $(basename "$f") is not in its SHA256SUMS"; rc=1; }
+  done
+done
 # every committed golden file must be listed in SHA256SUMS
 for f in tests/goldens/*.txt; do
   grep -q -E "^[0-9a-f]{64}  $(basename "$f")\$" tests/goldens/SHA256SUMS || { echo "goldens-regen: $(basename "$f") is not in SHA256SUMS"; rc=1; }

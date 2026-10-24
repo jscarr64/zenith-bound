@@ -20,6 +20,13 @@ floor=$(awk -F'\t' -v s="$step" '$1 == s { print $2; exit }' "$ff") || { echo "F
 # A CRLF row: strip the CR only to name it, then still FAIL (fail closed: a floor file edited on Windows must be fixed, not guessed at).
 case "$floor" in *$'\r') echo "FAIL BADCOUNT: $step: floor row ends in CR (CRLF line ending): '${floor%$'\r'}' in $ff; convert it to LF"; exit 1 ;; esac
 int floor "$floor"
+# per-slice shares (S0, 2026-10-24): tools/test_floor.d/<slice>.txt rows STEP<TAB>N (0 allowed) add to the central floor
+for sf in "$(dirname "$ff")"/test_floor.d/*.txt; do
+  [ -f "$sf" ] || continue
+  share=$(awk -F'\t' -v s="$step" '$1 == s { print $2; exit }' "$sf") || { echo "FAIL NOFLOOR: cannot read $sf"; exit 1; }
+  [ -n "$share" ] || { echo "FAIL NOFLOOR: $step has no row in $sf"; exit 1; }
+  int "share in $sf" "$share"; floor=$((floor + 10#$share))
+done
 # Only `passed` counts toward the floor: failed tests are not coverage (a red step fails on its own exit code).
 counts=$(awk '
   /^[ \t]*(Running|Doc-tests)[ \t]/ { st++ }
