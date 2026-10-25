@@ -1,0 +1,4 @@
+# Slice CB share of the mutant floor (added to ../floor.txt by tools/mutate.sh). Raise it with the slice's mutants.
+# Measured: pop-logs cassie/2026-10-25/0711-cb-mut-cball-ce84c7c (13 killed of 13).
+killed	13
+killed+equivalent	13
