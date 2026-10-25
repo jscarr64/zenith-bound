@@ -512,7 +512,9 @@ mod slice_matrix_nan_map {
     fn step_error(err: Option<Error>) -> Result<BoundError, String> {
         match rounded("nan_map", ExactNum::nan(err), 53) {
             Err(e) => Ok(e),
-            Ok(Step::Value(..)) | Ok(Step::Overflow) => Err(String::from("a NaN step did not error")),
+            Ok(Step::Value(..)) | Ok(Step::Overflow) => {
+                Err(String::from("a NaN step did not error"))
+            }
         }
     }
 
@@ -523,11 +525,14 @@ mod slice_matrix_nan_map {
             return Err(format!("DivisionByZero mapped to {e:?}"));
         }
         let e = step_error(Some(Error::InvalidArgument))?;
-        if !(matches!(e, BoundError::InvalidArgument { .. }) && e.detail() == "zf invalid argument") {
+        if !(matches!(e, BoundError::InvalidArgument { .. }) && e.detail() == "zf invalid argument")
+        {
             return Err(format!("InvalidArgument mapped to {e:?}"));
         }
         let e = step_error(None)?;
-        if !(matches!(e, BoundError::Representation { .. }) && e.detail() == "zf NaN without an error kind") {
+        if !(matches!(e, BoundError::Representation { .. })
+            && e.detail() == "zf NaN without an error kind")
+        {
             return Err(format!("kindless NaN mapped to {e:?}"));
         }
         Ok(())
