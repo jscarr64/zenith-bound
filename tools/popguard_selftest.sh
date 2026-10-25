@@ -8,6 +8,7 @@
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap popguard_selftest "$@"   # run log (tools/runlog.sh)
 set -u
+unset ZB_GATE_MODE GOLDENS_REGEN_ARGS   # fixtures run regular mode even inside a merge-gate run (gate 1707: inherited ZB_GATE_MODE=merge refused every fixture)
 here="$(cd "$(dirname "$0")" && pwd)"; repo="$(cd "$here/.." && pwd)"
 t="$(mktemp -d "$(zb_scratch)/popguard-selftest.XXXXXX")"; runlog_on_exit "rm -rf \"$t\""
 . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
@@ -22,7 +23,7 @@ export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 # fixture: one slice whose generator is a stub interpreter that only leaves a marker
 root="$t/r"; d="$root/tests/goldens/slices/x"; mkdir -p "$d"; printf 'gen_x.py\n' > "$d/GENERATORS"; printf '# EMPTY\n' > "$d/SHA256SUMS"
 stub="$t/stubpy"; printf '#!/bin/sh\ntouch "%s/ran"\n' "$t" > "$stub"; chmod +x "$stub"
-gr() { GOLDENS_ROOT="$root" GOLDENS_PYTHON="$stub" RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 "$@" "$here/goldens_regen.sh" --slices-only 2>&1; }
+gr() { GOLDENS_ROOT="$root" GOLDENS_PYTHON="$stub" RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 "$@" "$here/goldens_regen.sh" --slices-only --regen 2>&1; }   # --regen: python runs every call (an unchanged key would skip it, mode=cached)
 inscope() { local u="popslot-zbselftest-$$-$RANDOM.scope"; POPSLOT_SCOPE=$u systemd-run --user --scope -q --collect "--unit=$u" -p MemoryMax=256M -p MemorySwapMax=0 -- "$@"; }
 ck; rm -f "$t/ran"; out=$(gr env -u POPSLOT_SCOPE); rc=$?; [ "$rc" = 3 ] || fail "bare goldens_regen: want exit 3, got $rc: $out"
 ck; printf '%s\n' "$out" | grep -q "REFUSING.*goldens_regen.*popslot" || fail "bare goldens_regen: unclear refusal: $out"

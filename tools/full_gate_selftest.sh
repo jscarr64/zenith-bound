@@ -20,8 +20,9 @@ ck; for c in bash timeout mkdir date; do ln -s "$(command -v "$c")" "$t/bin/$c" 
 ck; "${fe[@]}" T="$t/logs" PATH="$t/bin" "$t/bin/bash" "$root/tools/full_gate.sh" stripped > "$t/stripped.out" 2>&1 && fail "stripped run (every step failing) exited 0"
 ck; grep -q '^failed$' "$t/logs/stripped.rc" || fail "stripped run did not finish with 'failed': $(cat "$t/stripped.out")"
 ck; grep -q '^done$' "$t/logs/stripped.rc" && fail "stripped run wrote 'done' although steps failed"
-steps=$(sed -n 's/^\([a-z-]*\)=[0-9]*$/\1/p' "$t/logs/stripped.rc")
-ck; [ "$(echo "$steps" | wc -w)" -ge 17 ] || fail "stripped run reported too few steps: $steps"
+steps=$(sed -n 's/^\([a-z0-9-]*\)=[0-9]*$/\1/p' "$t/logs/stripped.rc")
+ck; [ "$(echo "$steps" | wc -w)" -eq 25 ] || fail "stripped run reported $(echo "$steps" | wc -w) steps, want exactly 25 (bump this with every tools/full_gate.sh step): $steps"
+for need in gen-la-guard gen-la-heavy la4-red-markers; do ck; echo "$steps" | grep -qx "$need" || fail "gate step $need missing from tools/full_gate.sh"; done
 for s in $steps; do
   ck; [ "$(rcof stripped "$s")" != 0 ] || fail "step $s PASSED with its tools missing (vacuous pass)"
 done
@@ -170,7 +171,7 @@ ck; grep -q 'TIMEOUT' "$t/d-oom.out" && miss+="[oom: reported as TIMEOUT: $(grep
 ck; tag=mu-slicesbad; mu env FAKE_MUT=slicesbad && miss+="[slicesbad: gate exited 0] "
 ck; grep -q 'the --slices cause' "$t/logs/mu-slicesbad-mutants.log" 2>/dev/null || miss+="[slicesbad: step log lost the cause: $(cat "$t/logs/mu-slicesbad-mutants.log" 2>/dev/null)] "
 [ -z "$miss" ] || fail "mutants step did not catch: $miss"
-st_done full_gate 111   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done full_gate 117   # WANT: cases this script runs (tools/selftest_cases.sh)
 # the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 (only the selftest fixture may use a 0 floor), nor the selftest-only
 # MUTANT_TIMEOUT_S / MUTANT_BUDGET_S / MUTATE_SETUP_S / MUTATE_SH, in its --all run or in its --step-timeout computation
 u='env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice\.sh'
