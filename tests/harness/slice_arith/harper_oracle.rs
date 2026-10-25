@@ -55,6 +55,31 @@ fn value(v: &[&str], at: usize) -> Result<ExactNum, String> {
     row_val(s, e, m)
 }
 
+/// Whether the finite-or-infinite `rad` is at least `|field at| · 2^n`, comparing exponents in i128 (the scaled truth
+/// lies below the ExactNum and Mag ranges). A zero truth endpoint is an error: these rows carry the nonzero mpmath image.
+fn rad_covers_scaled(rad: &Mag, v: &[&str], at: usize, n: i64) -> Result<bool, String> {
+    let e = field(v, at.checked_add(1).ok_or("at")?)?;
+    let m = field(v, at.checked_add(2).ok_or("at")?)?;
+    if m == "0" {
+        return Err("truth endpoint is 0; want the nonzero mpmath image".into());
+    }
+    let (Some(rexp), Some(rmant)) = (rad.exp(), rad.mant()) else {
+        return Ok(rad.is_infinity());
+    };
+    let te: i64 = e.parse().map_err(|_| format!("exp {}", e))?;
+    let et = i128::from(te)
+        .checked_add(i128::from(n))
+        .ok_or("scaled exp")?;
+    let er = i128::from(rexp);
+    if er != et {
+        return Ok(er > et);
+    }
+    // Same exponent: compare the fractions 0.MANT in [1/2, 1).
+    let fr = ExactNum::from(rmant).mul_full_prec(&pow2(-64)?);
+    let fh = row_val("0", "0", m)?;
+    Ok(fr.partial_cmp(&fh) != Some(Ordering::Less))
+}
+
 /// Placeholder τ (TEST_PLAN 9): add/sub 2, mul/mul_exact/sqr/sqrt/div/inv/hypot 4, powi 2n, neg/abs/mul_2exp 1.
 fn tau(op: &str, n: i64) -> Result<i64, String> {
     match op {
@@ -168,6 +193,18 @@ fn check_row(line: &str) -> Result<(), String> {
                     res.rad(),
                     min_pos
                 ));
+            }
+            // [LO, HI] of this tag is the mpmath truth at scale 2^-N (its true exponent is below every number range);
+            // a mid-0 result contains it iff rad >= |LO|, |HI| scaled by 2^N.
+            for (end, at) in [("LO", 16usize), ("HI", 19usize)] {
+                if !rad_covers_scaled(res.rad(), &v, at, n)? {
+                    return Err(format!(
+                        "underflow rad {:?} does not cover truth {} * 2^{}",
+                        res.rad(),
+                        end,
+                        n
+                    ));
+                }
             }
             return if res.mid() == &num(0) {
                 Ok(())
