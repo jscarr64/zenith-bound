@@ -48,3 +48,5 @@ src/mag/convert.rs:map_zf_error	344-ZFEXPOVF	bridge/344-ZFEXPOVF.patch	harness
 src/mag/convert.rs:map_zf_error	345-ZFDIVZERO	bridge/345-ZFDIVZERO.patch	harness
 src/mag/convert.rs:map_zf_error	346-ZFRETRY	bridge/346-ZFRETRY.patch	harness
 src/mag/convert.rs:map_zf_error	347-ZFALLOC	bridge/347-ZFALLOC.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	348-URNAN	bridge/348-URNAN.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	349-ZNAN	bridge/349-ZNAN.patch	harness
