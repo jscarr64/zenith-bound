@@ -363,3 +363,34 @@ fn compare_both_radii_below_zf_range_touching_not_false() -> Result<(), String> 
     }
     Ok(())
 }
+
+/// Kills 343-FARSWAPSIGN: a = 0 ± 2^(EXPONENT_MIN − 150) (radius below zf's range), b = (2^(EXPONENT_MIN − 1) + 2^(EXPONENT_MIN −
+/// 200)) ± 2^(EXPONENT_MIN − 1) at 256 bits. lo(b) = 2^(EXPONENT_MIN − 200) < hi(a), so the balls overlap: True both ways.
+#[test]
+fn compare_tiny_radius_against_fine_subnormal_gap() -> Result<(), String> {
+    let e1 = EXPONENT_MIN.checked_sub(1).ok_or("e1")?;
+    // 2^(EXPONENT_MIN − 200) is below pow2's range; an exact product of two in-range powers gives it as a wide subnormal.
+    let h = EXPONENT_MIN.checked_div(2).ok_or("h")?;
+    let fine = pow2(h.checked_sub(100).ok_or("h1")?)?.mul_full_prec(&pow2(
+        EXPONENT_MIN
+            .checked_sub(h)
+            .and_then(|v| v.checked_sub(100))
+            .ok_or("h2")?,
+    )?);
+    let m2 = pow2(e1)?.add_full_prec(&fine);
+    let a = ball(
+        num(0),
+        mag(TOP, EXPONENT_MIN.checked_sub(149).ok_or("e149")?)?,
+        256,
+    )?;
+    let b = ball(m2, mag(TOP, EXPONENT_MIN)?, 256)?;
+    for (what, t) in [("a b", a.overlaps(&b)), ("b a", b.overlaps(&a))] {
+        if t != Tri::True {
+            return Err(format!(
+                "{}: overlapping balls with a fine subnormal gap gave {:?}",
+                what, t
+            ));
+        }
+    }
+    Ok(())
+}
