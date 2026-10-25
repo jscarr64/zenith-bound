@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- pubfn_coverage empty exempt list (harper, 2026-10-25, Spence): the exempt load used `grep -v` to drop comments and blanks; on the shipped comment-only list grep selects nothing and exits 1, so under pipefail the ERR trap logged `ERR rc=1 line=119 cmd=sort -u > "$tmp/exempt"` in passing runs. The load is now an awk filter (exit 0 on zero entries, a read error exits 2) and the check prints `exempt list is empty` or `exempt list: N items`. Selftest +7 cases (22): a two-entry list with comments must be read (and the same tree FAILS UNCOVERED with an empty list), and an empty list is reported and logs no ERR (log harper/2026-10-25/1410-full_gate.log). Red-first: pop-logs harper/2026-10-25/1409-pubfn_coverage_selftest.log and 1409-pubfn_coverage_selftest-2580107.log.
 - MagArray accessor coverage (harper, 2026-10-25): 6 harness tests in tests/harness/slice_matrix.rs (`s6_magarray_*`) assert exact shape, rank, len, is_empty, as_slice order and into_parts round-trip for rank 0, 1-D, N-D and zero-length dims, plus from_mags InvalidArgument rejections (rank-0 count, length mismatch, [0] with 1, shape overflow). COVERS now names MagArray::shape, rank, len, is_empty, as_slice, into_parts; pubfn-coverage drops them (log harper/2026-10-25/1220-full_gate.log). Red-first: a wrong [1,2,3] expectation (23) failed s6_magarray_nd_accessors_row_major.
 
 

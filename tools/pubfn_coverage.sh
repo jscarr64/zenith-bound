@@ -115,11 +115,17 @@ fi
 cut -f2 "$tmp/covers" | sort -u > "$tmp/covered_names"
 
 # ---- 3. exemptions -------------------------------------------------------------------------------------------------------
+# Entries are the first tab field of each non-comment, non-blank line. awk, not grep -v: a list with no entries (the shipped
+# state) is a normal case, and grep exits 1 on zero selected lines, which under pipefail made the load "fail" (ERR line 119).
+# awk exits 0 on zero entries and non-zero only on a real read error, which stops the check.
 if [ -f "$exempt" ]; then
-  grep -v -E '^[[:space:]]*(#|$)' "$exempt" | cut -f1 | sort -u > "$tmp/exempt"
+  awk -F "\t" '$0 !~ /^[[:space:]]*(#|$)/ { print $1 }' "$exempt" | sort -u > "$tmp/exempt" \
+    || { echo "pubfn_coverage: cannot read exempt list $exempt"; exit 2; }
 else
   : > "$tmp/exempt"
 fi
+nex=$(wc -l < "$tmp/exempt" | tr -d ' ')
+if [ "$nex" = 0 ]; then echo "pubfn_coverage: exempt list is empty ($exempt)"; else echo "pubfn_coverage: exempt list: $nex items ($exempt)"; fi
 
 fail=0
 # UNCOVERED
