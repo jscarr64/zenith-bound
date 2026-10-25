@@ -252,7 +252,22 @@ def stream_rows(out):
                 got += 1
                 n += 1
                 print("progress: op=%s case=p%d-%d tier=gate row_s=%.3f elapsed_s=%.3f" % (op, prec, got, time.monotonic() - t1, time.monotonic() - t0), flush=True)
+    for op, prec, a in extra_rows():
+        t1 = time.monotonic()
+        out.write(make_row(op, prec, a, None) + "\n")
+        out.flush()
+        n += 1
+        print("progress: op=%s case=p%d-extra tier=gate row_s=%.3f elapsed_s=%.3f" % (op, prec, time.monotonic() - t1, time.monotonic() - t0), flush=True)
     return n
+
+
+def extra_rows():
+    """Hand-picked rows appended after the drawn stream (the drawn rows stay byte-identical).
+    sqr p=53, A = 1 + (0 +- 2)i: a WIDE imaginary radius with an exact real part, so the 16.CB.10 second-order term
+    rad(im)^2 = 4 dominates the re part (RREF_re is one ulp) and a sqr reference without it cannot cover re = 1 - [0, 4]
+    (Spence, 2026-10-25)."""
+    zero = (0, 0, 0)
+    return [("sqr", 53, (canon(0, 1, 0), zero, zero, canon(0, 1, 1)))]
 
 
 def write_file(path):
