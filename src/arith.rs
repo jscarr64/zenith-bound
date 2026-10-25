@@ -437,13 +437,7 @@ fn endpoint_signs(a: &Ball, b: &Ball) -> Option<(Ordering, Ordering)> {
         Ordering::Greater => Ordering::Less,
         Ordering::Equal if r2.is_zero() => Ordering::Equal,
         Ordering::Equal => Ordering::Less,
-        Ordering::Less => {
-            let mut rn = r1.to_exact_num().ok()?;
-            if d.is_negative() {
-                rn.inv_sign();
-            }
-            r2.cmp_exact_diff(&d, &rn)?.reverse()
-        }
+        Ordering::Less => far_side(r1, r2, &d)?,
     };
     let sd = if d.is_zero() {
         Ordering::Equal
@@ -463,6 +457,31 @@ fn endpoint_signs(a: &Ball, b: &Ball) -> Option<(Ordering, Ordering)> {
         c.reverse()
     };
     Some((hi, lo))
+}
+
+/// `|D|` against `r1 + r2` once `|D| > r1`: `r2` against `||D| − r1|` (16.S2.2) with `r1` converted, or, when `r1` lies
+/// outside zenith-float's range, the same with the roles swapped. `None` when neither radius converts.
+fn far_side(r1: &Mag, r2: &Mag, d: &ExactNum) -> Option<Ordering> {
+    if r2.is_zero() {
+        return Some(Ordering::Greater);
+    }
+    if let Ok(mut rn) = r1.to_exact_num() {
+        if d.is_negative() {
+            rn.inv_sign();
+        }
+        return Some(r2.cmp_exact_diff(d, &rn)?.reverse());
+    }
+    // r1 > 0 is outside the range, so |D| against r2 alone first.
+    match r2.cmp_exact_num(d)? {
+        Ordering::Greater | Ordering::Equal => Some(Ordering::Less),
+        Ordering::Less => {
+            let mut sn = r2.to_exact_num().ok()?;
+            if d.is_negative() {
+                sn.inv_sign();
+            }
+            Some(r1.cmp_exact_diff(d, &sn)?.reverse())
+        }
+    }
 }
 
 /// `r · 2^k` rounded up with a checked exponent: exact while the exponent fits, `Infinity` on overflow and the smallest

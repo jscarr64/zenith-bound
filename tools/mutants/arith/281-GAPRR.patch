@@ -1,13 +1,13 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index 4a73525..e590e77 100644
+index 5817ee4..4732471 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -442,7 +442,7 @@ fn endpoint_signs(a: &Ball, b: &Ball) -> Option<(Ordering, Ordering)> {
-             if d.is_negative() {
-                 rn.inv_sign();
-             }
--            r2.cmp_exact_diff(&d, &rn)?.reverse()
-+            r2.cmp_exact_diff(&d, &rn)?
+@@ -469,7 +469,7 @@ fn far_side(r1: &Mag, r2: &Mag, d: &ExactNum) -> Option<Ordering> {
+         if d.is_negative() {
+             rn.inv_sign();
          }
-     };
-     let sd = if d.is_zero() {
+-        return Some(r2.cmp_exact_diff(d, &rn)?.reverse());
++        return Some(r2.cmp_exact_diff(d, &rn)?);
+     }
+     // r1 > 0 is outside the range, so |D| against r2 alone first.
+     match r2.cmp_exact_num(d)? {

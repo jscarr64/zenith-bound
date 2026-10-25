@@ -41,3 +41,10 @@ src/bridge.rs:constant_ball	337-HALFSHIFT	bridge/337-HALFSHIFT.patch	harness
 src/bridge.rs:constant_ball	338-WIDEPREC	bridge/338-WIDEPREC.patch	harness
 src/bridge.rs:constant_ball	339-UPONLY	bridge/339-UPONLY.patch	harness
 src/bridge.rs:constant_ball	340-PPLUS	bridge/340-PPLUS.patch	harness
+src/arith.rs:far_side	341-FARR2ZERO	bridge/341-FARR2ZERO.patch	harness
+src/arith.rs:far_side	342-FARSWAP	bridge/342-FARSWAP.patch	harness
+src/arith.rs:far_side	343-FARSWAPSIGN	bridge/343-FARSWAPSIGN.patch	harness
+src/mag/convert.rs:map_zf_error	344-ZFEXPOVF	bridge/344-ZFEXPOVF.patch	harness
+src/mag/convert.rs:map_zf_error	345-ZFDIVZERO	bridge/345-ZFDIVZERO.patch	harness
+src/mag/convert.rs:map_zf_error	346-ZFRETRY	bridge/346-ZFRETRY.patch	harness
+src/mag/convert.rs:map_zf_error	347-ZFALLOC	bridge/347-ZFALLOC.patch	harness
