@@ -9,13 +9,34 @@ use core::cmp::Ordering;
 use zenith_bound::ball::Ball;
 use zenith_bound::mag::Mag;
 use zenith_bound::policy::DomainPolicy;
-use zenith_float_num::ExactNum;
+use zenith_float_num::{ExactNum, EXPONENT_MIN};
 
-use super::{num, ok, row_val, want_contains};
+use super::{num, ok, pow2, row_val, want_contains};
 use crate::common::goldens::golden_dir;
 
-/// Rows the generator writes: 11 ops × 124 (add sub mul mul_exact sqr powi sqrt neg div inv hypot). A short file fails, so the check cannot pass on a truncated golden.
-const WANT_ROWS: usize = 1364;
+/// Rows the generator writes (v3): 13 random ops × 124 (add sub mul mul_exact sqr powi sqrt neg div inv hypot abs mul_2exp),
+/// then the fixed sections: 36 powi rows, 32 mul_2exp exponent-edge rows, 22 hypot edge rows. A short file fails.
+const WANT_RANDOM: usize = 1612;
+const WANT_POWI_FIXED: usize = 36;
+const WANT_ROWS: usize = 1702;
+/// Exact row count per OP tag (every row is checked; a tag count off by one fails).
+const WANT_PER_OP: [(&str, usize); 15] = [
+    ("add", 124),
+    ("sub", 124),
+    ("mul", 124),
+    ("mul_exact", 124),
+    ("sqr", 124),
+    ("powi", 160),
+    ("sqrt", 124),
+    ("neg", 124),
+    ("div", 124),
+    ("inv", 124),
+    ("hypot", 146),
+    ("abs", 124),
+    ("mul_2exp", 140),
+    ("mul_2exp_ovf", 8),
+    ("mul_2exp_unf", 8),
+];
 const LAMBDA: i64 = 1024;
 
 fn field<'a>(v: &[&'a str], i: usize) -> Result<&'a str, String> {
@@ -32,15 +53,14 @@ fn value(v: &[&str], at: usize) -> Result<ExactNum, String> {
     row_val(s, e, m)
 }
 
-/// Placeholder τ (TEST_PLAN 9): add/sub 2, mul/mul_exact/sqr/sqrt/div/inv/hypot 4, powi 2n, neg 1.
-fn tau(op: &str, n: u64) -> Result<i64, String> {
+/// Placeholder τ (TEST_PLAN 9): add/sub 2, mul/mul_exact/sqr/sqrt/div/inv/hypot 4, powi 2n, neg/abs/mul_2exp 1.
+fn tau(op: &str, n: i64) -> Result<i64, String> {
     match op {
         "add" | "sub" => Ok(2),
         "mul" | "mul_exact" | "sqr" | "sqrt" | "div" | "inv" | "hypot" => Ok(4),
-        "neg" => Ok(1),
-        "powi" => i64::try_from(n)
-            .ok()
-            .and_then(|k| k.checked_mul(2))
+        "neg" | "abs" | "mul_2exp" => Ok(1),
+        "powi" => n
+            .checked_mul(2)
             .map(|k| k.max(1))
             .ok_or_else(|| format!("powi n {}", n)),
         other => Err(format!("unknown op {}", other)),
@@ -62,19 +82,22 @@ fn within(rad: &Mag, k: i64, rref: &ExactNum) -> Result<bool, String> {
     }
 }
 
-fn run(op: &str, prec: usize, n: u64, a: Ball, b: &Ball, bmid: &ExactNum) -> Result<Ball, String> {
+fn run(op: &str, prec: usize, k: i64, a: Ball, b: &Ball, bmid: &ExactNum) -> Result<Ball, String> {
+    let n = || u64::try_from(k).map_err(|_| format!("{}: N {} is negative", op, k));
     match op {
         "add" => ok("add", a.add(b, prec)),
         "sub" => ok("sub", a.sub(b, prec)),
         "mul" => ok("mul", a.mul(b, prec)),
         "mul_exact" => ok("mul_exact", a.mul_exact(bmid, prec)),
         "sqr" => ok("sqr", a.sqr(prec)),
-        "powi" => ok("powi", a.powi(n, prec)),
+        "powi" => ok("powi", a.powi(n()?, prec)),
         "neg" => Ok(-a),
         "sqrt" => ok("sqrt", a.sqrt(prec, &DomainPolicy::Clip)),
         "div" => ok("div", a.div(b, prec)),
         "inv" => ok("inv", a.inv(prec)),
         "hypot" => ok("hypot", a.hypot(b, prec)),
+        "abs" => ok("abs", a.abs(prec)),
+        "mul_2exp" | "mul_2exp_ovf" | "mul_2exp_unf" => ok("mul_2exp", a.mul_2exp(k, prec)),
         other => Err(format!("unknown op {}", other)),
     }
 }
@@ -86,7 +109,7 @@ fn check_row(line: &str) -> Result<(), String> {
     }
     let op = field(&v, 0)?;
     let prec: usize = field(&v, 1)?.parse().map_err(|_| "prec")?;
-    let n: u64 = field(&v, 3)?.parse().map_err(|_| "n")?;
+    let n: i64 = field(&v, 3)?.parse().map_err(|_| "n")?;
     let amid = value(&v, 4)?;
     let arad = Mag::from_exact_num(&value(&v, 7)?);
     let bmid = value(&v, 10)?;
@@ -119,7 +142,22 @@ fn check_row(line: &str) -> Result<(), String> {
     } else {
         None
     };
+    let sign_neg = amid.partial_cmp(&num(0)) == Some(Ordering::Less);
     let res = run(op, prec, n, a, &b, &bmid)?;
+    // Out-of-range mul_2exp outcomes (decided by mpmath on the exact exponent): overflow is all reals; underflow
+    // must contain [0, 2^(EXPONENT_MIN - 1)] on the input's side (the exact image lies strictly inside it).
+    if op == "mul_2exp_ovf" {
+        return if res.is_informative() {
+            Err(format!("overflow row gave an informative ball {:?}", res))
+        } else {
+            Ok(())
+        };
+    }
+    if op == "mul_2exp_unf" {
+        let bmax = pow2(EXPONENT_MIN.checked_sub(1).ok_or("EXPONENT_MIN - 1")?)?;
+        want_contains("underflow 0", &res, &num(0))?;
+        return want_contains("underflow bound", &res, &if sign_neg { -bmax } else { bmax });
+    }
     want_contains("LO", &res, &lo)?;
     want_contains("HI", &res, &hi)?;
     let t = tau(op, n)?;
@@ -159,12 +197,19 @@ fn oracle_rows_contained_tight_loose() -> Result<(), String> {
         .join("arith_oracle_rows.txt");
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{:?}: {}", path, e))?;
     let mut rows = 0usize;
+    let mut per_op = WANT_PER_OP.map(|(op, _)| (op, 0usize));
     let mut bad: Vec<String> = Vec::new();
     for line in text
         .lines()
         .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
     {
         rows = rows.checked_add(1).ok_or("rows")?;
+        let tag = line.split_whitespace().next().ok_or("empty row")?;
+        let slot = per_op
+            .iter_mut()
+            .find(|(op, _)| *op == tag)
+            .ok_or_else(|| format!("row {}: unknown OP {}", rows, tag))?;
+        slot.1 = slot.1.checked_add(1).ok_or("op count")?;
         if let Err(e) = check_row(line) {
             bad.push(format!(
                 "row {}: {}\n    row: {}",
@@ -176,6 +221,11 @@ fn oracle_rows_contained_tight_loose() -> Result<(), String> {
     }
     if rows != WANT_ROWS {
         return Err(format!("{} rows, want {}", rows, WANT_ROWS));
+    }
+    for ((op, got), (_, want)) in per_op.iter().zip(WANT_PER_OP.iter()) {
+        if got != want {
+            return Err(format!("{} {} rows, want {}", got, op, want));
+        }
     }
     if !bad.is_empty() {
         let shown: Vec<&String> = bad.iter().take(12).collect();
@@ -222,4 +272,62 @@ fn hypot_wide_rows_1313_1343_tight() -> Result<(), String> {
     } else {
         Err(format!("{:#?}", bad))
     }
+}
+
+/// Fixed powi section (Spence): data rows WANT_RANDOM+1 .. +36 are (1 + (37j+5)·2^-20)^n, n = 100 + 71j + i, at precision
+/// [53, 64, 113][i], j in 0..12 (the loop of powi_exact_input_within_one_ulp). The exact power is LO = HI (mpmath.iv checked
+/// at W + 64); RREF = U = one ulp of the power at PREC. Each row must pass check_row, and an informative result must have
+/// rad <= RREF (one ulp); at least 30 of the 36 are informative, as in the loop.
+#[test]
+fn powi_fixed_rows_within_one_ulp() -> Result<(), String> {
+    let path = golden_dir()
+        .join("slices")
+        .join("arith")
+        .join("arith_oracle_rows.txt");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{:?}: {}", path, e))?;
+    let rows: Vec<&str> = text
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .skip(WANT_RANDOM)
+        .take(WANT_POWI_FIXED)
+        .collect();
+    if rows.len() != WANT_POWI_FIXED {
+        return Err(format!("{} fixed powi rows, want {}", rows.len(), WANT_POWI_FIXED));
+    }
+    let mut informative = 0usize;
+    for (at, (line, (i, j))) in rows
+        .iter()
+        .zip([53usize, 64, 113].into_iter().enumerate().flat_map(|(i, p)| (0..12i64).map(move |j| (i, (p, j)))))
+        .enumerate()
+    {
+        let (prec, jj) = j;
+        let ii = i64::try_from(i).map_err(|_| "i")?;
+        let n = jj
+            .checked_mul(71)
+            .and_then(|v| v.checked_add(100))
+            .and_then(|v| v.checked_add(ii))
+            .ok_or("n")?;
+        let v: Vec<&str> = line.split_whitespace().collect();
+        let want_head = format!("powi {}", prec);
+        if !line.starts_with(&want_head) || field(&v, 3)? != n.to_string() {
+            return Err(format!("fixed powi row {}: want {} n {}: {}", at, want_head, n, line));
+        }
+        check_row(line).map_err(|e| format!("fixed powi row {} (p {} n {}): {}", at, prec, n, e))?;
+        let a = ok(
+            "a",
+            Ball::from_mid_rad(value(&v, 4)?, Mag::from_exact_num(&value(&v, 7)?), prec),
+        )?;
+        let res = ok("powi", a.powi(u64::try_from(n).map_err(|_| "n")?, prec))?;
+        if !res.is_informative() {
+            continue;
+        }
+        if !within(res.rad(), 1, &value(&v, 22)?)? {
+            return Err(format!("fixed powi p {} n {}: rad {:?} > one ulp RREF", prec, n, res.rad()));
+        }
+        informative = informative.checked_add(1).ok_or("c")?;
+    }
+    if informative < 30 {
+        return Err(format!("only {} informative fixed powi rows", informative));
+    }
+    Ok(())
 }

@@ -291,6 +291,25 @@ def selftest():
     must_raise(RowRejected, lambda: make_row("div", 8, 0, one, ZERO, one, two), "a div divisor reaching 0")
     must_raise(SystemExit, lambda: rss_check(RSS_CAP_KIB + 1), "a peak RSS over the cap")
     rss_check(RSS_CAP_KIB)
+    # v3 (Spence/Paul): hard-fail containment. A correct inward row passes and counts exactly one check; a rounding slip
+    # (LO nudged DOWN one ulp at W, outside the true image) must be rejected even though it is within the old 2-ulp tolerance.
+    before = CHECKS[0]
+    w8 = 2 * 8 + 64
+    cross_check("add", 8, 0, w8, Fraction(1), Fraction(1, 2), Fraction(1), Fraction(1, 2), Fraction(1), Fraction(3))
+    must_raise(Disagreement, lambda: cross_check("add", 8, 0, w8, Fraction(1), Fraction(1, 2), Fraction(1), Fraction(1, 2),
+                                                 Fraction(1) - ulp(Fraction(1), w8), Fraction(3)), "LO slipped one ulp outward")
+    must_raise(Disagreement, lambda: cross_check("add", 8, 0, w8, Fraction(1), Fraction(1, 2), Fraction(1), Fraction(1, 2),
+                                                 Fraction(1), Fraction(3) + ulp(Fraction(3), w8)), "HI slipped one ulp outward")
+    if CHECKS[0] - before != 1:
+        raise SystemExit("gen_arith_oracle selftest: %d passing containment checks, want exactly 1" % (CHECKS[0] - before))
+    want3 = [
+        (lohi("abs", 0, neg_one, half)[:2], (Fraction(1, 2), Fraction(3, 2)), "abs [-1+-1/2]"),
+        (lohi("abs", 0, half, one)[:2], (0, Fraction(3, 2)), "abs [1/2+-1] straddles 0"),
+        (lohi("mul_2exp", -3, neg_one, half)[:2], (Fraction(-3, 16), Fraction(-1, 16)), "mul_2exp [-1+-1/2]*2^-3"),
+    ]
+    for got, exp, what in want3:
+        if got != exp:
+            raise SystemExit("gen_arith_oracle selftest: %s: got %s want %s" % (what, got, exp))
     # tools/goldens_regen.sh passes --skip-heavy to every slice generator in regen-gate mode (01af08d); S1 has no heavy rows, so it must parse
     if parse_args(["--check", "D", "--skip-heavy"]) != ("check", "D", None) or parse_args(["--check", "D"]) != ("check", "D", None):
         raise SystemExit("gen_arith_oracle selftest: --check DIR [--skip-heavy] not accepted")
