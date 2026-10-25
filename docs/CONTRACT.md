@@ -209,9 +209,99 @@ Owner: slice S1 (Spence). Code: `src/arith.rs`. Tests: `tests/harness/slice_arit
 
 ### Slice S2 (`src/bridge.rs`)
 
-_Empty (S0 stub). Owner: slice S2._
+Owner: slice S2 (Rusty). Status: **draft for Spence's ack, not normative yet** (section 16 rule). Tests: `tests/harness/slice_bridge.rs`. Goldens (if any): `tests/goldens/slices/bridge/`. Mutants 300-399 (`tools/mutants/manifest.d/bridge.txt`). zenith-float pin: `829f112` (O21).
 
-Scope moved in (2026-10-24): TEST_PLAN L0a-4, `Mag::cmp_exact_num` (clause 4.2) and `Mag::cmp_exact_diff` (the exact diff-compare of 15.2 and 10.2c), with the `from_exact_num(_lower)` / `to_exact_num` sets and P9. Clauses to be written by S2.
+Scope moved in (2026-10-24): TEST_PLAN L0a-4, `Mag::cmp_exact_num` (clause 4.2) and `Mag::cmp_exact_diff` (the exact diff-compare of 15.2 and 10.2c), with the `from_exact_num(_lower)` / `to_exact_num` sets and P9.
+
+- **16.S2.0 What exists, where the code lives.** `Mag::from_exact_num`, `Mag::from_exact_num_lower` and `Mag::to_exact_num` already exist in `src/mag/convert.rs` (`b7a799c`, L0b unit 2; tests in `tests/mag/convert.rs`). S2 adopts them as they are and does not reimplement them: they stay in `src/mag/convert.rs`, because they build values through the private `Mag::from_canonical`. These calls are fed by an `ExactNum`'s parts, not by another `Mag`, so they are outside `sanctioned_rebuild_count` (O18-C). The two comparisons are new and go in `src/bridge.rs` as inherent `impl Mag` methods built on the public `Mag` accessors and zenith-float's exact ops. S1 already has the same logic as private helpers in `src/arith.rs`: `cmp_abs_rad` is `cmp_exact_num` and `gaps` is `cmp_exact_diff`. Once S2 lands, S1 calls the S2 methods and deletes its helpers in the same change (one primitive, 15.2). The zenith-float functions used are `ExactNum::top_u64_mantissa_and_sticky`, `ExactNum::from_mag_parts`, `abs_cmp`, `add_full_prec`, `sub_full_prec`, `is_nan`, `is_inf` and `is_negative` at `829f112`. No new zenith-float API is needed.
+- **16.S2.1 `from_exact_num(x: &ExactNum) -> Mag` (infallible, rounds up).** The result is the least `Mag` ≥ `|x|` (14.1).
+  - **Sign:** the sign of `x` is ignored, and both `−0` and `+0` give the canonical zero (2.3).
+  - **Rounding:** a finite nonzero `x` is read through `top_u64_mantissa_and_sticky` as `(mant, sticky, exp)`. Without sticky the result is exactly `Finite { exp, mant }`. With sticky it is `mant + 1`, and a carry out of `u64::MAX` gives `Finite { exp + 1, 2^63 }`.
+  - **Subnormal:** a subnormal `x` is normalised exactly, since its `exp` is below `EXPONENT_MIN` and fits `i64`.
+  - **Range:** every zenith-float exponent fits the `Mag` range. The top is `EXPONENT_MAX + 1 < i64::MAX` and the bottom is `EXPONENT_MIN − MAX_PRECISION > i64::MIN`, so there is no `Representation` error and no underflow.
+  - **Infinity:** the `exp + 1` overflow arm returns `Infinity` (3.3). It cannot be reached at this pin but is kept.
+  - **NaN/Inf:** a NaN or `±Inf` `x` gives `Infinity` (3.3).
+  - **Precision loss:** the only loss is the rounding to 64 bits, and it is bounded by one `Mag` ulp: the result's predecessor is below `|x|`.
+- **16.S2.2 `from_exact_num_lower(x: &ExactNum) -> Mag` (infallible, rounds down).** The result is the greatest `Mag` ≤ `|x|` (14.2): `Finite { exp, mant }` from the same parts, with the sticky bits dropped.
+  - **Sign, zero and subnormal:** handled as in 16.S2.1.
+  - **NaN/Inf:** a NaN or `±Inf` `x` gives the canonical zero (3.4), the sound lower bound.
+  - **No underflow:** a nonzero finite `x` never gives zero, because every zenith-float magnitude is ≥ `min_pos`. So the 14.2 zero-iff rule reduces to "zero iff `x` is zero, NaN or Inf".
+  - **Gap to the upper bound:** `from_exact_num_lower(x) ≤ from_exact_num(x)`. They are equal iff `|x|` has at most 64 significant bits (sticky false), and otherwise they differ by exactly one `Mag` ulp.
+- **16.S2.3 `to_exact_num(&self) -> Result<ExactNum, BoundError>` (exact or error).**
+  - **Success:** `Ok` holds exactly `value(self)` (1.2) as a positive `ExactNum` at precision 64 (always exact, since a `Mag` mantissa has 64 bits), with `inexact() == false`. It is never rounded.
+  - **Zero:** the canonical zero gives `+0`.
+  - **Errors:** each is `BoundError::Representation { op: "Mag::to_exact_num", .. }`, never a wrapped, saturated or rounded value:
+    - `Infinity`.
+    - An exponent above `EXPONENT_MAX` (zenith-float's `ExponentOverflow`).
+    - A value with any bit below zenith-float's smallest subnormal `2^(EXPONENT_MIN − 64)` (zenith-float's `InvalidArgument`) (O21).
+  - **Error mapping:** at this pin `from_mag_parts` can return only those two errors. The other arms of `map_zf_error` (`DivisionByZero` maps to `Domain`; `PrecisionRetryExhausted` and `MemoryAllocation` map to `Resource`) cannot be reached and are kept as the O2 table's mapping.
+  - **Callers:** a caller that needs an upper bound on a radius outside the range uses `Mag` arithmetic or `Infinity` (O21), not this function.
+- **16.S2.4 Round-trip and P9.**
+  - (a) For every finite `Mag` `m` that `to_exact_num` accepts: `from_exact_num(&to_exact_num(m)?) == m` and `from_exact_num_lower(&to_exact_num(m)?) == m` (lossless).
+  - (b) P9: for every `ExactNum` `x` that is not NaN or Inf, `from_exact_num(x).to_exact_num()` is either `Ok(u)` with `u.abs_cmp(x) ≥ 0` (decided exactly, no rounding) or `Err(Representation)`. The error can occur only when the carry of 16.S2.1 crosses `EXPONENT_MAX`, which is unreachable at this pin. Likewise `from_exact_num_lower(x)` gives `Ok(l)` with `l.abs_cmp(x) ≤ 0`.
+  - (c) Monotone: `|x| ≤ |y|` implies `from_exact_num(x) ≤ from_exact_num(y)`, and the same holds for `_lower`.
+- **16.S2.5 `cmp_exact_num(&self, x: &ExactNum) -> Option<Ordering>`.** This is the order of `value(self)` against `|x|`, decided exactly with no rounding and without building `self` as an `ExactNum` when it is outside zenith-float's range. This is the clause 4.2 test: `|m_b| ≤ r_b` is `r_b.cmp_exact_num(m_b) != Some(Less)`.
+  - **Zero:** canonical zero against `±0` is `Equal`, and against a nonzero `x` it is `Less`. A nonzero `self` against `±0` is `Greater`. These go by sign only (2.3).
+  - **In range:** when `to_exact_num` succeeds, the result is `abs_cmp`.
+  - **Out of range:** when `self` is outside zenith-float's range it differs from every finite `|x|`, and the result is decided by `from_exact_num_lower(x) > self` (`Less`) or `from_exact_num(x) < self` (`Greater`). Because `self` lies outside the range, one of the two always holds, so the result is `Some` for every finite `x` and finite `self`.
+  - **None:** returned iff `x` is NaN or `±Inf`, or `self` is `Infinity`. `Infinity` is a bound, not a number (14.5 caveat), and callers treat `None` as undecided. At the clause 4.2 call site `Ball` never holds an Inf midpoint (6.2), and `r_b = Infinity` counts as touching 0.
+- **16.S2.6 `cmp_exact_diff(a: &ExactNum, b: &ExactNum, r: &Mag, s: &Mag) -> Option<Ordering>` (associated fn).** This is the order of `a − b` against `r + s` (that is, the sign of `(a − b) − (r + s)`), decided exactly. `a − b` and `r + s` are formed with `sub_full_prec` and `add_full_prec` (exact) or an equivalent exact method, never with `add_up` or any rounded sum (10.2c, 15.2, D14).
+  - **Tri uses:** with `D = m1 − m2` and `R = r1 + r2`, the sign of `D − R` is `cmp_exact_diff(m1, m2, r1, r2)`, and the sign of `D + R` is the reverse of `cmp_exact_diff(m2, m1, r1, r2)`.
+  - **10.2c uses:** pass `s = Mag::zero()`. `|m| + r ≤ 1` is `cmp_exact_diff(1, |m|, r, 0) ∈ {Greater, Equal}`, with `|m|` read as `−m` when `m` is negative and no rounding. `acosh`'s `m − r ≥ 1` is `cmp_exact_diff(m, 1, r, 0) ∈ {Greater, Equal}`.
+  - **None:** returned when `a` or `b` is NaN or `±Inf`, or when `r` or `s` is `Infinity` (D14: an `Infinity` radius is undecided).
+  - **Out of range:** it may also return `None` when `r` or `s` is outside zenith-float's range and the `Mag`-bound test (as in 16.S2.5, applied to `|a − b|` and to `r + s` bounded by `add_up`/`add_lower`) does not decide the order. `None` is sound, since it means `Unknown` or `Resource`.
+  - **Must decide:** it must return `Some` for every input where `a`, `b` are finite, `r`, `s` are finite and both `r` and `s` are inside zenith-float's range.
+- **16.S2.7 Code rules (shared).**
+  - **Borrowing:** every parameter is borrowed (`&ExactNum`, `&Mag`), as O9 and 15.1 require for `Mag`. These functions make no copy, call no `*_ref` zenith-float op and add no `from_canonical` site fed by a `Mag` (O18-C).
+  - **Banned constructs:** no floating-point type or literal, no `as` cast (exponents move through `i64::try_from`, `checked_*` or `i128`), no `unsafe`, no `clone`, no `unwrap` or `expect`, and no panic. Exponent arithmetic is checked (3.1).
+  - **Ordering:** the zero checks come first (2.3).
+  - **Determinism:** results are deterministic across targets (13.1), because `top_u64_mantissa_and_sticky` does not depend on the word size.
+- **16.S2.8 Test obligations** (in `tests/harness/slice_bridge.rs`; the existing `tests/mag/convert.rs` rows stay and are cited, not duplicated).
+  - **Oracles.**
+    - Every check uses pure exact arithmetic: the independent `u128`/`i128` integer model in `tests/model/direct.rs` (extended as M1 for the comparisons) and zenith-float's exact `abs_cmp`, `add_full_prec` and `sub_full_prec`.
+    - **No mpmath golds are needed:** every quantity is a dyadic rational, and each function is either exact or a one-step directed rounding of the top 64 bits.
+    - An optional cross-check of decimal-sourced rows is not required by any clause.
+  - **Edge rows.**
+    - **Conversions (16.S2.1 to 16.S2.4):**
+      - zero and `−0`;
+      - NaN and `±Inf` (up gives `Infinity`, down gives zero);
+      - mantissa `2^63`, `2^63 + 1` and all ones, with and without sticky;
+      - the carry at all ones (`exp + 1`, `2^63`);
+      - zenith-float values of 63, 64, 65 and 128 significant bits;
+      - `EXPONENT_MAX`, `EXPONENT_MIN`, subnormals down to `2^(EXPONENT_MIN − p)` for `p ∈ {64, 128, 1024}`;
+      - `to_exact_num` at `exp = EXPONENT_MAX` and `EXPONENT_MAX + 1`, at the subnormal grid edge and one below it, and at `i64::MIN`, `i64::MAX` and `Infinity` (each `Ok` exact or `Representation`, as the clause says).
+    - **cmp_exact_num (16.S2.5):**
+      - ties (`Equal` for `x = ±value(self)`);
+      - one ulp either side at 64 bits and at 65+ bits (`x` wider than a `Mag`);
+      - a zero radius;
+      - an `Infinity` radius (`None`);
+      - radius exponents at `EXPONENT_MAX + 1 ..= i64::MAX` and `i64::MIN ..= EXPONENT_MIN − 65`, decided without building the radius.
+    - **cmp_exact_diff (16.S2.6):** the same set, plus:
+      - `a = b`;
+      - the touching edges `a − b = r + s` (`Equal`);
+      - cancellation `a ≈ b` with 1000-bit operands;
+      - `r` or `s` zero;
+      - mixed signs;
+      - the 10.2c rows `|m| + r = 1` and `m − r = 1`;
+      - one out-of-range radius against an in-range one;
+      - an `Infinity` radius (`None`).
+  - **Properties** (P-numbers from TEST_PLAN; gate seeds, deep tier as section 1):
+    - P9 and 16.S2.4 (a) to (c) over `draw_exp`/`draw_mant`/`draw_mag` and `ExactNum`s of 1 to 4 words;
+    - `from_exact_num_lower ≤ from_exact_num`, within one ulp, equal iff the model says exact;
+    - `cmp_exact_num` antisymmetric against the model and consistent with `Mag: Ord` through `from_exact_num` when `x` is a `Mag` value;
+    - `cmp_exact_diff(a, b, r, s)` equals the model sign;
+    - swapping `(r, s)` changes nothing;
+    - `cmp_exact_diff(a, b, r, 0)` agrees with `cmp_exact_num` when `a − b ≥ 0`.
+  - **Mutants (300-399):**
+    - sticky ignored;
+    - carry dropped;
+    - `+1` on the lower path;
+    - NaN mapped to zero on the up path or to `Infinity` on the down path;
+    - sign not ignored;
+    - `Equal` arms swapped;
+    - out-of-range fallback inverted;
+    - `add_up` substituted for the exact sum;
+    - `None` for an `Infinity` radius replaced by `Less`.
 
 ### Slice S3 (`src/elementary.rs`)
 
