@@ -1,11 +1,9 @@
-diff --git a/src/arith.rs b/src/arith.rs
-index 4ed7629..4cbe88b 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -320,13 +320,13 @@ impl Ball {
+@@ -322,13 +322,13 @@
          check_prec(OP, prec)?;
          let (m, r) = (self.mid(), self.rad());
-         match cmp_abs_rad(m, r) {
+         match r.cmp_exact_num(m).map(Ordering::reverse) {
 -            Some(Ordering::Greater | Ordering::Equal) => {
 +            Some(Ordering::Greater) => {
                  // round(|m|) as one product (-1 or 1)·m, so `m` is borrowed, not consumed (O14-W).

@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -45,7 +45,7 @@
+             || a.is_inf()
+             || b.is_nan()
+             || b.is_inf()
+-            || r.is_infinity()
++            || false
+             || s.is_infinity()
+         {
+             return None;

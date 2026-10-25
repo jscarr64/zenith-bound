@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -14,7 +14,7 @@
+     /// `Infinity` `self`. A `self` outside zenith-float's range is never built as an `ExactNum`: it is compared with the
+     /// round-down and round-up `Mag` bounds of `|x|`.
+     pub fn cmp_exact_num(&self, x: &ExactNum) -> Option<Ordering> {
+-        if x.is_nan() || x.is_inf() || self.is_infinity() {
++        if x.is_nan() || x.is_inf() {
+             return None;
+         }
+         match (self.is_zero(), x.is_zero()) {

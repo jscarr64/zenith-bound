@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -158,7 +158,7 @@
+             return Some(Ordering::Greater);
+         }
+         if n_lo > p_up {
+-            return Some(Ordering::Less);
++            return Some(Ordering::Greater);
+         }
+         let (first, second) = if i > j { (i, j) } else { (j, i) };
+         let t1 = ts.swap_remove(first);

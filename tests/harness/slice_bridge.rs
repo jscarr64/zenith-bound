@@ -59,6 +59,12 @@ fn exact_p(n: &Num, p: usize) -> Result<ExactNum, String> {
             } else {
                 acc.add_full_prec(&t)
             };
+            if acc.is_zero() {
+                return Err(format!(
+                    "zf could not hold the exact sum at word exp {} (subnormal flush)",
+                    e
+                ));
+            }
         }
         e = e.checked_sub(64).ok_or("word exponent underflow")?;
     }
@@ -425,13 +431,11 @@ fn cmp_exact_num_edges() -> Result<(), String> {
     case_n(&r, &sub, 1024, E)?;
     case_n(&mag(TOP + 1, EXPONENT_MIN - 1023)?, &sub, 1024, G)?;
     case_n(&mag(ONES, EXPONENT_MIN - 1024)?, &sub, 1024, L)?;
-    case_n(&r, &num(false, &[TOP, TOP], EXPONENT_MIN - 900), 1024, L)?;
-    case_n(
-        &mag(TOP + 1, EXPONENT_MIN - 900)?,
-        &num(false, &[TOP, TOP], EXPONENT_MIN - 900),
-        1024,
-        G,
-    )?;
+    // single-word subnormals: zf 829f112 add_full_prec flushes a subnormal sum to zero, so exact_p cannot build two words here
+    let sub900 = num(false, &[TOP | 1], EXPONENT_MIN - 900);
+    case_n(&r, &sub900, 1024, L)?;
+    case_n(&mag(TOP + 2, EXPONENT_MIN - 900)?, &sub900, 1024, G)?;
+    case_n(&mag(TOP, EXPONENT_MIN - 900)?, &sub900, 1024, L)?;
     Ok(())
 }
 

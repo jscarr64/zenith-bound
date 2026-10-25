@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -24,7 +24,7 @@
+             (false, false) => {}
+         }
+         if let Ok(sn) = self.to_exact_num() {
+-            return sn.abs_cmp(x).map(|c| c.cmp(&0));
++            return sn.abs_cmp(x).map(|c| 0.cmp(&c));
+         }
+         // `self` is off zenith-float's grid, so `self = |x|` only when `|x|` is a `Mag` (lower == upper bound).
+         let lo = Mag::from_exact_num_lower(x);

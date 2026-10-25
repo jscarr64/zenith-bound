@@ -6,6 +6,11 @@
   `Mag::cmp_exact_diff(&ExactNum, &ExactNum, &Mag, &Mag)` (`a − b` against `r + s`), both exact, borrow-only, `None` only for NaN/Inf or an
   `Infinity` radius (and, for the diff, an undecided out-of-range radius). Tests: tests/harness/slice_bridge.rs with the exact model
   tests/model/bridge.rs, cross-checked against Python `fractions.Fraction` rows (scripts/gen_bridge_rows.py, tests/goldens/slices/bridge/bridge_rows.txt).
+- S2 implementation: S1 (`src/arith.rs`) now calls `Mag::cmp_exact_num` / `Mag::cmp_exact_diff`; its `gaps` and `cmp_abs_rad` helpers are deleted
+  (16.S2.0). Behaviour change: a finite radius outside zf's range no longer makes `overlaps` Unknown when the `Mag` bounds decide it
+  (`0 ± 2^huge` overlaps `1` is now True). `cmp_exact_diff` also returns `None` when an exact partial sum would land in zf's subnormal
+  range (zf `add_full_prec` flushes it to zero), never a wrong order. Mutants: S1 patches regenerated in place (217, 279-282 re-homed),
+  bridge mutants 300-321.
 - S1 borrowing, option B (2026-10-24, Jeff): `Ball::sqr`, `inv`, `sqrt`, `hypot`, `powi` and `abs` take `&self` (API change; callers
   no longer give up the ball). `sqr` uses `mul_full_prec` and its per-operation `inexact()` flag; `abs` rounds `|m|` as
   `ExactNum::from(±1).mul(m)`. `add`, `sub`, `mul`, `mul_exact`, `div`, `mul_2exp`, `neg` stay by value until zenith-float has

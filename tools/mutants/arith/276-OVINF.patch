@@ -1,13 +1,11 @@
-diff --git a/src/arith.rs b/src/arith.rs
-index 1f8372d..df751fb 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -399,7 +399,7 @@ impl Ball {
+@@ -424,7 +424,7 @@
      /// everything.
      pub fn overlaps(&self, other: &Ball) -> Tri {
          if self.rad().is_infinity() || other.rad().is_infinity() {
 -            return Tri::True;
 +            return Tri::Unknown;
          }
-         match gaps(self, other) {
-             Some((Ordering::Less, _) | (_, Ordering::Greater)) => Tri::False,
+         let r = self.rad();
+         let s = other.rad();

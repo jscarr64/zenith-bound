@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -133,7 +133,7 @@
+             } else {
+                 (&mut n_lo, &mut n_up, &mut in_)
+             };
+-            if lo > *side_lo {
++            if lo < *side_lo {
+                 *side_lo = lo;
+             }
+             *side_up = side_up.add_up(&up);

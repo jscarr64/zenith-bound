@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -192,7 +192,7 @@
+ /// The out-of-range radius case of 16.S2.6: decide by `Mag` bounds of `a − b` and `r + s`, or `None`.
+ fn bound_diff(a: &ExactNum, b: &ExactNum, r: &Mag, s: &Mag) -> Option<Ordering> {
+     // r + s > 0 here (a zero radius is in range), so a ≤ b decides Less.
+-    if a.compare(b).is_some_and(|c| c <= 0) {
++    if a.compare(b).is_some_and(|c| c < 0) {
+         return Some(Ordering::Less);
+     }
+     // a > b: |a − b| = a − b. Bound it from the parts with the signs of a and b.

@@ -185,7 +185,7 @@ impl Ball {
                 Ball::all_reals(prec)
             };
         }
-        let Some(ord) = cmp_abs_rad(m, r) else {
+        let Some(ord) = r.cmp_exact_num(m).map(Ordering::reverse) else {
             return Err(BoundError::Resource {
                 op: OP,
                 detail: "cannot decide the sign of m - r",
@@ -321,7 +321,7 @@ impl Ball {
         const OP: &str = "Ball::abs";
         check_prec(OP, prec)?;
         let (m, r) = (self.mid(), self.rad());
-        match cmp_abs_rad(m, r) {
+        match r.cmp_exact_num(m).map(Ordering::reverse) {
             Some(Ordering::Greater | Ordering::Equal) => {
                 // round(|m|) as one product (-1 or 1)·m, so `m` is borrowed, not consumed (O14-W).
                 let sign = if m.is_negative() { -1i64 } else { 1i64 };
@@ -356,21 +356,33 @@ impl Ball {
 
     /// `self < other` decided by exact endpoint comparison (CONTRACT 15.2, D14, 16.S1.11).
     pub fn lt(&self, other: &Ball) -> Tri {
-        match gaps(self, other) {
-            Some((Ordering::Less, _)) => Tri::True,
+        let r = self.rad();
+        let s = other.rad();
+        let (hi, lo) = (
+            Mag::cmp_exact_diff(other.mid(), self.mid(), r, s).map(Ordering::reverse),
+            Mag::cmp_exact_diff(self.mid(), other.mid(), r, s),
+        );
+        match (hi, lo) {
+            (Some(Ordering::Less), _) => Tri::True,
             // lo(a) >= hi(b): every point of `a` is >= every point of `b`, so `a < b` is certainly False, also when the
             // balls only touch (R > 0, lo(a) = hi(b)).
-            Some((_, Ordering::Greater | Ordering::Equal)) => Tri::False,
-            Some((Ordering::Equal | Ordering::Greater, Ordering::Less)) | None => Tri::Unknown,
+            (_, Some(Ordering::Greater | Ordering::Equal)) => Tri::False,
+            _ => Tri::Unknown,
         }
     }
 
     /// `self ≤ other` decided by exact endpoint comparison (CONTRACT 15.2, D14, 16.S1.11).
     pub fn le(&self, other: &Ball) -> Tri {
-        match gaps(self, other) {
-            Some((Ordering::Less | Ordering::Equal, _)) => Tri::True,
-            Some((Ordering::Greater, Ordering::Greater)) => Tri::False,
-            Some((Ordering::Greater, Ordering::Equal | Ordering::Less)) | None => Tri::Unknown,
+        let r = self.rad();
+        let s = other.rad();
+        let (hi, lo) = (
+            Mag::cmp_exact_diff(other.mid(), self.mid(), r, s).map(Ordering::reverse),
+            Mag::cmp_exact_diff(self.mid(), other.mid(), r, s),
+        );
+        match (hi, lo) {
+            (Some(Ordering::Less | Ordering::Equal), _) => Tri::True,
+            (_, Some(Ordering::Greater)) => Tri::False,
+            _ => Tri::Unknown,
         }
     }
 
@@ -386,11 +398,16 @@ impl Ball {
 
     /// Value equality: `True` only for two exact equal points, `False` for disjoint balls (CONTRACT 15.2, 16.S1.11).
     pub fn eq(&self, other: &Ball) -> Tri {
-        match gaps(self, other) {
-            Some((Ordering::Equal, Ordering::Equal)) => Tri::True,
-            Some((Ordering::Less, _) | (_, Ordering::Greater)) => Tri::False,
-            Some((Ordering::Equal | Ordering::Greater, Ordering::Equal | Ordering::Less))
-            | None => Tri::Unknown,
+        let r = self.rad();
+        let s = other.rad();
+        let (hi, lo) = (
+            Mag::cmp_exact_diff(other.mid(), self.mid(), r, s).map(Ordering::reverse),
+            Mag::cmp_exact_diff(self.mid(), other.mid(), r, s),
+        );
+        match (hi, lo) {
+            (Some(Ordering::Equal), Some(Ordering::Equal)) => Tri::True,
+            (Some(Ordering::Less), _) | (_, Some(Ordering::Greater)) => Tri::False,
+            _ => Tri::Unknown,
         }
     }
 
@@ -409,27 +426,20 @@ impl Ball {
         if self.rad().is_infinity() || other.rad().is_infinity() {
             return Tri::True;
         }
-        match gaps(self, other) {
-            Some((Ordering::Less, _) | (_, Ordering::Greater)) => Tri::False,
-            Some((Ordering::Equal | Ordering::Greater, Ordering::Equal | Ordering::Less)) => {
+        let r = self.rad();
+        let s = other.rad();
+        let (hi, lo) = (
+            Mag::cmp_exact_diff(other.mid(), self.mid(), r, s).map(Ordering::reverse),
+            Mag::cmp_exact_diff(self.mid(), other.mid(), r, s),
+        );
+        match (hi, lo) {
+            (Some(Ordering::Less), _) | (_, Some(Ordering::Greater)) => Tri::False,
+            (Some(Ordering::Equal | Ordering::Greater), Some(Ordering::Equal | Ordering::Less)) => {
                 Tri::True
             }
-            None => Tri::Unknown,
+            _ => Tri::Unknown,
         }
     }
-}
-
-/// The one comparison primitive (CONTRACT 15.2): with `D = m1 − m2` and `R = r1 + r2` computed exactly, the signs of
-/// `D + R` (`hi(a) − lo(b)`) and `D − R` (`lo(a) − hi(b)`). `None` (any doubt) for an `Infinity` radius, a radius
-/// outside zenith-float's range, or a difference zenith-float cannot hold.
-fn gaps(a: &Ball, b: &Ball) -> Option<(Ordering, Ordering)> {
-    let (ra, rb) = (a.rad().to_exact_num().ok()?, b.rad().to_exact_num().ok()?);
-    let d = a.mid().sub_full_prec(b.mid());
-    let rr = ra.add_full_prec(&rb);
-    let zero = ExactNum::from(0i64);
-    let hi = d.add_full_prec(&rr).partial_cmp(&zero)?;
-    let lo = d.sub_full_prec(&rr).partial_cmp(&zero)?;
-    Some((hi, lo))
 }
 
 /// `r · 2^k` rounded up with a checked exponent: exact while the exponent fits, `Infinity` on overflow and the smallest
@@ -458,7 +468,7 @@ fn mag_mul_2exp_up(r: &Mag, k: i64) -> Mag {
 
 /// A lower bound on `min |m ± r|` at `wp` bits: 0 when the ball reaches 0, else `|m| - r` rounded toward 0.
 fn abs_lower(m: &ExactNum, r: &Mag, rn: &ExactNum, wp: Precision) -> ExactNum {
-    match cmp_abs_rad(m, r) {
+    match r.cmp_exact_num(m).map(Ordering::reverse) {
         Some(Ordering::Greater) => {
             let x = ExactNum::from(1i64).mul(m, wp, RoundingMode::ToZero);
             if m.is_negative() {
@@ -486,7 +496,7 @@ fn clear_of_zero(n: &ExactNum, s: &Mag) -> Option<Mag> {
     if s.is_infinity() {
         return None;
     }
-    match cmp_abs_rad(n, s) {
+    match s.cmp_exact_num(n).map(Ordering::reverse) {
         Some(Ordering::Greater) => Some(Mag::from_exact_num_lower(n)),
         Some(Ordering::Equal | Ordering::Less) | None => None,
     }
@@ -499,23 +509,6 @@ fn endpoint_ball(op: &'static str, u: Mag, prec: Precision) -> BoundResult<Ball>
     match (u.to_exact_num(), ExactNum::from_mag_parts(HALF_MANT, 0, 64)) {
         (Ok(un), Ok(h)) => finish(op, un.mul(&h, prec, MID_RM), &u_half, prec, false),
         (Err(_), _) | (_, Err(_)) => Ball::from_mid_rad(ExactNum::from(0i64), u, prec),
-    }
-}
-
-/// `|m|` against `r`, decided exactly; `None` only if neither the exact path nor the `Mag` bounds decide it.
-fn cmp_abs_rad(m: &ExactNum, r: &Mag) -> Option<Ordering> {
-    match r.to_exact_num() {
-        Ok(rn) => m.abs_cmp(&rn).map(|c| c.cmp(&0)),
-        // r is outside zenith-float's exponent range, so it differs from every zenith-float value; bound |m| by Mag.
-        Err(_) => {
-            if *r < Mag::from_exact_num_lower(m) {
-                Some(Ordering::Greater)
-            } else if *r > Mag::from_exact_num(m) {
-                Some(Ordering::Less)
-            } else {
-                None
-            }
-        }
     }
 }
 

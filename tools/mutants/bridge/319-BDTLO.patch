@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -211,7 +211,7 @@
+         (true, false) => return Some(Ordering::Less),
+     };
+     let t_up = r.add_up(s);
+-    let t_lo = if *r > *s { r } else { s };
++    let t_lo = if *r > *s { s } else { r };
+     if d_lo > t_up {
+         Some(Ordering::Greater)
+     } else if d_up < *t_lo {

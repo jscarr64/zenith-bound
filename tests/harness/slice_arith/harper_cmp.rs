@@ -97,14 +97,15 @@ fn compare_infinite_and_out_of_range_radius() -> Result<(), String> {
     want_cmp("all vs 1", &all()?, &pt(1, P)?, [U, U, U, U, U, U, T])?;
     want_cmp("1 vs all", &pt(1, P)?, &all()?, [U, U, U, U, U, U, T])?;
     want_cmp("all vs all", &all()?, &all()?, [U, U, U, U, U, U, T])?;
-    // a finite radius outside zf's range: undecidable, overlaps Unknown, never False (277).
+    // a finite radius outside zf's range: orders undecidable; since S2 (16.S2.6) the Mag bounds decide overlaps True, never
+    // False (277).
     let huge = ball(
         num(1),
         mag(TOP, EXPONENT_MAX.checked_add(8).ok_or("emax+8")?)?,
         P,
     )?;
-    want_cmp("huge vs 1", &huge, &pt(1, P)?, [U, U, U, U, U, U, U])?;
-    want_cmp("1 vs huge", &pt(1, P)?, &huge, [U, U, U, U, U, U, U])
+    want_cmp("huge vs 1", &huge, &pt(1, P)?, [U, U, U, U, U, U, T])?;
+    want_cmp("1 vs huge", &pt(1, P)?, &huge, [U, U, U, U, U, U, T])
 }
 
 #[test]

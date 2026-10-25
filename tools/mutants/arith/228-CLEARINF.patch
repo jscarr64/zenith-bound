@@ -1,14 +1,12 @@
-diff --git a/src/arith.rs b/src/arith.rs
-index 50bf6cd..20a6742 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -283,9 +283,6 @@ impl Ball {
+@@ -489,9 +489,6 @@
  
  /// A lower bound on `|n|` when the ball `n ± s` excludes 0 (`|n| > s`, decided exactly), else `None`.
  fn clear_of_zero(n: &ExactNum, s: &Mag) -> Option<Mag> {
 -    if s.is_infinity() {
 -        return None;
 -    }
-     match cmp_abs_rad(n, s) {
+     match s.cmp_exact_num(n).map(Ordering::reverse) {
          Some(Ordering::Greater) => Some(Mag::from_exact_num_lower(n)),
          Some(Ordering::Equal | Ordering::Less) | None => None,

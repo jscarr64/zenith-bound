@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -136,7 +136,7 @@
+             if lo > *side_lo {
+                 *side_lo = lo;
+             }
+-            *side_up = side_up.add_up(&up);
++            *side_up = up;
+             let larger = match best {
+                 Some(j) => ts
+                     .get(*j)

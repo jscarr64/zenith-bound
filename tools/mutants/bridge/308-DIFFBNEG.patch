@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -59,7 +59,7 @@
+                     },
+                     Term {
+                         val: Val::Ref(b),
+-                        neg: true,
++                        neg: false,
+                     },
+                     Term {
+                         val: Val::Own(rn),

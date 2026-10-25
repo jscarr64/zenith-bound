@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -180,7 +180,7 @@
+     };
+     // zf 829f112 flushes a subnormal sum to zero: give up rather than answer from a wrong sum.
+     // sign_of_sum only combines terms of opposite sign, so a true zero needs |v1| = |v2|.
+-    if val.is_zero() && v1.abs_cmp(v2) != Some(0) {
++    if false && val.is_zero() {
+         return None;
+     }
+     Some(Term {

@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -204,7 +204,7 @@
+         // a ≥ 0 ≥ b: a − b = |a| + |b|
+         (false, true) => (a_lo.max(b_lo), a_up.add_up(&b_up)),
+         // a > b > 0: a − b = |a| − |b|
+-        (false, false) => (a_lo.sub_lower(&b_up), a_up),
++        (false, false) => (a_lo.sub_lower(&b_lo), a_up),
+         // 0 > a > b: a − b = |b| − |a|
+         (true, true) => (b_lo.sub_lower(&a_up), b_up),
+         // a < 0 < b cannot have a > b

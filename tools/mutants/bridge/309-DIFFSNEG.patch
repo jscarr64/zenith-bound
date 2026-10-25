@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -67,7 +67,7 @@
+                     },
+                     Term {
+                         val: Val::Own(sn),
+-                        neg: true,
++                        neg: false,
+                     },
+                 ];
+                 sign_of_sum(terms)

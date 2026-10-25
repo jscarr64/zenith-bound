@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -28,7 +28,7 @@
+         }
+         // `self` is off zenith-float's grid, so `self = |x|` only when `|x|` is a `Mag` (lower == upper bound).
+         let lo = Mag::from_exact_num_lower(x);
+-        let up = Mag::from_exact_num(x);
++        let up = Mag::from_exact_num_lower(x);
+         Some(match self.cmp(&lo) {
+             Ordering::Less => Ordering::Less,
+             Ordering::Greater => Ordering::Greater,

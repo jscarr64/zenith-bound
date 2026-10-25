@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -19,7 +19,7 @@
+         }
+         match (self.is_zero(), x.is_zero()) {
+             (true, true) => return Some(Ordering::Equal),
+-            (true, false) => return Some(Ordering::Less),
++            (true, false) => return Some(Ordering::Equal),
+             (false, true) => return Some(Ordering::Greater),
+             (false, false) => {}
+         }

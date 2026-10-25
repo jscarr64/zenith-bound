@@ -1,8 +1,6 @@
-diff --git a/src/arith.rs b/src/arith.rs
-index 4ed7629..9b33551 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -180,7 +180,7 @@ impl Ball {
+@@ -182,7 +182,7 @@
              return if strict {
                  Err(domain(OP, "the all-reals ball reaches below 0"))
              } else {
@@ -10,4 +8,4 @@ index 4ed7629..9b33551 100644
 +                Err(domain(OP, "mutant"))
              };
          }
-         let Some(ord) = cmp_abs_rad(m, r) else {
+         let Some(ord) = r.cmp_exact_num(m).map(Ordering::reverse) else {

@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -202,7 +202,7 @@
+     let b_neg = b.is_negative() && !b.is_zero();
+     let (d_lo, d_up) = match (a_neg, b_neg || b.is_zero()) {
+         // a ≥ 0 ≥ b: a − b = |a| + |b|
+-        (false, true) => (a_lo.max(b_lo), a_up.add_up(&b_up)),
++        (false, true) => (a_lo.max(b_lo), a_up),
+         // a > b > 0: a − b = |a| − |b|
+         (false, false) => (a_lo.sub_lower(&b_up), a_up),
+         // 0 > a > b: a − b = |b| − |a|

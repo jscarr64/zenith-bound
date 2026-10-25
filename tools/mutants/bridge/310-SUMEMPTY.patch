@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -149,7 +149,7 @@
+         }
+         let (Some(i), Some(j)) = (ip, in_) else {
+             return Some(match (ip, in_) {
+-                (Some(_), None) => Ordering::Greater,
++                (Some(_), None) => Ordering::Less,
+                 (None, Some(_)) => Ordering::Less,
+                 _ => Ordering::Equal,
+             });

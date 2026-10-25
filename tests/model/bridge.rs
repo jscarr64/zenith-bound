@@ -81,6 +81,9 @@ fn sub_nat(a: &[u64], b: &[u64]) -> Vec<u64> {
 
 /// `a · 2^k`, `k ≥ 0` (bounded by the caller: only cluster-internal shifts reach here).
 fn shl_nat(a: &[u64], k: i128) -> Option<Vec<u64>> {
+    if a.iter().all(|w| *w == 0) {
+        return Some(Vec::new());
+    }
     let k = usize::try_from(k).ok()?;
     let (words, bits) = (k / 64, k % 64);
     let mut out = vec![0u64; words];
@@ -163,7 +166,11 @@ struct Acc {
 
 impl Acc {
     fn add(self, t: Term) -> Option<Acc> {
-        let low = self.low.min(t.low);
+        let low = if self.mag.is_empty() {
+            t.low
+        } else {
+            self.low.min(t.low)
+        };
         let a = shl_nat(&self.mag, self.low - low)?;
         let b = shl_nat(&t.limbs, t.low - low)?;
         if self.neg == t.neg {

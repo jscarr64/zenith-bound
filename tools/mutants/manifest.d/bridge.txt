@@ -1,3 +1,25 @@
 # range: 300-399
 # Slice S2 (src/bridge.rs) mutants, owned by S2 alone. Rows as in ../manifest.txt (fn_path<TAB>mutant_id<TAB>patch<TAB>suite);
 # ids NNN-<name> with NNN in 300..=399; patches go in tools/mutants/bridge/ and the patch column reads bridge/NNN-<name>.patch.
+src/bridge.rs:Mag::cmp_exact_num	300-NUMINF	bridge/300-NUMINF.patch	harness
+src/bridge.rs:Mag::cmp_exact_num	301-NUMZZ	bridge/301-NUMZZ.patch	harness
+src/bridge.rs:Mag::cmp_exact_num	302-NUMZX	bridge/302-NUMZX.patch	harness
+src/bridge.rs:Mag::cmp_exact_num	303-NUMXZ	bridge/303-NUMXZ.patch	harness
+src/bridge.rs:Mag::cmp_exact_num	304-NUMSIGN	bridge/304-NUMSIGN.patch	harness
+src/bridge.rs:Mag::cmp_exact_num	305-NUMLOEQ	bridge/305-NUMLOEQ.patch	harness
+src/bridge.rs:Mag::cmp_exact_num	306-NUMLOUP	bridge/306-NUMLOUP.patch	harness
+src/bridge.rs:Mag::cmp_exact_diff	307-DIFFRINF	bridge/307-DIFFRINF.patch	harness
+src/bridge.rs:Mag::cmp_exact_diff	308-DIFFBNEG	bridge/308-DIFFBNEG.patch	harness
+src/bridge.rs:Mag::cmp_exact_diff	309-DIFFSNEG	bridge/309-DIFFSNEG.patch	harness
+src/bridge.rs:sign_of_sum	310-SUMEMPTY	bridge/310-SUMEMPTY.patch	harness
+src/bridge.rs:sign_of_sum	311-SUMPGT	bridge/311-SUMPGT.patch	harness
+src/bridge.rs:sign_of_sum	312-SUMNLT	bridge/312-SUMNLT.patch	harness
+src/bridge.rs:sign_of_sum	313-SUMSIDEUP	bridge/313-SUMSIDEUP.patch	harness
+src/bridge.rs:sign_of_sum	314-SUMSIDELO	bridge/314-SUMSIDELO.patch	harness
+src/bridge.rs:combine	315-COMBSIGN	bridge/315-COMBSIGN.patch	harness
+src/bridge.rs:combine	316-COMBFLUSH	bridge/316-COMBFLUSH.patch	harness
+src/bridge.rs:bound_diff	317-BDLE	bridge/317-BDLE.patch	harness
+src/bridge.rs:bound_diff	318-BDSUM	bridge/318-BDSUM.patch	harness
+src/bridge.rs:bound_diff	319-BDTLO	bridge/319-BDTLO.patch	harness
+src/bridge.rs:bound_diff	320-BDGT	bridge/320-BDGT.patch	harness
+src/bridge.rs:bound_diff	321-BDSUB	bridge/321-BDSUB.patch	harness

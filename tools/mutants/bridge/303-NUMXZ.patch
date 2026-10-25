@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -20,7 +20,7 @@
+         match (self.is_zero(), x.is_zero()) {
+             (true, true) => return Some(Ordering::Equal),
+             (true, false) => return Some(Ordering::Less),
+-            (false, true) => return Some(Ordering::Greater),
++            (false, true) => return Some(Ordering::Less),
+             (false, false) => {}
+         }
+         if let Ok(sn) = self.to_exact_num() {

@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -173,7 +173,7 @@
+ /// `t1 + t2` exactly, as `(−1)^neg1 · (v1 ± v2)`.
+ fn combine<'a>(t1: &Term<'_>, t2: &Term<'_>) -> Option<Term<'a>> {
+     let (v1, v2) = (t1.val.get(), t2.val.get());
+-    let val = if t1.neg == t2.neg {
++    let val = if t1.neg != t2.neg {
+         v1.add_full_prec(v2)
+     } else {
+         v1.sub_full_prec(v2)

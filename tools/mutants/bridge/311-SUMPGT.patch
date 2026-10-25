@@ -1,0 +1,11 @@
+--- a/src/bridge.rs
++++ b/src/bridge.rs
+@@ -154,7 +154,7 @@
+                 _ => Ordering::Equal,
+             });
+         };
+-        if p_lo > n_up {
++        if p_lo >= n_up {
+             return Some(Ordering::Greater);
+         }
+         if n_lo > p_up {
