@@ -26,10 +26,15 @@ for arg in "$@"; do case $arg in --slices-only) slices_only=1 ;; --regen) regen=
 #   cached      key equals the stamp: python is skipped entirely; only the pinned SHA256SUMS / HEAVY.SHA256 are verified.
 #   regen-gate  key changed (or no stamp): every generator runs --check; heavy rows are checked by HEAVY.SHA256 pin only (--skip-heavy).
 #   regen-full  --regen: every generator runs --check and every heavy row is recomputed against its pin (about 14 min).
-# ZB_GATE_MODE=merge (merge points) REFUSES (exit 2) without --regen. The mode and its reason are logged.
+# ZB_GATE_MODE=merge (merge points) REFUSES (exit 2) without --regen, and with --slices-only (the merge gate runs every generator;
+# Spence LA4 nit, 2026-10-25). ZB_GATE_MODE is recorded first thing, then the mode and its reason are logged.
+# The key also covers scripts/requirements.lock (the oracle pins).
+echo "goldens-regen: ZB_GATE_MODE=${ZB_GATE_MODE:-regular}"   # recorded first, also before an unknown-mode refusal
 case "${ZB_GATE_MODE:-regular}" in regular|merge) ;; *) echo "goldens-regen: REFUSING: unknown ZB_GATE_MODE=${ZB_GATE_MODE} (want regular or merge)"; exit 2 ;; esac
 gate_mode=${ZB_GATE_MODE:-regular}
+echo "goldens-regen: ZB_GATE_MODE=$gate_mode"
 if [ "$gate_mode" = merge ] && [ "$regen" != 1 ]; then echo "goldens-regen: REFUSING: ZB_GATE_MODE=merge needs --regen (the merge gate must regenerate and recompute every heavy row)"; exit 2; fi
+if [ "$gate_mode" = merge ] && [ "$slices_only" = 1 ]; then echo "goldens-regen: REFUSING: ZB_GATE_MODE=merge does not allow --slices-only (the merge gate must run every generator, not only the per-slice checks)"; exit 2; fi
 cd "$root" || exit 2
 tmp=$(mktemp -d "$(zb_scratch)"/zb-goldens-regen.XXXXXX) || { echo "goldens-regen: mktemp failed"; exit 2; }; runlog_on_exit "rm -rf \"$tmp\""
 # Pop direct-run guard (~/pop-logs/bin/popguard.sh, 11:49 2026-10-24: a bare 58 GB generator run global-OOMed Pop): before the
@@ -47,6 +52,7 @@ pg_require() {
 }
 key_inputs() {
   { find scripts -type f -name '*.py' 2> /dev/null
+    find scripts -maxdepth 1 -type f -name requirements.lock 2> /dev/null
     find tests/goldens -type f \( -name '*.txt' -o -name SHA256SUMS -o -name HEAVY.SHA256 -o -name GENERATORS \) ! -name '*_heavy.txt' 2> /dev/null
   } | sort | while IFS= read -r f; do sha256sum "$f"; done
   echo "tool $(sha256sum < "$self")"; echo "slices_only=$slices_only"; echo "py $(readlink -f "$PY" 2> /dev/null || echo "$PY")"
