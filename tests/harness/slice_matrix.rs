@@ -1,3 +1,482 @@
-//! Slice S6 harness rows (`src/matrix.rs`). Owned by slice S6 alone; S0 stub, no tests yet.
+//! Slice S6 harness rows (`src/matrix.rs`). Owned by slice S6 alone. RED: the API is a stub until the green unit lands.
 //! Goldens: tests/goldens/slices/matrix/ (its own SHA256SUMS and GENERATORS). Mutants: tools/mutants/manifest.d/matrix.txt, ids 900..=999.
 //! Golden file headers for this slice are declared here, not in tests/common/goldens.rs.
+//! CONTRACT 16.S6.0 to 16.S6.11. Oracle: exact Fraction golds from scripts/gen_matrix_goldens.py (gate file matrix_rows.txt; the heavy
+//! file matrix_rows_heavy.txt is replayed by the ignored heavy test when ZB_MATRIX_HEAVY points at it), plus hand rows below.
+//! COVERS: MagArray::from_mags, MagArray::get, BallArray::add, BallArray::sub, BallArray::mid_rad, BallArray::from_mid_rad, BallVec::dot, BallMat::matvec, BallMat::matmul, BallMat::norm_inf, BallMat::norm_1, BallMat::norm_frob_up
+
+use crate::common::goldens::golden_dir;
+use zenith_bound::array::{BallArray, BallMat, BallVec};
+use zenith_bound::ball::Ball;
+use zenith_bound::enclosure::Enclosure;
+use zenith_bound::error::BoundError;
+use zenith_bound::mag::Mag;
+use zenith_bound::matrix::MagArray;
+use zenith_bound::tri::Tri;
+use zenith_float_num::ExactNum;
+
+const GATE_ROWS: usize = 128;
+const HEAVY_ROWS: usize = 21;
+const TOP: u64 = 0x8000_0000_0000_0000;
+
+// ---- helpers ------------------------------------------------------------------------------------------------------------
+fn num(v: i64) -> ExactNum {
+    ExactNum::from(v)
+}
+
+fn ok<T>(what: &str, r: Result<T, BoundError>) -> Result<T, String> {
+    r.map_err(|e| format!("{what}: unexpected {e:?}"))
+}
+
+/// `2^k` exactly.
+fn pow2(k: i64) -> Result<ExactNum, String> {
+    let e = k.checked_add(1).ok_or("pow2 exponent")?;
+    ExactNum::from_mag_parts(TOP, e, 64).map_err(|e| format!("pow2({k}): {e:?}"))
+}
+
+fn ball(v: i64, rad: Mag, prec: usize) -> Result<Ball, String> {
+    ok("from_mid_rad", Ball::from_mid_rad(num(v), rad, prec))
+}
+
+fn pt(v: i64) -> Result<Ball, String> {
+    ok("exact", Ball::exact(num(v), 64))
+}
+
+fn mat(nrows: usize, ncols: usize, vals: &[i64]) -> Result<BallMat, String> {
+    let mut balls = Vec::new();
+    for v in vals {
+        balls.push(pt(*v)?);
+    }
+    ok("BallMat::from_balls", BallMat::from_balls(nrows, ncols, balls))
+}
+
+fn vec_of(vals: &[i64]) -> Result<BallVec, String> {
+    let mut balls = Vec::new();
+    for v in vals {
+        balls.push(pt(*v)?);
+    }
+    Ok(BallVec::from_balls(balls))
+}
+
+fn sign_of(x: &ExactNum, y: &ExactNum) -> i8 {
+    match x.partial_cmp(y) {
+        Some(core::cmp::Ordering::Greater) => 1,
+        Some(core::cmp::Ordering::Less) => -1,
+        Some(core::cmp::Ordering::Equal) => 0,
+        // incomparable (NaN-like) never satisfies an equality or a bound
+        None => 2,
+    }
+}
+
+fn want_dim_mismatch<T: core::fmt::Debug>(what: &str, r: Result<T, BoundError>) -> Result<(), String> {
+    match r {
+        Err(BoundError::DimensionMismatch { .. }) => Ok(()),
+        other => Err(format!("{what}: want DimensionMismatch, got {other:?}")),
+    }
+}
+
+fn want_contains(what: &str, b: &Ball, x: &ExactNum) -> Result<(), String> {
+    match b.contains(x) {
+        Tri::True => Ok(()),
+        t @ (Tri::False | Tri::Unknown) => Err(format!("{what}: {b:?} does not contain {x:?} ({t:?})")),
+    }
+}
+
+/// `x <= bound * (1 + 2^-56)` (the tightness slack of 16.S6.6 and 16.S6.9).
+fn within_slack(what: &str, x: &Mag, bound: &ExactNum) -> Result<(), String> {
+    let xe = x.to_exact_num().map_err(|e| format!("{what}: radius {x:?} not finite: {e:?}"))?;
+    let slack = bound.mul_full_prec(&pow2(-56)?);
+    let limit = bound.add_full_prec(&slack);
+    if sign_of(&xe, &limit) > 0 {
+        return Err(format!("{what}: {x:?} exceeds {bound:?} * (1 + 2^-56)"));
+    }
+    Ok(())
+}
+
+// ---- gold rows ------------------------------------------------------------------------------------------------------------
+/// `SIGN EXP MANT` (scripts/gen_matrix_goldens.py): value = (-1)^SIGN · MANT · 2^(EXP − bitlen(MANT)), MANT hex.
+fn gold_val(sign: &str, exp: &str, hex: &str) -> Result<ExactNum, String> {
+    let e: i64 = exp.parse().map_err(|_| format!("bad exponent {exp:?}"))?;
+    let first = hex
+        .chars()
+        .next()
+        .ok_or("empty mantissa")?
+        .to_digit(16)
+        .ok_or("bad digit")?;
+    if first == 0 {
+        return if hex == "0" && sign == "0" && e == 0 {
+            Ok(num(0))
+        } else {
+            Err(format!("non-canonical zero {sign} {exp} {hex}"))
+        };
+    }
+    let len = i64::try_from(hex.len()).map_err(|_| "mantissa length")?;
+    let bitlen = 4 * (len - 1) + i64::from(32 - first.leading_zeros());
+    let base = e - bitlen;
+    let mut acc = num(0);
+    let mut shift = 0i64;
+    for bytes in hex.as_bytes().rchunks(16) {
+        let chunk = std::str::from_utf8(bytes).map_err(|_| "utf8")?;
+        let c = u64::from_str_radix(chunk, 16).map_err(|_| format!("bad hex {chunk:?}"))?;
+        if c != 0 {
+            let lz = i64::from(c.leading_zeros());
+            let part = ExactNum::from_mag_parts(c << lz, base + shift + 64 - lz, 64)
+                .map_err(|e| format!("from_mag_parts: {e:?}"))?;
+            acc = acc.add_full_prec(&part);
+        }
+        shift += 64;
+    }
+    match sign {
+        "0" => Ok(acc),
+        "1" => Ok(num(0).sub_full_prec(&acc)),
+        other => Err(format!("bad sign {other:?}")),
+    }
+}
+
+struct Cursor<'a> {
+    toks: Vec<&'a str>,
+    at: usize,
+}
+
+impl<'a> Cursor<'a> {
+    fn tok(&mut self) -> Result<&'a str, String> {
+        let t = self.toks.get(self.at).ok_or("short row")?;
+        self.at += 1;
+        Ok(t)
+    }
+    fn usize(&mut self) -> Result<usize, String> {
+        let t = self.tok()?;
+        t.parse::<usize>().map_err(|e| format!("bad count {t:?}: {e}"))
+    }
+    fn val(&mut self) -> Result<ExactNum, String> {
+        let s = self.tok()?;
+        let e = self.tok()?;
+        let m = self.tok()?;
+        gold_val(s, e, m)
+    }
+    fn balls(&mut self, n: usize, prec: usize) -> Result<Vec<Ball>, String> {
+        let mut out = Vec::new();
+        for _ in 0..n {
+            let mid = self.val()?;
+            let rad = Mag::from_exact_num(&self.val()?);
+            out.push(ok("gold ball", Ball::from_mid_rad(mid, rad, prec))?);
+        }
+        Ok(out)
+    }
+    fn done(&self) -> Result<(), String> {
+        if self.at == self.toks.len() {
+            Ok(())
+        } else {
+            Err(format!("{} trailing tokens", self.toks.len() - self.at))
+        }
+    }
+}
+
+fn read_gold(name: &str) -> Result<String, String> {
+    let path = golden_dir().join("slices").join("matrix").join(name);
+    std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))
+}
+
+fn header_rows(text: &str) -> Result<usize, String> {
+    let line = text
+        .lines()
+        .find_map(|l| l.strip_prefix("# rows: "))
+        .ok_or("no '# rows:' header")?;
+    line.trim()
+        .parse::<usize>()
+        .map_err(|e| format!("bad '# rows:' header {line:?}: {e}"))
+}
+
+/// Checks one product output entry: mid == MIDR, contains P0 P1 P2, rad <= RREF (1 + 2^-56).
+fn check_entry(what: &str, c: &Ball, cur: &mut Cursor) -> Result<(), String> {
+    let midr = cur.val()?;
+    let rref = cur.val()?;
+    if sign_of(c.mid(), &midr) != 0 {
+        return Err(format!("{what}: mid {:?} != MIDR {midr:?}", c.mid()));
+    }
+    for k in 0..3 {
+        want_contains(&format!("{what} P{k}"), c, &cur.val()?)?;
+    }
+    within_slack(&format!("{what} rad"), c.rad(), &rref)
+}
+
+/// Replays one gold row through zenith-bound; Ok(()) when every check holds.
+fn replay_row(line: &str) -> Result<(), String> {
+    let mut cur = Cursor {
+        toks: line.split(' ').collect(),
+        at: 0,
+    };
+    let id = cur.tok()?;
+    let op = cur.tok()?;
+    let prec = cur.usize()?;
+    let m = cur.usize()?;
+    let k = cur.usize()?;
+    let n = cur.usize()?;
+    let size = |a: usize, b: usize| a.checked_mul(b).ok_or_else(|| format!("{id}: dims overflow"));
+    match op {
+        "norm_inf" | "norm_1" | "norm_frob" => {
+            let a = ok(id, BallMat::from_balls(m, n, cur.balls(size(m, n)?, prec)?))?;
+            let s = cur.val()?;
+            let hi = cur.val()?;
+            let r = match op {
+                "norm_inf" => a.norm_inf(),
+                "norm_1" => a.norm_1(),
+                other => {
+                    if other != "norm_frob" {
+                        return Err(format!("{id}: op {other}"));
+                    }
+                    a.norm_frob_up()
+                }
+            };
+            let re = r.to_exact_num().map_err(|e| format!("{id}: norm {r:?} not finite: {e:?}"))?;
+            let lhs = if op == "norm_frob" {
+                re.mul_full_prec(&re)
+            } else {
+                re
+            };
+            if sign_of(&lhs, &s) < 0 {
+                return Err(format!("{id}: {op} {r:?} is below the exact value"));
+            }
+            within_slack(id, &r, &hi)?;
+        }
+        "dot" | "matvec" | "matmul" => {
+            let av = cur.balls(size(m, k)?, prec)?;
+            let bv = cur.balls(size(k, n)?, prec)?;
+            match op {
+                "dot" => {
+                    let c = ok(id, BallVec::from_balls(av).dot(&BallVec::from_balls(bv), prec))?;
+                    check_entry(id, &c, &mut cur)?;
+                }
+                "matvec" => {
+                    let a = ok(id, BallMat::from_balls(m, k, av))?;
+                    let y = ok(id, a.matvec(&BallVec::from_balls(bv), prec))?;
+                    for i in 0..m {
+                        let c = y.get(i).ok_or_else(|| format!("{id}: no y[{i}]"))?;
+                        check_entry(&format!("{id} y[{i}]"), c, &mut cur)?;
+                    }
+                }
+                other => {
+                    if other != "matmul" {
+                        return Err(format!("{id}: op {other}"));
+                    }
+                    let a = ok(id, BallMat::from_balls(m, k, av))?;
+                    let b = ok(id, BallMat::from_balls(k, n, bv))?;
+                    let c = ok(id, a.matmul(&b, prec))?;
+                    if c.nrows() != m || c.ncols() != n {
+                        return Err(format!("{id}: result is {}x{}", c.nrows(), c.ncols()));
+                    }
+                    for i in 0..m {
+                        for j in 0..n {
+                            let e = c.get(i, j).ok_or_else(|| format!("{id}: no c[{i},{j}]"))?;
+                            check_entry(&format!("{id} c[{i},{j}]"), e, &mut cur)?;
+                        }
+                    }
+                }
+            }
+        }
+        other => return Err(format!("{id}: unknown op {other:?}")),
+    }
+    cur.done().map_err(|e| format!("{id}: {e}"))
+}
+
+/// Replays every row; returns the number of rows and the first few failures.
+fn replay_text(text: &str, want_rows: usize) -> Result<(), String> {
+    let rows = header_rows(text)?;
+    if rows != want_rows {
+        return Err(format!("header says {rows} rows, slice pins {want_rows}"));
+    }
+    let mut seen = 0usize;
+    let mut failures = Vec::new();
+    for line in text.lines().filter(|l| !l.starts_with('#')) {
+        seen += 1;
+        if let Err(e) = replay_row(line) {
+            failures.push(e);
+        }
+    }
+    if seen != rows {
+        return Err(format!("{seen} data rows, header says {rows}"));
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        let first: Vec<&String> = failures.iter().take(5).collect();
+        Err(format!("{} of {rows} rows fail; first: {first:#?}", failures.len()))
+    }
+}
+
+// ---- gold tests -----------------------------------------------------------------------------------------------------------
+#[test]
+fn s6_gate_rows_match_header_and_pinned_count() -> Result<(), String> {
+    let text = read_gold("matrix_rows.txt")?;
+    let rows = header_rows(&text)?;
+    let seen = text.lines().filter(|l| !l.starts_with('#')).count();
+    if rows == GATE_ROWS && seen == GATE_ROWS {
+        Ok(())
+    } else {
+        Err(format!("header {rows}, data {seen}, pinned {GATE_ROWS}"))
+    }
+}
+
+#[test]
+fn s6_gate_rows_replay_through_zb() -> Result<(), String> {
+    replay_text(&read_gold("matrix_rows.txt")?, GATE_ROWS)
+}
+
+#[test]
+#[ignore = "heavy tier (16.S6.10): set ZB_MATRIX_HEAVY to matrix_rows_heavy.txt (scripts/gen_matrix_goldens.py --heavy DIR; sha256 in HEAVY.SHA256)"]
+fn s6_heavy_rows_replay_through_zb() -> Result<(), String> {
+    let path = std::env::var("ZB_MATRIX_HEAVY").map_err(|e| format!("ZB_MATRIX_HEAVY: {e}"))?;
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {path}: {e}"))?;
+    replay_text(&text, HEAVY_ROWS)
+}
+
+// ---- hand rows ------------------------------------------------------------------------------------------------------------
+#[test]
+fn s6_matmul_hand_row_2x2() -> Result<(), String> {
+    // [1 2; 3 4] * [5 6; 7 8] = [19 22; 43 50], all exact
+    let c = ok("matmul", mat(2, 2, &[1, 2, 3, 4])?.matmul(&mat(2, 2, &[5, 6, 7, 8])?, 53))?;
+    for (i, j, v) in [(0, 0, 19), (0, 1, 22), (1, 0, 43), (1, 1, 50)] {
+        let e = c.get(i, j).ok_or("missing entry")?;
+        if sign_of(e.mid(), &num(v)) != 0 || !e.rad().is_zero() {
+            return Err(format!("c[{i},{j}] = {e:?}, want {v} exactly"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn s6_shape_mismatch_is_an_error_not_a_panic() -> Result<(), String> {
+    let a = mat(2, 3, &[1, 2, 3, 4, 5, 6])?;
+    want_dim_mismatch("matmul 2x3 * 2x3", a.matmul(&mat(2, 3, &[1, 2, 3, 4, 5, 6])?, 53))?;
+    want_dim_mismatch("matvec 2x3 * 2", a.matvec(&vec_of(&[1, 2])?, 53))?;
+    want_dim_mismatch("dot 2 . 3", vec_of(&[1, 2])?.dot(&vec_of(&[1, 2, 3])?, 53))?;
+    let six = vec_of(&[1, 2, 3, 4, 5, 6])?.into_array();
+    want_dim_mismatch("add [6] + [2,3]", six.add(a.as_array(), 53))?;
+    let six = vec_of(&[1, 2, 3, 4, 5, 6])?.into_array();
+    want_dim_mismatch("sub [6] - [2,3]", six.sub(a.as_array(), 53))?;
+    let rads = ok("from_mags", MagArray::from_mags(Box::new([2]), vec![Mag::zero(), Mag::zero()]))?;
+    want_dim_mismatch("from_mid_rad [6] with [2]", BallArray::from_mid_rad(a.into_array(), &rads, 53))
+}
+
+#[test]
+fn s6_bad_prec_is_invalid_argument() -> Result<(), String> {
+    match mat(1, 1, &[1])?.matmul(&mat(1, 1, &[1])?, 0) {
+        Err(BoundError::InvalidArgument { .. }) => Ok(()),
+        other => Err(format!("prec 0: {other:?}")),
+    }
+}
+
+#[test]
+fn s6_empty_inner_dimension_gives_exact_zeros() -> Result<(), String> {
+    let a = mat(2, 0, &[])?;
+    let b = mat(0, 3, &[])?;
+    let c = ok("matmul 2x0 * 0x3", a.matmul(&b, 53))?;
+    if c.nrows() != 2 || c.ncols() != 3 {
+        return Err(format!("shape {}x{}", c.nrows(), c.ncols()));
+    }
+    for e in c.as_array().as_slice() {
+        if !e.mid().is_zero() || !e.rad().is_zero() {
+            return Err(format!("entry {e:?} is not 0 +- 0"));
+        }
+    }
+    let d = ok("dot of empty", vec_of(&[])?.dot(&vec_of(&[])?, 53))?;
+    if d.mid().is_zero() && d.rad().is_zero() {
+        Ok(())
+    } else {
+        Err(format!("empty dot {d:?}"))
+    }
+}
+
+#[test]
+fn s6_infinite_radius_is_all_reals_entry_and_infinite_norm() -> Result<(), String> {
+    let inf = ball(1, Mag::infinity(), 53)?;
+    let a = ok("from_balls", BallMat::from_balls(2, 1, vec![inf, pt(2)?]))?;
+    let b = mat(1, 2, &[3, 4])?;
+    let c = ok("matmul with an Infinity radius", a.matmul(&b, 53))?;
+    for j in 0..2 {
+        let top = c.get(0, j).ok_or("missing")?;
+        if !top.rad().is_infinity() {
+            return Err(format!("c[0,{j}] {top:?} should be all-reals"));
+        }
+        let low = c.get(1, j).ok_or("missing")?;
+        if low.rad().is_infinity() {
+            return Err(format!("c[1,{j}] {low:?} should stay finite (elementwise)"));
+        }
+    }
+    if a.norm_inf().is_infinity() && a.norm_1().is_infinity() && a.norm_frob_up().is_infinity() {
+        Ok(())
+    } else {
+        Err("norms of a matrix with an Infinity radius must be Infinity".to_string())
+    }
+}
+
+#[test]
+fn s6_norms_hand_row() -> Result<(), String> {
+    // A = [1 -2; 3 4]: norm_inf = 7, norm_1 = 6, frob^2 = 30
+    let a = mat(2, 2, &[1, -2, 3, 4])?;
+    let exact = |m: &Mag| m.to_exact_num().map_err(|e| format!("{e:?}"));
+    if sign_of(&exact(&a.norm_inf())?, &num(7)) != 0 || sign_of(&exact(&a.norm_1())?, &num(6)) != 0 {
+        return Err(format!("norm_inf {:?}, norm_1 {:?}", a.norm_inf(), a.norm_1()));
+    }
+    let f = exact(&a.norm_frob_up())?;
+    let f2 = f.mul_full_prec(&f);
+    if sign_of(&f2, &num(30)) < 0 {
+        return Err("norm_frob_up below sqrt(30)".to_string());
+    }
+    within_slack("frob", &a.norm_frob_up(), &num(6))
+}
+
+#[test]
+fn s6_mag_array_constructor_and_get() -> Result<(), String> {
+    let mags = vec![Mag::zero(), Mag::infinity(), Mag::zero(), Mag::zero(), Mag::zero(), Mag::zero()];
+    let m = ok("from_mags", MagArray::from_mags(Box::new([2, 3]), mags))?;
+    if m.shape() != [2, 3] || m.rank() != 2 || m.len() != 6 {
+        return Err(format!("shape {:?}", m.shape()));
+    }
+    let hit = m.get(&[0, 1]).ok_or("get [0,1]")?;
+    if !hit.is_infinity() || m.get(&[1]).is_some() || m.get(&[2, 0]).is_some() {
+        return Err("get: wrong element, or a wrong rank / out-of-range index was accepted".to_string());
+    }
+    match MagArray::from_mags(Box::new([4]), vec![Mag::zero()]) {
+        Err(BoundError::InvalidArgument { .. }) => Ok(()),
+        other => Err(format!("length mismatch: {other:?}")),
+    }
+}
+
+#[test]
+fn s6_mid_rad_round_trip_encloses() -> Result<(), String> {
+    let r = Mag::finite(TOP, -3).map_err(|e| format!("{e:?}"))?;
+    let balls = vec![ball(5, Mag::finite(TOP, -3).map_err(|e| format!("{e:?}"))?, 53)?, pt(-7)?];
+    let arr = ok("from_balls", BallArray::from_balls(Box::new([2]), balls))?;
+    let (mids, rads) = arr.mid_rad();
+    if rads.shape() != [2] || mids.shape() != [2] {
+        return Err(format!("split shapes {:?} {:?}", mids.shape(), rads.shape()));
+    }
+    for b in mids.as_slice() {
+        if !b.is_exact() {
+            return Err(format!("mid {b:?} not exact"));
+        }
+    }
+    let first = rads.as_slice().first().ok_or("no rad")?;
+    let want = r.to_exact_num().map_err(|e| format!("{e:?}"))?;
+    if first.to_exact_num().ok().map(|x| sign_of(&x, &want)) != Some(0) {
+        return Err(format!("rad[0] {first:?}"));
+    }
+    let back = ok("from_mid_rad", BallArray::from_mid_rad(mids, &rads, 53))?;
+    let b0 = back.as_slice().first().ok_or("empty")?;
+    want_contains("round trip lower", b0, &num(5).sub_full_prec(&pow2(-4)?))?;
+    want_contains("round trip upper", b0, &num(5).add_full_prec(&pow2(-4)?))
+}
+
+#[test]
+fn s6_elementwise_add_hand_row() -> Result<(), String> {
+    let a = vec_of(&[1, 2, 3])?.into_array();
+    let b = vec_of(&[10, 20, 30])?.into_array();
+    let c = ok("add", a.add(&b, 53))?;
+    for (e, v) in c.as_slice().iter().zip([11, 22, 33]) {
+        if sign_of(e.mid(), &num(v)) != 0 || !e.rad().is_zero() {
+            return Err(format!("{e:?} != {v}"));
+        }
+    }
+    Ok(())
+}
