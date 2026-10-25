@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# History: fba8ec9 (slice C) first added this step because `mutate.sh --list`/`--floor` alone never apply a patch, so a stale patch passed
+# the gate (slice C merge 8597039, 2026-10-24); Spence chose the design below, which folds in fba8ec9's ID_REGEX (merge resolution).
 # Per-slice mutant run for the gate (Spence-approved design, 2026-10-24). It does NOT trust tools/mutate.sh's exit code: it checks the
 # result lines itself and FAILS on any of
 #   TIMEOUT     the slice ran past its budget: names every id that never ran
