@@ -433,6 +433,30 @@ def selftest():
         out = product_entry(sa[0], [sb[t][0] for t in range(3)], prec)
         _check(" ".join(enc(v) for v in out[:4]) == spread_out(SPREAD_SMALL_E, prec), "spread out text at prec %d" % prec)
     _check(spread_out(SPREAD_E, 53).split(" ")[10] == str(SPREAD_E + 3 - 53), "spread TREF exponent")
+    # CONTRACT 16.S6.9 accounting (Spence option 1): with U = 2^(1-prec) S and w = prec + g, the K products and K partial sums
+    # cost < c U / 4 together, the final rounding (one full ulp of |s_K|) costs U (1 + c 2^(-1-prec)), and the Mag evaluation
+    # costs (1 + 2^-63)^(4K+8) <= 1 + 2^-43. The ratio bound against TREF = R1 + U is (1.25 + 2^-prec)(1 + 2^-43) < 2 at
+    # every prec >= 1 (the earlier "< 1.6 TREF" claim failed at prec 1 to 3). Exact Fractions, U normalised to 1.
+    def accounting_ratio(prec, k):
+        g = k.bit_length() + 2                              # ceil(log2(k + 1)) + 2
+        _check(pow2(g) >= 4 * (k + 1), "2^g >= 4(K+1) at K=%d" % k)
+        w = prec + g
+        _check(2 * k * pow2(-w) <= Fraction(1, 2), "c bound premise at prec %d K %d" % (prec, k))
+        c = 1 + 4 * k * pow2(-w)                            # >= (1 + 2^-w)^(2K) since 2K 2^-w <= 1/2
+        steps = 2 * k * pow2(-w) * c / pow2(1 - prec)       # (a) in units of U
+        _check(steps < c / 4, "(a) steps < c/4 at prec %d K %d" % (prec, k))
+        final = 1 + steps * pow2(1 - prec)                  # (b) 2^(1-prec)(S + steps U) / U
+        total = steps + final                               # (c)
+        _check(total <= Fraction(5, 4) + pow2(-prec), "(c) rounding total <= 1.25 + 2^-prec at prec %d K %d" % (prec, k))
+        n = 4 * k + 8
+        _check(n * pow2(-63) <= Fraction(1, 2) and 2 * n * pow2(-63) <= pow2(-43), "(d) Mag loss <= 2^-43 at K %d" % k)
+        return max(Fraction(1), total) * (1 + pow2(-43))
+    for prec in (1, 2, 3, 4):
+        cap = (Fraction(5, 4) + pow2(-prec)) * (1 + pow2(-43))
+        for k in (1, 2, 3, 4, 7, 8, 31, 32, 1000, 2 ** 16):
+            ratio = accounting_ratio(prec, k)
+            _check(ratio <= cap and ratio < 2, "16.S6.9 ratio %s at prec %d K %d" % (ratio, prec, k))
+    _check((Fraction(5, 4) + pow2(-1)) * (1 + pow2(-43)) < 2, "16.S6.9 worst case prec 1 below 2")
     # norms: norm_1 of A is norm_inf of A transposed; frob HI is a tight 64-bit upper bound of sqrt(S); vector norms of a row
     a = draw_matrix(rng, 64, 3, 5, "rand", "A")
     at = [[a[i][j] for i in range(3)] for j in range(5)]
