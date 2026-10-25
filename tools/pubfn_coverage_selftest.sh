@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Self-test for tools/pubfn_coverage.sh: builds fixture trees under /tmp at run time and proves the check
 # (1) lists exactly the expected public items, (2) PASSES on a clean fixture, (3) FAILS on each failure mode
-# (UNCOVERED, STALE, NOTEST), (4) honours the exemption list for UNCOVERED only. No repo files are touched.
+# (UNCOVERED, STALE, NOTEST), (4) honours the exemption list for UNCOVERED only, reads a present list (6) and handles an empty one with no ERR (7), and FAILS STALE-EXEMPT on an exempt entry that is not an item (8). No repo files are touched.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap pubfn_coverage_selftest "$@"   # run log (tools/runlog.sh)
 runlog_detach_children
@@ -103,5 +103,25 @@ ck; echo "$out" | grep -c "NOTEST" > /dev/null || fail "no-test file: wrong repo
 w="$t/word"; mkfix "$w"; sed -i 's/Foo::new();/Foo::new_thing();/' "$w/tests/t.rs"
 ck; out="$(chk "$w")" && fail "substring-only mention passed (grep -w semantics broken)"
 ck; echo "$out" | grep -c "NOTEST: tests/t.rs declares Foo::new" > /dev/null || fail "word: wrong report: $out"
-st_done pubfn_coverage 15   # WANT: cases this script runs (tools/selftest_cases.sh)
+# 6. exemptions present and read: a comment-headed list with two entries rescues exactly those two UNCOVERED items;
+#    dropping the list (an empty exempt) must make the same tree FAIL, so a silently skipped load cannot pass
+x="$t/exread"; mkfix "$x"; printf 'impl Foo {\n    pub fn ex1() {}\n    pub fn ex2() {}\n}\n' >> "$x/src/m.rs"
+printf '# header comment\n\nFoo::ex1\tfixture\n  # indented comment\nFoo::ex2\tfixture\n' > "$x/tools/pubfn_coverage_exempt.txt"
+ck; out="$(chk "$x")" || fail "two read exemptions still failed: $out"
+ck; echo "$out" | grep -c "exempt list: 2 items" > /dev/null || fail "exempt read: count not reported: $out"
+: > "$t/empty_exempt"
+ck; out="$(chk "$x" "$t/empty_exempt")" && fail "dropped exemptions passed: $out"
+ck; echo "$out" | grep -c "UNCOVERED: Foo::ex2" > /dev/null || fail "dropped exemptions: wrong report: $out"
+# 7. empty exempt list (comments and blanks only, as shipped) is explicit and logs no ERR. The run joins this
+#    self-test's own log as a nested sub-run so an ERR trap line from pubfn_coverage.sh would land there.
+e="$t/emptyex"; mkfix "$e"; printf '# only a comment\n\n' > "$e/tools/pubfn_coverage_exempt.txt"
+before=$(wc -l < "$POPLOG_FILE")
+ck; out="$(export POPLOG_FILE POPLOG_STATE_DIR POPLOG_PID POPLOG_PROGRESS_FILE; chk "$e")" || fail "empty exempt list failed: $out"
+ck; echo "$out" | grep -c "exempt list is empty" > /dev/null || fail "empty exempt: not reported explicitly: $out"
+ck; if tail -n "+$((before + 1))" "$POPLOG_FILE" | grep "ERR rc=" | grep -q "pubfn_coverage.sh"; then fail "empty exempt: ERR line logged: $(tail -n "+$((before + 1))" "$POPLOG_FILE" | grep "ERR rc=")"; fi
+# 8. STALE-EXEMPT: an exempt entry that names no public item must FAIL (a clean, fully covered tree otherwise)
+q="$t/staleexempt"; mkfix "$q"; printf 'Foo::ghost\tno such item\n' > "$q/tools/pubfn_coverage_exempt.txt"
+ck; out="$(chk "$q")" && fail "stale exempt entry passed: $out"
+ck; echo "$out" | grep -c "FAIL STALE-EXEMPT: Foo::ghost is in the exempt list but is not a public item" > /dev/null || fail "stale exempt: wrong report: $out"
+st_done pubfn_coverage 24   # WANT: cases this script runs (tools/selftest_cases.sh)
 echo "pubfn_coverage selftest: ok"

@@ -14,6 +14,7 @@
 # FAILS (exit 1, one line each) when:
 #   UNCOVERED  an item is in no COVERS line and not in the exemption list
 #   STALE      a COVERS name is not an item (renamed or removed)
+#   STALE-EXEMPT  an exemption-list entry is not an item (renamed or removed)
 #   NOTEST     the declaring file has no #[test] fn whose text mentions the name (word match on the last `::` segment,
 #              or on the Trait / Type of an `impl Trait for Type` name)
 # Parser limits (rustfmt layout assumed): an impl/mod/enum block opens with `{` and its members start on later lines; macro-generated items are not seen.
@@ -115,11 +116,17 @@ fi
 cut -f2 "$tmp/covers" | sort -u > "$tmp/covered_names"
 
 # ---- 3. exemptions -------------------------------------------------------------------------------------------------------
+# Entries are the first tab field of each non-comment, non-blank line. awk, not grep -v: a list with no entries (the shipped
+# state) is a normal case, and grep exits 1 on zero selected lines, which under pipefail made the load "fail" (ERR line 119).
+# awk exits 0 on zero entries and non-zero only on a real read error, which stops the check.
 if [ -f "$exempt" ]; then
-  grep -v -E '^[[:space:]]*(#|$)' "$exempt" | cut -f1 | sort -u > "$tmp/exempt"
+  awk -F "\t" '$0 !~ /^[[:space:]]*(#|$)/ { print $1 }' "$exempt" | sort -u > "$tmp/exempt" \
+    || { echo "pubfn_coverage: cannot read exempt list $exempt"; exit 2; }
 else
   : > "$tmp/exempt"
 fi
+nex=$(wc -l < "$tmp/exempt" | tr -d ' ')
+if [ "$nex" = 0 ]; then echo "pubfn_coverage: exempt list is empty ($exempt)"; else echo "pubfn_coverage: exempt list: $nex items ($exempt)"; fi
 
 fail=0
 # UNCOVERED
@@ -128,6 +135,11 @@ while IFS= read -r it; do
   grep -qxF -- "$it" "$tmp/exempt" && continue
   echo "FAIL UNCOVERED: $it is in no COVERS line"; fail=1
 done < "$tmp/items"
+# STALE-EXEMPT: an exempt entry that names no public item (renamed or removed) would otherwise be silently ignored
+while IFS= read -r ex; do
+  grep -qxF -- "$ex" "$tmp/items" && continue
+  echo "FAIL STALE-EXEMPT: $ex is in the exempt list but is not a public item"; fail=1
+done < "$tmp/exempt"
 # STALE and NOTEST
 while IFS="$(printf '\t')" read -r file name; do
   if ! grep -qxF -- "$name" "$tmp/items"; then
