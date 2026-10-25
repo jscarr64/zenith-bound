@@ -15,16 +15,22 @@ ROWS (one case per line, fields separated by single spaces; a value is 'SIGN EXP
 MANT lowercase hex and odd, zero is '0 0 0'; radii use the same form and are nonnegative with at most 8 mantissa bits):
   products   ID OP PREC M K N  A[M*K]  B[K*N]  OUT[M*N]
              every A/B entry is 'MID RAD' (6 tokens), row-major; dot has M = N = 1 (A is the row vector x, B the column vector y),
-             matvec has N = 1 (B is the vector); every OUT entry is 'MIDR RREF P0 P1 P2' (15 tokens):
+             matvec has N = 1 (B is the vector); every OUT entry is 'P0 P1 P2 TREF' (12 tokens):
              P0 = sum_k m(a_ik) m(b_kj) exactly; P1 = the exact product of (A low corner) and (B high corner); P2 = (A high corner)(B low corner)
-             (low corner = mid - rad entrywise, high = mid + rad); MIDR = P0 rounded ToEven at PREC; RREF = sum_k |m(a)| r(b) + r(a)(|m(b)| + r(b))
-             plus one ulp at PREC of MIDR (0 when MIDR = 0), rounded up to 64 bits. A consumer checks containment of P0, P1, P2, mid == MIDR,
-             and rad <= RREF * (1 + 2^-56).
+             (low corner = mid - rad entrywise, high = mid + rad); TREF = R1 + 2^(1-PREC) * S rounded up to 64 bits, with
+             R1 = sum_k |m(a)| r(b) + r(a)(|m(b)| + r(b)) and S = sum_k |m(a) m(b)| (CONTRACT 16.S6.9). No midpoint is pinned (Spence ruling 2,
+             2026-10-25: the implementation accumulates sequentially at PREC + guard bits). A consumer checks containment of P0, P1, P2 and
+             rad <= 2 * TREF.
   norms      ID OP PREC M 0 N  A[M*N]  S HI
              norm_inf / norm_1: S = HI = the exact max row / column sum of |m| + r. norm_frob: S = sum (|m| + r)^2 exactly and HI = sqrt(S)
-             rounded up to 64 bits. A consumer checks result >= S (norm_frob: result^2 >= S) and result <= HI * (1 + 2^-56). PREC is the
-             draw precision of the mids (norms take no prec).
-Draws: goldlib.SplitMix64 from goldlib.stream_seed(17, 1) (gate) and stream_seed(17, 2) (heavy), in case-table order.
+             rounded up to 64 bits. vnorm_inf / vnorm_1 / vnorm_2 (BallVec norms, M = 1, the vector is the row): max / sum of |m| + r, and
+             S = sum of squares, HI = sqrt(S) up. A consumer checks result >= S (norm_frob, vnorm_2: result^2 >= S) and
+             result <= HI * (1 + 2^-56). PREC is the draw precision of the mids (norms take no prec).
+  spread     the row dot.spread (gate tier, CONTRACT 16.S6.10): x = (2^E, 1, -2^E), y = (1, 1, 1), all exact, E = 2^41, so the terms are
+             2^(2^41) apart. P0 = P1 = P2 = 1 analytically and TREF = 2^(1-PREC)(2^(E+1) + 1) rounded up is written by exponent bookkeeping
+             (spread_out); no Fraction near 2^E is ever built. The selftest checks the same text against the generic Fraction path at E = 200.
+Draws: goldlib.SplitMix64 from goldlib.stream_seed(17, 1) (gate) and stream_seed(17, 2) (heavy), in case-table order (suite 17 = s6_matrix,
+registered in tests/common/seeds.rs).
 """
 # popguard gate (as gen_la_goldens.py): before any heavy import or work. Outside a popslot/poprun memory scope ~/pop-logs/bin/popguard.sh exits
 # nonzero and so do we, with its rc; 3 if the guard is missing or cannot run.
@@ -53,7 +59,7 @@ from gen_ball_goldens import vfrac, from_fraction, venc
 
 sys.set_int_max_str_digits(0)
 
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 GOLDEN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "goldens", "slices", "matrix")
 GATE_NAME = "matrix_rows.txt"
 HEAVY_NAME = "matrix_rows_heavy.txt"
@@ -61,14 +67,17 @@ SUITE = 17
 RAD_BITS = 8
 EXP_BAND = 8
 SLACK = Fraction(1, 1 << 56)
+SPREAD_E = 1 << 41
 
-# Case tables: (op, prec, M, K, N, kind). kind: "rand" draws mids and radii; "zero", "ident", "cancel", "tie", "exact" are fixed shapes.
+# Case tables: (op, prec, M, K, N, kind). kind: "rand" draws mids and radii; "zero", "ident", "cancel", "tie", "exact", "spread" are fixed shapes.
 GATE_PRECS = (1, 2, 53, 64, 113, 256)
 PRODUCT_SHAPES = {"dot": ((1, 1, 1), (1, 3, 1), (1, 8, 1)),
                   "matvec": ((1, 1, 1), (2, 3, 1), (4, 4, 1)),
                   "matmul": ((1, 1, 1), (2, 3, 2), (3, 3, 3), (2, 4, 3))}
 NORM_SHAPES = ((1, 0, 1), (2, 0, 3), (4, 0, 4))
-NORMS = ("norm_inf", "norm_1", "norm_frob")
+MAT_NORMS = ("norm_inf", "norm_1", "norm_frob")
+VEC_NORMS = ("vnorm_inf", "vnorm_1", "vnorm_2")
+NORMS = MAT_NORMS + VEC_NORMS
 
 
 def gate_cases():
@@ -77,7 +86,7 @@ def gate_cases():
         for op in ("dot", "matvec", "matmul"):
             for (m, k, n) in PRODUCT_SHAPES[op]:
                 cases.append((op, prec, m, k, n, "rand"))
-        for op in NORMS:
+        for op in MAT_NORMS:
             for (m, k, n) in NORM_SHAPES:
                 cases.append((op, prec, m, k, n, "rand"))
     # fixed rows at prec 53 (and 2 for the tie): empty inner dimension, zero, identity, exact cancellation, ToEven tie, exact (no radius)
@@ -86,6 +95,11 @@ def gate_cases():
               ("dot", 2, 1, 2, 1, "tie"), ("matmul", 64, 3, 5, 2, "exact"),
               ("matmul", 8, 8, 8, 8, "rand"), ("norm_inf", 53, 8, 0, 8, "rand"), ("norm_1", 53, 8, 0, 8, "rand"),
               ("norm_frob", 53, 8, 0, 8, "rand"), ("norm_inf", 53, 2, 0, 0, "rand"), ("norm_frob", 53, 0, 0, 3, "rand")]
+    # version 2 (Spence rulings 2 and 5): the huge-spread row, then BallVec norms (length 4 per prec, and empty vectors)
+    cases.append(("dot", 53, 1, 3, 1, "spread"))
+    for prec in GATE_PRECS:
+        cases += [(op, prec, 1, 0, 4, "rand") for op in VEC_NORMS]
+    cases += [(op, 53, 1, 0, 0, "rand") for op in VEC_NORMS]
     return cases
 
 
@@ -94,11 +108,13 @@ def heavy_cases():
     for prec in (1024, 4096, 16384):
         cases += [("matmul", prec, 16, 16, 16, "rand"), ("matmul", prec, 32, 32, 32, "rand"),
                   ("matvec", prec, 32, 32, 1, "rand"), ("dot", prec, 1, 32, 1, "rand")]
-        cases += [(op, prec, 32, 0, 32, "rand") for op in NORMS]
+        cases += [(op, prec, 32, 0, 32, "rand") for op in MAT_NORMS]
+    for prec in (1024, 4096, 16384):
+        cases += [(op, prec, 1, 0, 32, "rand") for op in VEC_NORMS]
     return cases
 
 
-EXPECTED_ROWS = {"gate": 128, "heavy": 21}
+EXPECTED_ROWS = {"gate": 150, "heavy": 30}
 
 
 # ---- dyadic helpers -------------------------------------------------------------------------------------------------------
@@ -201,10 +217,17 @@ def draw_matrix(rng, prec, rows, cols, kind, which):
                 # x = (5/8, 0), y = (1, 1): sum 5/8 = 0.101b, a tie at 2 bits between 1/2 (mantissa 10b, even) and 3/4; ToEven gives 1/2
                 vals = (Fraction(5, 8), Fraction(0)) if which == "A" else (Fraction(1), Fraction(1))
                 row.append((vals[i * cols + j], Fraction(0)))
+            elif kind == "spread_small":
+                # selftest only: the spread row at a small exponent (SPREAD_SMALL_E), through the generic Fraction path
+                vals = (pow2(SPREAD_SMALL_E), Fraction(1), -pow2(SPREAD_SMALL_E)) if which == "A" else (Fraction(1),) * 3
+                row.append((vals[i * cols + j], Fraction(0)))
             else:
                 raise ValueError(kind)
         out.append(row)
     return out
+
+
+SPREAD_SMALL_E = 200
 
 
 # ---- truth ------------------------------------------------------------------------------------------------------------------
@@ -213,17 +236,35 @@ def product_entry(arow, bcol, prec):
     p1 = sum(((a[0] - a[1]) * (b[0] + b[1]) for a, b in zip(arow, bcol)), Fraction(0))
     p2 = sum(((a[0] + a[1]) * (b[0] - b[1]) for a, b in zip(arow, bcol)), Fraction(0))
     first = sum((abs(a[0]) * b[1] + a[1] * (abs(b[0]) + b[1]) for a, b in zip(arow, bcol)), Fraction(0))
-    midr = round_even(p0, prec)
-    rref = round_up64(first + ulp(midr, prec))
-    return midr, rref, p0, p1, p2, first
+    sabs = sum((abs(a[0] * b[0]) for a, b in zip(arow, bcol)), Fraction(0))
+    tref = round_up64(first + pow2(1 - prec) * sabs)
+    return p0, p1, p2, tref, first, sabs
+
+
+def spread_mids(e):
+    """The spread row's A entries (x = (2^e, 1, -2^e), exact) and B entries (y = (1, 1, 1)) as text, by exponent bookkeeping."""
+    one = "0 1 1"
+    zero = "0 0 0"
+    a = ["0 %d 1 %s" % (e + 1, zero), "%s %s" % (one, zero), "1 %d 1 %s" % (e + 1, zero)]
+    b = ["%s %s" % (one, zero)] * 3
+    return a, b
+
+
+def spread_out(e, prec):
+    """P0 P1 P2 TREF of the spread row: P = 1 exactly; TREF = round_up64(2^(1-prec) (2^(e+1) + 1)) = (2^63 + 1) 2^(e+2-prec-63)
+    for e >= 64 (2^(e+1) + 1 has e + 2 > 64 bits, rounding up at 64 bits gives 2^(e+1) (1 + 2^-63)); 'SIGN EXP MANT' has EXP = e + 3 - prec."""
+    if e < 64:
+        raise ValueError("spread_out needs e >= 64")
+    one = "0 1 1"
+    return "%s %s %s 0 %d %x" % (one, one, one, e + 3 - prec, (1 << 63) + 1)
 
 
 def norm_values(op, a):
     absm = [[abs(m) + r for (m, r) in row] for row in a]
-    if op == "norm_inf":
+    if op in ("norm_inf", "vnorm_1"):
         v = max((sum(row, Fraction(0)) for row in absm), default=Fraction(0))
         return v, v
-    if op == "norm_1":
+    if op in ("norm_1", "vnorm_inf"):
         cols = len(absm[0]) if absm else 0
         v = max((sum((absm[i][j] for i in range(len(absm))), Fraction(0)) for j in range(cols)), default=Fraction(0))
         return v, v
@@ -242,28 +283,30 @@ def make_row(idx, case, rng):
         a = draw_matrix(rng, prec, m, n, kind, "A")
         s, hi = norm_values(op, a)
         return " ".join([cid, op, str(prec), str(m), "0", str(n)] + entries(a) + [enc(s), enc(hi)])
+    if kind == "spread":
+        sa, sb = spread_mids(SPREAD_E)
+        return " ".join([cid, op, str(prec), str(m), str(k), str(n)] + sa + sb + [spread_out(SPREAD_E, prec)])
     a = draw_matrix(rng, prec, m, k, kind, "A")
     b = draw_matrix(rng, prec, k, n, kind, "B")
     outs = []
     for i in range(m):
         for j in range(n):
-            midr, rref, p0, p1, p2, _ = product_entry(a[i], [b[t][j] for t in range(k)], prec)
-            outs.append(" ".join(enc(v) for v in (midr, rref, p0, p1, p2)))
+            p0, p1, p2, tref, _, _ = product_entry(a[i], [b[t][j] for t in range(k)], prec)
+            outs.append(" ".join(enc(v) for v in (p0, p1, p2, tref)))
     return " ".join([cid, op, str(prec), str(m), str(k), str(n)] + entries(a) + entries(b) + outs)
 
 
 def row_width(op, m, k, n):
     if op in NORMS:
         return 6 + 6 * m * n + 6
-    return 6 + 6 * m * k + 6 * k * n + 15 * m * n
+    return 6 + 6 * m * k + 6 * k * n + 12 * m * n
 
 
 def header(tier, nrows):
     return ["# zenith-bound slice S6 gold rows (%s tier), generated by scripts/gen_matrix_goldens.py (generator version %d)" % (tier, GENERATOR_VERSION),
-            "# format: see the generator docstring; products: ID OP PREC M K N A[M*K](MID RAD) B[K*N](MID RAD) OUT[M*N](MIDR RREF P0 P1 P2)",
-            "# norms: ID OP PREC M 0 N A[M*N](MID RAD) S HI; values 'SIGN EXP MANT' (MANT hex, odd; zero '0 0 0')",
+            "# format: see the generator docstring; products: ID OP PREC M K N A[M*K](MID RAD) B[K*N](MID RAD) OUT[M*N](P0 P1 P2 TREF)",
+            "# norms (norm_*, vnorm_*): ID OP PREC M 0 N A[M*N](MID RAD) S HI; values 'SIGN EXP MANT' (MANT hex, odd; zero '0 0 0')",
             "# rows: %d" % nrows]
-
 
 def stream_tier(tier, sinks):
     """Write the header and every row of a tier to each sink (callables taking one line); returns the row count."""
@@ -349,33 +392,66 @@ def selftest():
         for i in range(3):
             for j in range(2):
                 col = [b[t][j] for t in range(4)]
-                midr, rref, p0, p1, p2, first = product_entry(a[i], col, prec)
+                p0, p1, p2, tref, first, sabs = product_entry(a[i], col, prec)
                 true_rad = sum((abs(x[0]) * y[1] + x[1] * abs(y[0]) + x[1] * y[1] for x, y in zip(a[i], col)), Fraction(0))
                 _check(true_rad == first, "first-order formula is the exact product radius")
                 _check(abs(p1 - p0) <= first and abs(p2 - p0) <= first, "corners inside the exact product box")
-                _check(abs(midr - p0) <= ulp(midr, prec) / 2 + ulp(p0, prec) / 2, "MIDR within half an ulp")
-                _check(rref >= first + ulp(midr, prec) and rref <= (first + ulp(midr, prec)) * (1 + pow2(-63)), "RREF rounding")
-    # cancellation and tie rows
+                _check(abs(p0) <= sabs, "|P0| <= S")
+                bound = first + pow2(1 - prec) * sabs
+                _check(tref >= bound and tref <= bound * (1 + pow2(-63)), "TREF rounding")
+    # mutant 902 (radius accounting, CONTRACT 16.S6.11): on cancel, tie and exact rows the rounding is unavoidable, and R1 alone
+    # (no rounding term) cannot reach P0 from any value representable at prec: dropping the rounding terms breaks containment.
+    def r1_misses(kind, prec, m, k, n):
+        ra = draw_matrix(rng, prec, m, k, kind, "A")
+        rb = draw_matrix(rng, prec, k, n, kind, "B")
+        hits = 0
+        for i in range(m):
+            for j in range(n):
+                p0, _, _, _, first, _ = product_entry(ra[i], [rb[t][j] for t in range(k)], prec)
+                lo = goldlib.round_fraction(p0, prec, "Down")[0]
+                hi = goldlib.round_fraction(p0, prec, "Up")[0]
+                if lo != p0 and first < min(p0 - lo, hi - p0):
+                    hits += 1
+        return hits
+    _check(r1_misses("cancel", 53, 1, 4, 1) == 1, "cancel row: R1 alone misses P0")
+    _check(r1_misses("tie", 2, 1, 2, 1) == 1, "tie row: R1 alone misses P0")
+    _check(r1_misses("exact", 64, 3, 5, 2) >= 1, "exact row: R1 alone misses P0 in some entry")
     ca = draw_matrix(rng, 53, 1, 4, "cancel", "A")
     cb = draw_matrix(rng, 53, 4, 1, "cancel", "B")
-    midr, _, p0, _, _, _ = product_entry(ca[0], [cb[t][0] for t in range(4)], 53)
-    _check(p0 == 1 + pow2(-60) and midr == 1, "cancel row: 1 + 2^-60 rounds to 1 at 53 bits")
+    p0 = product_entry(ca[0], [cb[t][0] for t in range(4)], 53)[0]
+    _check(p0 == 1 + pow2(-60) and round_even(p0, 53) == 1, "cancel row: 1 + 2^-60 is not representable at 53 bits")
     ta = draw_matrix(rng, 2, 1, 2, "tie", "A")
     tb = draw_matrix(rng, 2, 2, 1, "tie", "B")
-    midr, _, p0, _, _, _ = product_entry(ta[0], [tb[t][0] for t in range(2)], 2)
-    _check(p0 == Fraction(5, 8) and midr == Fraction(1, 2), "tie row: 5/8 is a tie at 2 bits, ToEven gives 1/2 (mantissa 10b)")
-    # norms: norm_1 of A is norm_inf of A transposed; frob HI is a tight 64-bit upper bound of sqrt(S)
+    p0 = product_entry(ta[0], [tb[t][0] for t in range(2)], 2)[0]
+    _check(p0 == Fraction(5, 8) and round_even(p0, 2) == Fraction(1, 2), "tie row: 5/8 is a tie at 2 bits")
+    # spread row: the bookkeeping text equals the generic Fraction path at E = 200
+    sa = draw_matrix(rng, 53, 1, 3, "spread_small", "A")
+    sb = draw_matrix(rng, 53, 3, 1, "spread_small", "B")
+    ga, gb = spread_mids(SPREAD_SMALL_E)
+    _check(entries(sa) == ga and entries(sb) == gb, "spread mids text")
+    for prec in (1, 53, 256):
+        out = product_entry(sa[0], [sb[t][0] for t in range(3)], prec)
+        _check(" ".join(enc(v) for v in out[:4]) == spread_out(SPREAD_SMALL_E, prec), "spread out text at prec %d" % prec)
+    _check(spread_out(SPREAD_E, 53).split(" ")[10] == str(SPREAD_E + 3 - 53), "spread TREF exponent")
+    # norms: norm_1 of A is norm_inf of A transposed; frob HI is a tight 64-bit upper bound of sqrt(S); vector norms of a row
     a = draw_matrix(rng, 64, 3, 5, "rand", "A")
     at = [[a[i][j] for i in range(3)] for j in range(5)]
     _check(norm_values("norm_1", a)[0] == norm_values("norm_inf", at)[0], "norm_1 = norm_inf of the transpose")
     s, hi = norm_values("norm_frob", a)
     _check(hi * hi >= s and (hi * (1 - pow2(-62))) ** 2 < s, "frob HI tight")
     _check(norm_values("norm_inf", [])[0] == 0 and norm_values("norm_frob", [[], []])[0] == 0, "empty norms are 0")
+    v = draw_matrix(rng, 64, 1, 6, "rand", "A")
+    vals = [abs(m) + r for (m, r) in v[0]]
+    _check(norm_values("vnorm_inf", v)[0] == max(vals) and norm_values("vnorm_1", v)[0] == sum(vals, Fraction(0)), "vector norms")
+    _check(norm_values("vnorm_2", v)[0] == sum((x * x for x in vals), Fraction(0)), "vector 2-norm square")
+    _check(all(norm_values(op, [[]])[0] == 0 for op in VEC_NORMS), "empty vector norms are 0")
     # case tables and widths
     _check(len(gate_cases()) == EXPECTED_ROWS["gate"] and len(heavy_cases()) == EXPECTED_ROWS["heavy"], "case counts")
     _check(all(max(c[2], c[3], c[4]) <= 8 and c[1] <= 256 for c in gate_cases()), "gate dims <= 8, prec <= 256")
     line = make_row(0, ("matmul", 53, 2, 3, 2, "rand"), goldlib.SplitMix64(1))
     _check(len(line.split(" ")) == row_width("matmul", 2, 3, 2), "row width")
+    line = make_row(0, ("dot", 53, 1, 3, 1, "spread"), goldlib.SplitMix64(1))
+    _check(len(line.split(" ")) == row_width("dot", 1, 3, 1) and len(line) < 400, "spread row width and size")
     print("gen_matrix_goldens selftest: OK")
 
 
