@@ -15,12 +15,13 @@ use super::{num, ok, pow2, row_val, want_contains};
 use crate::common::goldens::golden_dir;
 
 /// Rows the generator writes (v3): 13 random ops × 124 (add sub mul mul_exact sqr powi sqrt neg div inv hypot abs mul_2exp),
-/// then the fixed sections: 36 powi rows, 32 mul_2exp exponent-edge rows, 22 hypot edge rows. A short file fails.
+/// then the fixed sections: 36 powi rows, 32 mul_2exp exponent-edge rows, 22 hypot edge rows, 2 mul_2exp_unf_rad rows
+/// (mid 0, rad 2^-53, k = i64::MIN; appended last). A short file fails.
 const WANT_RANDOM: usize = 1612;
 const WANT_POWI_FIXED: usize = 36;
-const WANT_ROWS: usize = 1702;
+const WANT_ROWS: usize = 1704;
 /// Exact row count per OP tag (every row is checked; a tag count off by one fails).
-const WANT_PER_OP: [(&str, usize); 15] = [
+const WANT_PER_OP: [(&str, usize); 16] = [
     ("add", 124),
     ("sub", 124),
     ("mul", 124),
@@ -36,6 +37,7 @@ const WANT_PER_OP: [(&str, usize); 15] = [
     ("mul_2exp", 140),
     ("mul_2exp_ovf", 8),
     ("mul_2exp_unf", 8),
+    ("mul_2exp_unf_rad", 2),
 ];
 const LAMBDA: i64 = 1024;
 
@@ -51,6 +53,31 @@ fn value(v: &[&str], at: usize) -> Result<ExactNum, String> {
     let e = field(v, at.checked_add(1).ok_or("at")?)?;
     let m = field(v, at.checked_add(2).ok_or("at")?)?;
     row_val(s, e, m)
+}
+
+/// Whether the finite-or-infinite `rad` is at least `|field at| · 2^n`, comparing exponents in i128 (the scaled truth
+/// lies below the ExactNum and Mag ranges). A zero truth endpoint is an error: these rows carry the nonzero mpmath image.
+fn rad_covers_scaled(rad: &Mag, v: &[&str], at: usize, n: i64) -> Result<bool, String> {
+    let e = field(v, at.checked_add(1).ok_or("at")?)?;
+    let m = field(v, at.checked_add(2).ok_or("at")?)?;
+    if m == "0" {
+        return Err("truth endpoint is 0; want the nonzero mpmath image".into());
+    }
+    let (Some(rexp), Some(rmant)) = (rad.exp(), rad.mant()) else {
+        return Ok(rad.is_infinity());
+    };
+    let te: i64 = e.parse().map_err(|_| format!("exp {}", e))?;
+    let et = i128::from(te)
+        .checked_add(i128::from(n))
+        .ok_or("scaled exp")?;
+    let er = i128::from(rexp);
+    if er != et {
+        return Ok(er > et);
+    }
+    // Same exponent: compare the fractions 0.MANT in [1/2, 1).
+    let fr = ExactNum::from(rmant).mul_full_prec(&pow2(-64)?);
+    let fh = row_val("0", "0", m)?;
+    Ok(fr.partial_cmp(&fh) != Some(Ordering::Less))
 }
 
 /// Placeholder τ (TEST_PLAN 9): add/sub 2, mul/mul_exact/sqr/sqrt/div/inv/hypot 4, powi 2n, neg/abs/mul_2exp 1.
@@ -97,7 +124,9 @@ fn run(op: &str, prec: usize, k: i64, a: Ball, b: &Ball, bmid: &ExactNum) -> Res
         "inv" => ok("inv", a.inv(prec)),
         "hypot" => ok("hypot", a.hypot(b, prec)),
         "abs" => ok("abs", a.abs(prec)),
-        "mul_2exp" | "mul_2exp_ovf" | "mul_2exp_unf" => ok("mul_2exp", a.mul_2exp(k, prec)),
+        "mul_2exp" | "mul_2exp_ovf" | "mul_2exp_unf" | "mul_2exp_unf_rad" => {
+            ok("mul_2exp", a.mul_2exp(k, prec))
+        }
         other => Err(format!("unknown op {}", other)),
     }
 }
@@ -153,7 +182,36 @@ fn check_row(line: &str) -> Result<(), String> {
             Ok(())
         };
     }
-    if op == "mul_2exp_unf" {
+    if op == "mul_2exp_unf" || op == "mul_2exp_unf_rad" {
+        if op == "mul_2exp_unf_rad" {
+            // A positive radius shifted below the Mag range clamps up to min_pos = finite(HALF_MANT, i64::MIN), never 0.
+            let min_pos = Mag::finite(0x8000_0000_0000_0000, i64::MIN)
+                .map_err(|e| format!("min_pos: {:?}", e))?;
+            if res.rad() != &min_pos {
+                return Err(format!(
+                    "underflow rad {:?}, want min_pos {:?}",
+                    res.rad(),
+                    min_pos
+                ));
+            }
+            // [LO, HI] of this tag is the mpmath truth at scale 2^-N (its true exponent is below every number range);
+            // a mid-0 result contains it iff rad >= |LO|, |HI| scaled by 2^N.
+            for (end, at) in [("LO", 16usize), ("HI", 19usize)] {
+                if !rad_covers_scaled(res.rad(), &v, at, n)? {
+                    return Err(format!(
+                        "underflow rad {:?} does not cover truth {} * 2^{}",
+                        res.rad(),
+                        end,
+                        n
+                    ));
+                }
+            }
+            return if res.mid() == &num(0) {
+                Ok(())
+            } else {
+                Err(format!("mid 0 shifted to {:?}", res.mid()))
+            };
+        }
         let bmax = pow2(EXPONENT_MIN.checked_sub(1).ok_or("EXPONENT_MIN - 1")?)?;
         want_contains("underflow 0", &res, &num(0))?;
         return want_contains(
