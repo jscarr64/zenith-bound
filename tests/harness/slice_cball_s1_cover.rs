@@ -88,12 +88,13 @@ fn cball_s1_cover_abs_mul_2exp() -> Result<(), String> {
     want("16±1 holds 15", r.overlaps(&pt(15)?), Tri::True)?;
     want("16±1 not 18", r.overlaps(&pt(18)?), Tri::False)?;
     // prec 0 is rejected.
-    match pt(1)?.abs(0) {
-        Err(BoundError::InvalidArgument { .. }) => {}
-        other => return Err(format!("abs prec 0: {:?}", other)),
+    let a0 = pt(1)?.abs(0);
+    if !matches!(a0, Err(BoundError::InvalidArgument { .. })) {
+        return Err(format!("abs prec 0: {:?}", a0));
     }
-    match pt(1)?.mul_2exp(1, 0) {
-        Err(BoundError::InvalidArgument { .. }) => Ok(()),
-        other => Err(format!("mul_2exp prec 0: {:?}", other)),
+    let m0 = pt(1)?.mul_2exp(1, 0);
+    if !matches!(m0, Err(BoundError::InvalidArgument { .. })) {
+        return Err(format!("mul_2exp prec 0: {:?}", m0));
     }
+    Ok(())
 }

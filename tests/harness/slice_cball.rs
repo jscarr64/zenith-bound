@@ -530,8 +530,9 @@ fn gold_val(sign: &str, exp: &str, hex: &str) -> Result<ExactNum, String> {
     let mut end = digits.len();
     let mut shift = 0i64;
     while end > 0 {
-        let start = end.saturating_sub(16);
-        let chunk = std::str::from_utf8(&digits[start..end]).map_err(|_| "utf8")?;
+        let start = if end > 16 { end - 16 } else { 0 };
+        let bytes = digits.get(start..end).ok_or("hex slice")?;
+        let chunk = std::str::from_utf8(bytes).map_err(|_| "utf8")?;
         let c = u64::from_str_radix(chunk, 16).map_err(|_| format!("bad hex {:?}", chunk))?;
         if c != 0 {
             let lz = i64::from(c.leading_zeros());
@@ -542,10 +543,12 @@ fn gold_val(sign: &str, exp: &str, hex: &str) -> Result<ExactNum, String> {
         shift += 64;
         end = start;
     }
-    match sign {
-        "0" => Ok(acc),
-        "1" => Ok(num(0).sub_full_prec(&acc)),
-        _ => Err(format!("bad sign {:?}", sign)),
+    if sign == "0" {
+        Ok(acc)
+    } else if sign == "1" {
+        Ok(num(0).sub_full_prec(&acc))
+    } else {
+        Err(format!("bad sign {:?}", sign))
     }
 }
 
