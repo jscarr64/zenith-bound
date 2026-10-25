@@ -1,13 +1,13 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index 50bf6cd..01b0d9c 100644
+index 4ed7629..9505b19 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -264,7 +264,7 @@ impl Ball {
-         let Some(n_lo) = clear_of_zero(&n, &s) else {
+@@ -270,7 +270,7 @@ impl Ball {
+         let Some(n_lo) = clear_of_zero(n, s) else {
              return Ball::all_reals(prec);
          };
--        let rad = s.div_up(&n_lo.mul_lower(&n_lo.sub_lower(&s)));
+-        let rad = s.div_up(&n_lo.mul_lower(&n_lo.sub_lower(s)));
 +        let rad = s.div_up(&n_lo.mul_lower(&n_lo));
-         finish(OP, n.reciprocal(prec, MID_RM), rad, prec, false)
+         finish(OP, n.reciprocal(prec, MID_RM), &rad, prec, false)
      }
  

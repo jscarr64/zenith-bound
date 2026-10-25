@@ -1,0 +1,13 @@
+diff --git a/src/arith.rs b/src/arith.rs
+index 1f8372d..1f79887 100644
+--- a/src/arith.rs
++++ b/src/arith.rs
+@@ -416,7 +416,7 @@ impl Ball {
+ /// outside zenith-float's range, or a difference zenith-float cannot hold.
+ fn gaps(a: &Ball, b: &Ball) -> Option<(Ordering, Ordering)> {
+     let (ra, rb) = (a.rad().to_exact_num().ok()?, b.rad().to_exact_num().ok()?);
+-    let d = a.mid().sub_full_prec(b.mid());
++    let d = b.mid().sub_full_prec(a.mid());
+     let rr = ra.add_full_prec(&rb);
+     let zero = ExactNum::from(0i64);
+     let hi = d.add_full_prec(&rr).partial_cmp(&zero)?;

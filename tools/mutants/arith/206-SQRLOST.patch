@@ -1,13 +1,13 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index deeda66..528a82f 100644
+index 5995d15..a3bc63d 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -109,7 +109,7 @@ impl Ball {
-         // reports only a loss inside the square itself (an exponent underflow), which forces ε (16.S1.5).
-         m.set_inexact(false);
-         let sq = m.mul_full_prec(&m);
--        let lost = sq.inexact_accumulated();
+@@ -125,7 +125,7 @@ impl Ball {
+         // A `mul_full_prec` exponent overflow passes through `finish` to all reals; pinned by
+         // tests/harness/slice_arith.rs `overflow_is_all_reals` (line 424).
+         let sq = m.mul_full_prec(m);
+-        let lost = sq.inexact();
 +        let lost = false;
-         finish("Ball::sqr", round_to(&sq, prec), rad, prec, lost)
+         finish("Ball::sqr", round_to(&sq, prec), &rad, prec, lost)
      }
  

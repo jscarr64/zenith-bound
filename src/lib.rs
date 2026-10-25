@@ -22,6 +22,7 @@ pub mod tri;
 pub mod arith; // S1
 pub mod bridge; // S2
 pub mod carlson; // S4b
+pub mod cball; // CB
 pub mod cholesky; // LA1
 pub mod eigen; // LA5
 pub mod elementary; // S3

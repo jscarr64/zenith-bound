@@ -1,7 +1,77 @@
 # Changelog
 
 ## Unreleased
+- MagArray accessor coverage (harper, 2026-10-25): 6 harness tests in tests/harness/slice_matrix.rs (`s6_magarray_*`) assert exact shape, rank, len, is_empty, as_slice order and into_parts round-trip for rank 0, 1-D, N-D and zero-length dims, plus from_mags InvalidArgument rejections (rank-0 count, length mismatch, [0] with 1, shape overflow). COVERS now names MagArray::shape, rank, len, is_empty, as_slice, into_parts; pubfn-coverage drops them (log harper/2026-10-25/1220-full_gate.log). Red-first: a wrong [1,2,3] expectation (23) failed s6_magarray_nd_accessors_row_major.
 
+
+- cball follow-up (Spence, 2026-10-25): hand gold row sqr p=53, A = (0 ± 2) + (0 ± 2)i (gen_cball_goldens.py extra_rows; mpmath 1.3.0), where RREF is 0 and the im radius rests on 2·r_re·r_im alone. Not red-first: the new mutant 1524-SQRREFNOXY (sqr_ref without 2·r_re·r_im) is already killed by drawn row 40 (sqr p=2, A = (0 ± 2^-3) + (0 ± 7·2^-23)i; pop-logs cassie/2026-10-25/1142-f2-cb-red); the new row passes and kills it too. 62 gold rows (12 sqr, 42 contained); cball floor 16.
+
+- 16.CB.10 RESOLVED (Spence ruling, 2026-10-25): the sqr tightness bound was mis-specified, not the code. Per part rad(sqr) ≤ 2·(RREF + S2), S2 = r_re² + r_im² (re) and 2·r_re·r_im (im), computed exactly from the gold input radii (test helper `sqr_ref`). `cball_tightness_factors_sqr` is no longer ignored; all 12 gold sqr rows pass (the 10 original rows, including the 3 that failed 2·RREF (pop-logs cassie/2026-10-25/0817-cb10-sqr-try), plus one wide-imaginary sqr row and one zero-mid row with both radii nonzero). Golds extended by that one wide-im sqr row in cball_rows.txt, which kills 1523-SQRREFNOIM; SHA256SUMS updated. CONTRACT 16.CB.10 amended.
+
+- S1 borrowing, option B (2026-10-24, Jeff): `Ball::sqr`, `inv`, `sqrt`, `hypot`, `powi` and `abs` take `&self` (API change; callers
+  no longer give up the ball). `sqr` uses `mul_full_prec` and its per-operation `inexact()` flag; `abs` rounds `|m|` as
+  `ExactNum::from(±1).mul(m)`. `add`, `sub`, `mul`, `mul_exact`, `div`, `mul_2exp`, `neg` stay by value until zenith-float has
+  borrowing correctly-rounded ops (Rusty). No `*_ref`, no new copy; rules_scan baselines unchanged. CONTRACT 15.1, O9, O14-W amended.
+  Test: harness `borrowed_ops_reuse_the_same_ball`.
+- mutate_slice / full_gate hardening (Spence BLOCK of 9ea44e6, 1742-zb-fgself2/mutself2): the gate runs mutate_slice.sh (--step-timeout and
+  --all) under `env -u` MUTATE_FLOOR_ZERO_OK MUTANT_TIMEOUT_S MUTANT_BUDGET_S MUTATE_SETUP_S MUTATE_SH, so a leaked selftest knob cannot
+  change a real run. A result is only an UNINDENTED `KILLED|SURVIVED-EQUIVALENT|SURVIVED|INVALID <id>` line for the --only id (a forged
+  indented line is suite output; a result for another id fails). A runner SIGKILLed before its limit (exit 137) is `KILLED-OOM <id>` and
+  fails, not TIMEOUT. A --step-timeout failure writes its whole output to the step log (`| tail -1` lost the cause of the one-off
+  1706-zb-mslice-9ea44e6-selftests failure). full_gate_selftest has 118 cases and logs the count (+6 from main's 25-step gate; +1: a stale MUTATE_REPO/MANIFEST/EQUIVALENT/FLOOR/TIMEOUT/BUILD_TIMEOUT/TMP/PERSIST must not reach mutate.sh, so the gate unsets every env mutate.sh reads except MUTATE_TARGET, which it sets; +19: leaks, duplicate/unknown/forged results, unreadable
+  floor/list, runner rc, OOM, --slices cause).
+
+- full_gate mutants step per slice (Spence-approved design, 2026-10-24): the step runs tools/mutate_slice.sh --all, which runs each slice
+  (`mutate.sh --slices`: central + manifest.d) with `mutate.sh --slice` and checks the result lines itself instead of trusting the runner's
+  exit code. It FAILS on an INVALID mutant, a SURVIVED mutant with no equivalent entry, a slice under its floor (floor.txt for central,
+  floor.d/<slice>.txt), a manifest id with no result (`INCOMPLETE: 257 results for 268 ids ...; missing: <ids>`, per slice and over the
+  whole manifest), a duplicate/unknown result id, or a slice past its timeout (`TIMEOUT ...; never ran: <ids>`). Per-slice timeout =
+  ids x MUTANT_BUDGET_S + MUTATE_SETUP_S; the gate step's timeout is `mutate_slice.sh --step-timeout` (sum + 600s), and the step FAILS if
+  it cannot be computed. Budget source: a real tiny-slice run (pop-logs harper/2026-10-24/1644-zb-mslice-measure, f854a9d: 4 mutants,
+  one per suite, fresh MUTATE_TARGET) had a max of 14s per mutant and ~1s setup; 1520-zb-mutq-merge-full-gate ran 184 mutants in 4m19s.
+  BUDGET_S = 60 (14s x ~4), SETUP_S = 300. mutate.sh gains --slices, --slice SLICE and a `TIME <id> <s>s` line per mutant.
+  full_gate_selftest has 82 cases (+10: timeout, missing results, INVALID, unexplained survivor, below floor, each against a runner that
+  always exits 0). Spence chose this mutate_slice.sh over fba8ec9's; its ID_REGEX is folded in:
+  `mutate_slice.sh SLICE ID_REGEX` runs only the matching ids, prints `PARTIAL run (ID_REGEX=...): floor/completeness not checked` and
+  never a full-pass line; a regex matching no id fails; `--all` rejects a regex, so full_gate never runs partial.
+- mutate_slice per-mutant timeout 60s (measured max 14s for 178-U-underflow-zero in harper/2026-10-24/1644-zb-mslice-measure, x ~4):
+  each id runs as `mutate.sh --slice S --only ID` under that limit; a mutant past it prints `TIMEOUT <id>` and the slice fails (the slice
+  continues and lists every timed-out id). Previously a hang ran to mutate.sh's 20m test timeout and counted as KILLED. The per-step
+  total is unchanged.
+
+- goldens_regen.sh SHA256SUMS line check quiet/loud (2026-10-24): the malformed-line `grep -v` returns 1 when every line is valid,
+  which tripped `ERR rc=1 line=65` on a clean run. rc 1 is now normal (clean rc 0, no ERR); a real malformed line still fails with
+  its text, and a grep rc 2 fails with "grep failed (rc 2)". goldens_regen_selftest has 25 cases (+6).
+
+- mutate.sh inrange forces base 10 itself (Spence nit on b5ac93f): `10#` on the id and the range bounds, so 0213 is 213 (not octal
+  139) and 0219 is not an arithmetic error. mutate_include_selftest has 36 cases (+1).
+
+- mutate.sh inrange quiet/loud (2026-10-24, Spence zb-s2 ceb4024 log 1422-zb-s2-const-steps: 368 `ERR rc=1 line=92`): inrange now
+  returns 0 with empty output on a miss (an id outside every slice range is normal), and rc 2 + a message on a malformed range row.
+  Call sites no longer mask it with `|| true`: a nonzero rc trips the ERR trap and fails the run. mutate_include_selftest has 35
+  cases (+7). Note: ceb4024 does not contain 7881073; rebasing zb-s2 on main also quiets line 92.
+
+- popguard_selftest no-guard-host goldlib case (2026-10-24, Spence follow-up): asserts the exact WARNING line and exit 0. It was
+  rc 1 because the sandbox HOME had no oracle venv (goldlib failed its oracle check, not the guard); the sandbox now links the real
+  pinned venv as a stand-in and runs goldlib with it.
+- Pop guard bypass closed (2026-10-24, Spence blocked 7881073: POPGUARD=/nonexistent turned the cap off silently): goldens_regen.sh
+  and goldlib.py REFUSE (exit 2) when POPGUARD is missing/not executable on a host that has ~/pop-logs/bin/popguard.sh; a host with
+  no popguard.sh runs with a loud stderr WARNING. popguard.sh (pop-logs 6d1fc93) now also requires the scope's memory.max to be a
+  number <= the 6G cap. popguard_selftest never skips on Pop (fails instead) and has 15 cases (the red commit said 16; 15 is right).
+  Red: harper-work/popguard/zb-bypass-red.log; green: zb-bypass-green.log.
+
+- mutate.sh quiet ERR trap (2026-10-24, Spence: 1207-zb-popguard-full-gate1 logged 184 `ERR rc=1 line=92` inrange misses and one
+  `ERR rc=101 line=214` per killed mutant): the inrange calls take `|| true` (no owning range is normal), the suite run captures its rc
+  explicitly (`rc=0; (...) || rc=$?`), and an unexpected rc (INVALID branch) is re-raised with `(exit "$rc")` so the ERR trap still
+  records it. mutate_selftest 34 cases (+2: logged run has no ERR line; unexpected rc 101 still logs ERR and fails).
+  Red: harper-work/popguard/zb-errquiet-red.log; green: zb-errquiet-green.log.
+
+- Pop direct-run guard (2026-10-24, 11:49 incident: a bare 58 GB goldens python run global-OOMed Pop): tools/goldens_regen.sh
+  (before its first generator) and scripts/goldlib.py (at import, before the oracle check, so every mpmath generator) call
+  ~/pop-logs/bin/popguard.sh and exit 3 outside a popslot/poprun memory scope (6G per job, swap 0); hosts without popguard.sh
+  run unguarded. New tools/popguard_selftest.sh (8 cases, in the goldens-regen step).
+
+- goldens_regen (2026-10-24): a slice SHA256SUMS holding only '# EMPTY' is skipped cleanly (no ERR trap lines); '# EMPTY' with a *.txt next to it, with entries, or with a malformed line FAILS. goldens_regen_selftest 19 cases. Red: 1200-goldens_regen_selftest, 1200-goldens_regen_selftest-2200915; green: 1201-goldens_regen_selftest
 - full_gate (2026-10-24): gate-selftest now runs tools/mutate_selftest.sh (and requires cargo, git, timeout). Red: 0915-zb-red-gate-skips-mutate-selftest
   (step PASS with a planted break); 0915-zb-red2 FAIL with it; 0917-zb-green-gate-mutate-selftest PASS, 28 cases.
 

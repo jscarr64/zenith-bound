@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Canonical full gate for zenith-bound. usage: tools/full_gate.sh TAG
+# Goldens: goldens-regen skips python when its input key is unchanged (mode=cached), else checks heavy rows by HEAVY.SHA256 pin only.
+# A merge-point gate runs with ZB_GATE_MODE=merge GOLDENS_REGEN_ARGS=--regen (full regen, heavy rows recomputed); merge without --regen fails.
 # Every step runs under `timeout` (STEP_TIMEOUT, default 20m); the rc of each step is written to $T/TAG.rc and its
 # output to $T/TAG-<step>.log (T defaults to $(zb_scratch)/zb-gate-logs, tools/scratch.sh: never /tmp). REPO selects the checkout (default: this one);
 # CARGO_TARGET_DIR is REQUIRED and belongs to one worktree (Paul, 2026-10-23: /tmp/target-<agent>-<worktree>, e.g.
@@ -19,7 +21,11 @@
 # no-float rules.
 # mutants runs the mutant-runner self-test, then the WHOLE manifest (tools/mutants/manifest.txt) with a persistent MUTATE_TARGET (default
 # "$CARGO_TARGET_DIR/mutate", inside the one target dir, outside the repo; default or caller-set, it gets the same ownership claim as
-# CARGO_TARGET_DIR via tools/fresh_test_run.sh --claim); any SURVIVED (not in EQUIVALENT.txt) or INVALID mutant fails the step.
+# CARGO_TARGET_DIR via tools/fresh_test_run.sh --claim), one slice at a time through tools/mutate_slice.sh --all (Spence-approved, 2026-10-24),
+# which checks the result lines itself and fails on an INVALID mutant, a survivor with no equivalent entry, a manifest id with no result
+# (INCOMPLETE, ids listed), a slice under its floor, or a slice past its timeout (ids x measured per-mutant budget + setup; the unrun ids are
+# listed). The step's own timeout is `tools/mutate_slice.sh --step-timeout` (sum of the slice timeouts + 600s), not STEP_TIMEOUT; if that
+# cannot be computed the step FAILS (no fallback).
 # toolchain (first step) prints which rustc/cargo run and fails unless both match rust-toolchain.toml's channel (Pop has rustc 1.95 in
 # /usr/bin; a PATH without ~/.cargo/bin first must not build silently with it). Callers: export PATH="$HOME/.cargo/bin:$PATH".
 # shellcheck source=tools/runlog.sh
@@ -53,8 +59,20 @@ export -f require no_hits
 gate_rc=0
 run() { name=$1; shift
   case " ${GATE_STEPS:-$name} " in *" $name "*) ;; *) return 0 ;; esac
-  local tf=() rc; case $name in build-debug|build-release) tf=(--tests) ;; esac   # a test step that runs zero tests fails (runlog_step)
-  echo "start $name $(date +%T)" >> "$T/$tag.rc"; runlog_step "${tf[@]}" "$name" -- timeout "${STEP_TIMEOUT:-20m}" bash -c "$*" > "$T/$tag-$name.log" 2>&1; rc=$?
+  local tf=() rc to=${STEP_TIMEOUT:-20m}; case $name in build-debug|build-release) tf=(--tests) ;; esac   # a test step that runs zero tests fails (runlog_step)
+  echo "start $name $(date +%T)" >> "$T/$tag.rc"
+  if [ "$name" = mutants ]; then   # the mutants step's timeout comes from the slice budgets; no silent fallback to STEP_TIMEOUT
+    # the selftest-only MUTANT_TIMEOUT_S / MUTANT_BUDGET_S / MUTATE_SETUP_S / MUTATE_SH (and MUTATE_FLOOR_ZERO_OK) never reach the gate's
+    # mutate_slice.sh: not here, not in the mutants step below (Spence, 1742-zb-fgself2-9ea44e6)
+    # ALL of its output goes to the step log on failure (a `| tail -1` here lost the cause of 1706-zb-mslice-9ea44e6-selftests)
+    local out trc=0
+    out=$(env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH -u MUTATE_REPO -u MUTATE_MANIFEST -u MUTATE_EQUIVALENT -u MUTATE_FLOOR -u MUTATE_TIMEOUT -u MUTATE_BUILD_TIMEOUT -u MUTATE_TMP -u MUTATE_PERSIST tools/mutate_slice.sh --step-timeout 2>&1) || trc=$?
+    to=${out##*$'\n'}
+    if [ "$trc" != 0 ] || [[ ! $to =~ ^[0-9]+$ ]]; then
+      printf 'mutants: FAIL cannot compute the step timeout (tools/mutate_slice.sh --step-timeout exited %s), its output:\n%s\n' "$trc" "$out" > "$T/$tag-$name.log"
+      echo "$name=2" >> "$T/$tag.rc"; gate_rc=1; return 0; fi
+  fi
+  runlog_step "${tf[@]}" "$name" -- timeout "$to" bash -c "$*" > "$T/$tag-$name.log" 2>&1; rc=$?
   echo "$name=$rc" >> "$T/$tag.rc"; [ "$rc" = 0 ] || gate_rc=1; }
 run toolchain "require rustc cargo sed && tools/toolchain_check_selftest.sh && tools/toolchain_check.sh"
 run target-dir "require git && tools/fresh_test_run.sh --claim"
@@ -71,12 +89,15 @@ run no-panic-scan "no_hits ':[0-9]+:\s*(//|\*)' -rn --include='*.rs' -E '\bunwra
 run no-clone-scan "no_hits ':[0-9]+:\s*(//|\*)' -rn --include='*.rs' -E '\.clone\(|\.clone_from\(|\.to_vec\(|\.cloned\(|\.copied\(|\.to_owned\(|Clone::clone|derive\([^)]*(Clone|Copy)|impl(<[^>]*>)?\s+(Clone|Copy)\s+for'"
 run derive-scan "no_hits '' -rPzl --include='*.rs' '#\\[derive\\([^)]*\\b(Clone|Copy)\\b'"
 run manifest-scan "no_hits ':[0-9]+:\s*(//|\*|//!)' -rn --include='*.rs' -F 'env!(\"CARGO_MANIFEST_DIR\")'"
-run gate-selftest "require mktemp ln sed grep wc stat tee touch cargo git timeout && tools/full_gate_selftest.sh && tools/fresh_test_run_selftest.sh && tools/no_tmp_selftest.sh && tools/runlog_selftest.sh && tools/mutate_selftest.sh"
+run gate-selftest "require mktemp ln sed grep wc stat tee touch cargo git timeout && tools/full_gate_selftest.sh && tools/fresh_test_run_selftest.sh && tools/no_tmp_selftest.sh && tools/runlog_selftest.sh && tools/mutate_selftest.sh && tools/mutants_apply_check_selftest.sh"
 run pubfn-coverage "require awk grep git && tools/pubfn_coverage_selftest.sh && tools/pubfn_coverage.sh"
-run goldens-regen "require sha256sum grep cmp && tools/goldens_regen_selftest.sh && tools/goldens_regen.sh"
+run gen-la-guard "require python3 env && tools/gen_la_guard_selftest.sh"
+run gen-la-heavy "require python3 && tools/gen_la_progress_selftest.sh && tools/gen_la_pins_selftest.sh"
+run la4-red-markers "require grep awk && tools/la4_red_markers_selftest.sh && tools/la4_red_markers.sh"
+run goldens-regen "require sha256sum grep cmp && tools/goldens_regen_selftest.sh && tools/popguard_selftest.sh && tools/goldens_regen.sh \${GOLDENS_REGEN_ARGS:-}"
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"
-run mutants "require cargo git timeout grep && mt=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:?}/mutate} && CARGO_TARGET_DIR=\$mt tools/fresh_test_run.sh --claim && tools/mutate_selftest.sh && MUTATE_TARGET=\$mt env -u MUTATE_FLOOR_ZERO_OK tools/mutate.sh"
+run mutants "require cargo git timeout grep awk && mt=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:?}/mutate} && CARGO_TARGET_DIR=\$mt tools/fresh_test_run.sh --claim && tools/mutate_selftest.sh && MUTATE_TARGET=\$mt env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH -u MUTATE_REPO -u MUTATE_MANIFEST -u MUTATE_EQUIVALENT -u MUTATE_FLOOR -u MUTATE_TIMEOUT -u MUTATE_BUILD_TIMEOUT -u MUTATE_TMP -u MUTATE_PERSIST tools/mutate_slice.sh --all"
 if [ "$gate_rc" = 0 ]; then echo "done" >> "$T/$tag.rc"; else echo "failed" >> "$T/$tag.rc"; fi
 exit "$gate_rc"

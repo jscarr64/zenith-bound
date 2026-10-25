@@ -30,6 +30,8 @@ mod w1_translation;
 mod slice_arith;
 mod slice_bridge;
 mod slice_carlson;
+mod slice_cball;
+mod slice_cball_s1_cover;
 mod slice_cholesky;
 mod slice_eigen;
 mod slice_elementary;

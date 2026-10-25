@@ -831,6 +831,13 @@ fn enclosure_rows_contained() -> Result<(), String> {
     Ok(())
 }
 
+// ---- Harper L0b harness (child modules under tests/harness/slice_arith/) -------------------------------------------
+
+mod harper_cmp;
+mod harper_edges;
+mod harper_oracle;
+mod harper_props;
+
 // ---- div, inv, hypot (16.S1.8, zenith-float R13) -----------------------------------------------------------------
 
 /// `[lo, hi]` brackets of an exact quotient or hypot at 256 bits, directed by zenith-float (Down / Up).
@@ -1108,4 +1115,626 @@ fn exponent_min_max_are_i64_62_bit() -> Result<(), String> {
         Err(BoundError::Representation { .. }) => Ok(()),
         other => Err(format!("Mag above EXPONENT_MAX: {:?}", other.map(|_| ()))),
     }
+}
+
+/// CONTRACT 8.3 / 10.4: a radius that would fall below the `Mag` range rounds outward to the smallest positive `Mag`,
+/// never to zero. `2^EXPONENT_MIN · s` with `s` near the bottom of the `Mag` range underflows `|n| r`.
+#[test]
+fn radius_below_exponent_min_rounds_out_to_smallest_mag() -> Result<(), String> {
+    let smallest = mag(TOP, i64::MIN)?;
+    let tiny = ok("tiny", Ball::exact(pow2(EXPONENT_MIN)?, 53))?;
+    let low = ball(num(1), mag(TOP, i64::MIN + 1)?, 53)?;
+    for (what, r) in [
+        ("mul", low.mul(&tiny, 53)),
+        (
+            "mul_exact",
+            ball(num(1), mag(TOP, i64::MIN + 1)?, 53)?.mul_exact(&pow2(EXPONENT_MIN)?, 53),
+        ),
+    ] {
+        let b = ok(what, r)?;
+        if b.mid() != &pow2(EXPONENT_MIN)? || b.rad() != &smallest {
+            return Err(format!("{}: {:?}", what, b));
+        }
+    }
+    let q = ok(
+        "div",
+        ball(num(1), mag(TOP, i64::MIN + 1)?, 53)?
+            .div(&ok("big", Ball::exact(pow2(EXPONENT_MAX - 1)?, 53))?, 53),
+    )?;
+    if q.rad().is_zero() || q.rad() < &smallest {
+        return Err(format!("div: {:?}", q));
+    }
+    Ok(())
+}
+
+/// 16.S1.8 edges: divisors wider than a 64-bit `Mag` (the `|n|` lower bound and the denominator must round down), and
+/// the midpoint of `inv` rounded `ToEven`, including a negative divisor.
+#[test]
+fn div_inv_wide_divisor_and_mid_rounding() -> Result<(), String> {
+    let p = 200;
+    let ev = RoundingMode::ToEven;
+    for (j, k) in [(1i64, 99i64), (3, 98), (-5, 97), (7, 100), (-1, 96)] {
+        for sign in [1i64, -1] {
+            // n = ±(2^100 + 2^37 + j), 101 significant bits; s = 2^(k-1). Built afresh for each use.
+            let n = || -> Result<ExactNum, String> {
+                let base =
+                    ExactNum::from_mag_parts(TOP | 1, 101, 64).map_err(|e| format!("{:?}", e))?;
+                Ok(base.add(&num(j), p, ev).mul(&num(sign), p, ev))
+            };
+            let lo = n()?.sub(&pow2(k - 1)?, p, ev);
+            let hi = n()?.add(&pow2(k - 1)?, p, ev);
+            let inv_b = ok("inv wide", ball(n()?, mag(TOP, k)?, p)?.inv(p))?;
+            let div_b = ok("div wide", pt(3, p)?.div(&ball(n()?, mag(TOP, k)?, p)?, p))?;
+            for end in [&lo, &hi] {
+                for x in brackets(&|rm| num(1).div(end, 512, rm)) {
+                    want_contains("inv wide end", &inv_b, &x)?;
+                }
+                for x in brackets(&|rm| num(3).div(end, 512, rm)) {
+                    want_contains("div wide end", &div_b, &x)?;
+                }
+            }
+        }
+    }
+    for v in [3i64, -3, 10, -7, 11] {
+        let b = ok("inv mid", pt(v, 53)?.inv(53))?;
+        let want = num(1).div(&num(v), 53, RoundingMode::ToEven);
+        if b.mid() != &want {
+            return Err(format!(
+                "inv {}: mid {:?}, want ToEven {:?}",
+                v,
+                b.mid(),
+                want
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// 16.S1.8: the denominator `|n| (|n| - s)` is a lower bound. With `n` and `n - s` exact 64-bit values the endpoint
+/// `1/(n - s)` sits exactly `s / (n (n - s))` from `1/n`, so an upward-rounded product loses it on some draws.
+#[test]
+fn div_inv_denominator_rounds_down() -> Result<(), String> {
+    let p = 200;
+    let ev = RoundingMode::ToEven;
+    let mut rng = SplitMix64::new(0x5_1_8_d_e_4);
+    for _ in 0..200 {
+        let nm = rng.next_u64() | TOP;
+        let sm = (rng.next_u64() | TOP) & !3u64;
+        for sign in [1i64, -1] {
+            let n = || -> Result<ExactNum, String> {
+                let x = ExactNum::from_mag_parts(nm, 64, 64).map_err(|e| format!("{:?}", e))?;
+                Ok(x.mul(&num(sign), p, ev))
+            };
+            let sx = ExactNum::from_mag_parts(sm, 62, 64).map_err(|e| format!("{:?}", e))?;
+            let near = n()?.sub(&sx.mul(&num(sign), p, ev), p, ev);
+            let inv_b = ok("inv", ball(n()?, mag(sm, 62)?, p)?.inv(p))?;
+            let div_b = ok("div", pt(1, p)?.div(&ball(n()?, mag(sm, 62)?, p)?, p))?;
+            for x in brackets(&|rm| num(1).div(&near, 512, rm)) {
+                want_contains("inv near end", &inv_b, &x)?;
+                want_contains("div near end", &div_b, &x)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Harper's oracle rows 1313 and 1343 (arith_oracle_rows.txt @ e634e11, test hypot_wide_rows_1313_1343_tight @ b1c412b):
+/// `OP PREC W N AMID ARAD BMID BRAD LO HI RREF`, each value `SIGN EXP MANT`. The first ball touches or straddles 0,
+/// so the 1-Lipschitz `r + s` radius is over 4x the reference radius; 16.S1.8 requires rad <= 4 * RREF.
+const HYPOT_WIDE_ROWS: [(usize, &str); 2] = [
+    (1313, "hypot 64 192 0 0 -28 1 0 -28 1 1 -26 7ffffffffffffff 0 -87 3 0 -26 7fffffffffffffed 0 -25 83f07b357f6837a0c7d62f13ee20be2705fe7f07ebb27d19 0 -31 5e2f274e3236ab25"),
+    (1343, "hypot 256 576 0 1 -1058 489706e98a646a056377d 0 -1058 3 1 -1056 ed2d7dd0cc75befbdf7a601e714cae309d5ff5498fc1ca098cc8e4a26cfe994f 0 -1313 1 0 -1056 3b4b5f74331d6fbef7de98079c532b8c2757fd5263f07282633239289b3fa653b 0 -1056 7ddb211a35ecafa48bddea922ae94aa45a81ecab0f05f8151dfd6226c4ef912f6acdb6567175ca04c408b2ff737809a7e9979fa2387738aeacb7da04b1d58e76f25d3b763e9e9823 0 -1060 178be5214e370fb7"),
+];
+
+#[test]
+fn hypot_wide_rows_1313_1343_tight() -> Result<(), String> {
+    for (id, line) in HYPOT_WIDE_ROWS {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        let v = |i: usize| -> Result<ExactNum, String> {
+            match (f.get(i), f.get(i + 1), f.get(i + 2)) {
+                (Some(s), Some(e), Some(m)) => row_val(s, e, m),
+                _ => Err(format!("row {}: short at field {}", id, i)),
+            }
+        };
+        let prec: usize = f
+            .get(1)
+            .ok_or("prec")?
+            .parse()
+            .map_err(|_| format!("row {}: prec", id))?;
+        let a = ball(v(4)?, Mag::from_exact_num(&v(7)?), prec)?;
+        let b = ball(v(10)?, Mag::from_exact_num(&v(13)?), prec)?;
+        let r = ok("hypot", a.hypot(&b, prec))?;
+        let what = format!("row {}", id);
+        want_contains(&what, &r, &v(16)?)?;
+        want_contains(&what, &r, &v(19)?)?;
+        let rad = r
+            .rad()
+            .to_exact_num()
+            .map_err(|e| format!("{}: rad {:?}: {:?}", what, r.rad(), e))?;
+        let bound = v(22)?.mul_full_prec(&num(4));
+        if rad > bound {
+            return Err(format!(
+                "{}: TIGHT: rad {:?} > 4*RREF {:?}",
+                what,
+                r.rad(),
+                bound
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The hypot radius covers both halves of `[lo, hi]`: the `ToEven` midpoint can land on either side of the centre.
+/// `x = (1 + k·2^-64) ± 2^-64` with `y = 0` at prec 64 gives `[|x| - r, |x| + r]` exactly; every k parity is checked.
+/// A narrow non-straddling pair stays at the monotone width (below the 1-Lipschitz `r + s`).
+#[test]
+fn hypot_radius_covers_both_endpoints() -> Result<(), String> {
+    let ulp = || pow2(-64);
+    for k in 1..=8i64 {
+        let x = || -> Result<ExactNum, String> {
+            Ok(num(1).add_full_prec(&num(k).mul_full_prec(&ulp()?)))
+        };
+        for neg in [false, true] {
+            let xm = if neg { -x()? } else { x()? };
+            let r = ok("hypot", ball(xm, mag(1, 0)?, 64)?.hypot(&pt(0, 64)?, 64))?;
+            let what = format!("k {} neg {}", k, neg);
+            want_contains(&what, &r, &x()?.sub_full_prec(&ulp()?))?;
+            want_contains(&what, &r, &x()?.add_full_prec(&ulp()?))?;
+        }
+    }
+    // [2 ± 1, 3 ± 1]: lo = hypot(1, 2) = √5, hi = hypot(3, 4) = 5 exactly; the width (5 - √5)/2 < 1.39 < r + s = 2.
+    for (a, b) in [(2i64, 3i64), (-2, 3), (2, -3), (-2, -3)] {
+        let r = ok(
+            "hypot",
+            ball(num(a), mag(1, 64)?, 64)?.hypot(&ball(num(b), mag(1, 64)?, 64)?, 64),
+        )?;
+        want_contains("hi = 5", &r, &num(5))?;
+        if r.rad() > &mag(0x58f5_c28f_5c28_f5c3, 2)? {
+            return Err(format!("({}, {}): rad {:?} above 1.39", a, b, r.rad()));
+        }
+    }
+    // [4 ± 1, 5 ± 1]: lo = hypot(3, 4) = 5 exactly.
+    for (a, b) in [(4i64, 5i64), (-4, -5)] {
+        let r = ok(
+            "hypot",
+            ball(num(a), mag(1, 64)?, 64)?.hypot(&ball(num(b), mag(1, 64)?, 64)?, 64),
+        )?;
+        want_contains("lo = 5", &r, &num(5))?;
+    }
+    Ok(())
+}
+
+/// powi carries guard bits through its squaring chain, so an exact input's power is within one ulp at `prec`
+/// (after Harper's powi_exact_input_within_one_ulp; kills 246-POWIGUARD).
+#[test]
+fn powi_exact_input_within_one_ulp() -> Result<(), String> {
+    let mut checked = 0u32;
+    for (i, prec) in [53usize, 64, 113].into_iter().enumerate() {
+        for j in 0..12i64 {
+            let x = || -> Result<ExactNum, String> {
+                Ok(num(1).add_full_prec(
+                    &num(j
+                        .checked_mul(37)
+                        .and_then(|v| v.checked_add(5))
+                        .ok_or("x")?)
+                    .mul_full_prec(&pow2(-20)?),
+                ))
+            };
+            let n = 100u64
+                .checked_add(
+                    u64::try_from(j)
+                        .map_err(|_| "j")?
+                        .checked_mul(71)
+                        .ok_or("n")?,
+                )
+                .and_then(|v| v.checked_add(u64::try_from(i).ok()?))
+                .ok_or("n")?;
+            let mut want = num(1);
+            for _ in 0..n {
+                want = want.mul_full_prec(&x()?);
+            }
+            let res = ok("powi", ok("exact", Ball::exact(x()?, prec))?.powi(n, prec))?;
+            if !res.is_informative() {
+                continue;
+            }
+            want_contains("powi", &res, &want)?;
+            let me = res.mid().exponent().ok_or("exp")?;
+            let ulp = Mag::half_ulp(me, prec.checked_sub(1).ok_or("p-1")?);
+            if res.rad() > &ulp {
+                return Err(format!(
+                    "prec {} n {}: rad {:?} > one ulp {:?}",
+                    prec,
+                    n,
+                    res.rad(),
+                    ulp
+                ));
+            }
+            checked = checked.checked_add(1).ok_or("c")?;
+        }
+    }
+    if checked < 30 {
+        return Err(format!("only {} informative powi rows", checked));
+    }
+    Ok(())
+}
+
+// ---- abs, mul_2exp, Tri comparisons (CONTRACT 15.1, 15.2, O14-W, 16.S1.10, 16.S1.11) -------------------------------
+
+fn want_tri(what: &str, got: Tri, want: Tri) -> Result<(), String> {
+    if got != want {
+        return Err(format!("{}: got {:?}, want {:?}", what, got, want));
+    }
+    Ok(())
+}
+
+#[test]
+fn abs_rows() -> Result<(), String> {
+    let b = ok("abs -3", pt(-3, 64)?.abs(64))?;
+    want_exact("abs -3", &b, &num(3), &Mag::zero())?;
+    let b = ok("abs 3", pt(3, 64)?.abs(64))?;
+    want_exact("abs 3", &b, &num(3), &Mag::zero())?;
+    let b = ok("abs -3±1", ball(num(-3), mag(TOP, 1)?, 64)?.abs(64))?;
+    want_exact("abs -3±1", &b, &num(3), &mag(TOP, 1)?)?;
+    // Touching 0: [-2, 0] maps to [0, 2] = 1 ± 1, exactly.
+    let b = ok("abs -1±1", ball(num(-1), mag(TOP, 1)?, 64)?.abs(64))?;
+    want_exact("abs -1±1", &b, &num(1), &mag(TOP, 1)?)?;
+    // Straddling: [-3, 1] maps to [0, 3] = 1.5 ± 1.5.
+    let b = ok("abs -1±2", ball(num(-1), mag(TOP, 2)?, 64)?.abs(64))?;
+    want_exact("abs -1±2", &b, &dy(3, -1)?, &mag(0xC000_0000_0000_0000, 1)?)?;
+    let b = ok("abs 1±2", ball(num(1), mag(TOP, 2)?, 64)?.abs(64))?;
+    want_exact("abs 1±2", &b, &dy(3, -1)?, &mag(0xC000_0000_0000_0000, 1)?)?;
+    let b = ok("abs 0±1", ball(num(0), mag(TOP, 1)?, 64)?.abs(64))?;
+    want_exact("abs 0±1", &b, &dy(1, -1)?, &mag(TOP, 0)?)?;
+    let b = ok("abs -0", ok("-0", Ball::exact(-num(0), 64))?.abs(64))?;
+    if b.mid().is_negative() || !b.is_exact() {
+        return Err(format!("abs -0: got {:?}", b));
+    }
+    want_all_reals("abs all reals", ok("ar", Ball::all_reals(64))?.abs(64))?;
+    want_invalid("abs prec 0", pt(-3, 64)?.abs(0))?;
+    // The midpoint is rounded to the requested prec and the radius absorbs it.
+    let x = || num(-1).sub_full_prec(&pow2(64).unwrap_or_else(|_| num(0)));
+    let b = ok("abs round", ok("x", Ball::exact(x(), 128))?.abs(2))?;
+    want_contains("abs round", &b, &x().abs())?;
+    if b.is_exact() {
+        return Err(format!("abs round: want a rounded midpoint, got {:?}", b));
+    }
+    // Endpoints and midpoint of random balls map inside.
+    let mut rng = SplitMix64::new(0x5b1_ab5);
+    for &e in EXPS.iter().cycle().take(200) {
+        let seed = rng.next_u64();
+        let mk = || near_ball(&mut SplitMix64::new(seed), e, 64);
+        let got = ok("abs rand", mk()?.abs(64))?;
+        let b0 = mk()?;
+        want_contains("abs rand mid", &got, &absn(b0.mid()))?;
+        if let Ok(rn) = b0.rad().to_exact_num() {
+            want_contains("abs rand hi", &got, &b0.mid().add_full_prec(&rn).abs())?;
+            want_contains("abs rand lo", &got, &b0.mid().sub_full_prec(&rn).abs())?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn mul_2exp_rows() -> Result<(), String> {
+    let three = || ball(num(3), mag(TOP, 1).unwrap_or_else(|_| Mag::zero()), 64);
+    let b = ok("3±1 << 5", three()?.mul_2exp(5, 64))?;
+    want_exact("3±1 << 5", &b, &num(96), &mag(TOP, 6)?)?;
+    let b = ok("3±1 >> 5", three()?.mul_2exp(-5, 64))?;
+    want_exact("3±1 >> 5", &b, &dy(3, -5)?, &mag(TOP, -4)?)?;
+    let b = ok("3±1 << 0", three()?.mul_2exp(0, 64))?;
+    want_exact("3±1 << 0", &b, &num(3), &mag(TOP, 1)?)?;
+    // i64 shifts beyond zenith-float's range: overflow is all reals, underflow is enclosed (never a silent flush).
+    want_all_reals("1 << MAX", pt(1, 64)?.mul_2exp(EXPONENT_MAX, 64))?;
+    want_all_reals("3±1 << i64::MAX", three()?.mul_2exp(i64::MAX, 64))?;
+    let k = EXPONENT_MIN.checked_sub(1000).ok_or("k")?;
+    let b = ok("1 >> past MIN", pt(1, 64)?.mul_2exp(k, 64))?;
+    if b.is_exact() || b.contains(&num(0)) != Tri::True {
+        return Err(format!(
+            "1 >> past MIN: want an inexact ball around 0, got {:?}",
+            b
+        ));
+    }
+    // The radius alone: exact while the Mag exponent fits, the smallest Mag below that.
+    let b = ok(
+        "0±1 >> 2^40",
+        ball(num(0), mag(TOP, 1)?, 64)?.mul_2exp(-(1 << 40), 64),
+    )?;
+    want_exact("0±1 >> 2^40", &b, &num(0), &mag(TOP, 1 - (1 << 40))?)?;
+    let b = ok(
+        "0±1 >> MIN",
+        ball(num(0), mag(TOP, 1)?, 64)?.mul_2exp(i64::MIN, 64),
+    )?;
+    want_exact("0±1 >> MIN", &b, &num(0), &mag(TOP, i64::MIN + 1)?)?;
+    let b = ok(
+        "0±2^-6 >> MIN",
+        ball(num(0), mag(TOP, -5)?, 64)?.mul_2exp(i64::MIN, 64),
+    )?;
+    want_exact("0±2^-6 >> MIN", &b, &num(0), &mag(TOP, i64::MIN)?)?;
+    let b = ok(
+        "0±1 << MAX",
+        ball(num(0), mag(TOP, 1)?, 64)?.mul_2exp(i64::MAX, 64),
+    )?;
+    if b.is_informative() {
+        return Err(format!("0±1 << MAX: want Infinity radius, got {:?}", b));
+    }
+    let b = ok(
+        "0±max << 1",
+        ball(num(0), mag(TOP, i64::MAX)?, 64)?.mul_2exp(1, 64),
+    )?;
+    if b.is_informative() {
+        return Err(format!("0±max << 1: want Infinity radius, got {:?}", b));
+    }
+    let b = ok("0 >> 1", pt(0, 64)?.mul_2exp(-1, 64))?;
+    want_exact("0 >> 1", &b, &num(0), &Mag::zero())?;
+    want_all_reals(
+        "all reals << 3",
+        ok("ar", Ball::all_reals(64))?.mul_2exp(3, 64),
+    )?;
+    want_invalid("mul_2exp prec 0", pt(3, 64)?.mul_2exp(1, 0))?;
+    // The midpoint is rounded to the requested prec.
+    let x = || num(1).add_full_prec(&pow2(64).unwrap_or_else(|_| num(0)));
+    let b = ok("round", ok("x", Ball::exact(x(), 128))?.mul_2exp(1, 2))?;
+    want_contains("round", &b, &x().mul_full_prec(&num(2)))?;
+    Ok(())
+}
+
+/// `lo ± r` and `hi ± r` style helper: `v ± 2^(k)` with `k` the Mag exponent minus 1.
+fn bl(v: i64, rad_exp: i64) -> Result<Ball, String> {
+    ball(num(v), mag(TOP, rad_exp)?, 64)
+}
+
+/// R > 0 and lo(a) = hi(b): every point of `a` is >= every point of `b`, so `a < b` is certainly False (review nit a).
+#[test]
+fn lt_touching_from_above_is_false() -> Result<(), String> {
+    for (name, a, b) in [
+        ("[2,4] < [0,2]", bl(3, 1)?, bl(1, 1)?),
+        ("2 < [0,2]", pt(2, 64)?, bl(1, 1)?),
+        ("[0,2] < 0", bl(1, 1)?, pt(0, 64)?),
+    ] {
+        want_tri(&format!("{} lt", name), a.lt(&b), Tri::False)?;
+        want_tri(&format!("{} gt", name), b.gt(&a), Tri::False)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn tri_compare_rows() -> Result<(), String> {
+    use Tri::{False as F, True as T, Unknown as U};
+    // (name, a, b, lt, le, gt, ge, eq, ne, overlaps)
+    let rows: [(&str, Ball, Ball, [Tri; 7]); 11] = [
+        (
+            "touching [0,2] [2,4]",
+            bl(1, 1)?,
+            bl(3, 1)?,
+            [U, T, F, U, U, U, T],
+        ),
+        (
+            "touching [2,4] [0,2]",
+            bl(3, 1)?,
+            bl(1, 1)?,
+            [F, U, U, T, U, U, T],
+        ),
+        (
+            "disjoint [0,2] [4,6]",
+            bl(1, 1)?,
+            bl(5, 1)?,
+            [T, T, F, F, F, T, F],
+        ),
+        (
+            "disjoint [4,6] [0,2]",
+            bl(5, 1)?,
+            bl(1, 1)?,
+            [F, F, T, T, F, T, F],
+        ),
+        (
+            "exact 3 vs 3",
+            pt(3, 64)?,
+            pt(3, 64)?,
+            [F, T, F, T, T, F, T],
+        ),
+        (
+            "exact 3 vs 4",
+            pt(3, 64)?,
+            pt(4, 64)?,
+            [T, T, F, F, F, T, F],
+        ),
+        (
+            "[0,2] vs edge point 2",
+            bl(1, 1)?,
+            pt(2, 64)?,
+            [U, T, F, U, U, U, T],
+        ),
+        (
+            "edge point 0 vs [0,2]",
+            pt(0, 64)?,
+            bl(1, 1)?,
+            [U, T, F, U, U, U, T],
+        ),
+        (
+            "interior point 1",
+            bl(1, 1)?,
+            pt(1, 64)?,
+            [U, U, U, U, U, U, T],
+        ),
+        (
+            "nested [0,2] [0.5,1.5]",
+            bl(1, 1)?,
+            bl(1, 0)?,
+            [U, U, U, U, U, U, T],
+        ),
+        (
+            "prec ignored",
+            pt(3, 2)?,
+            pt(3, 4096)?,
+            [F, T, F, T, T, F, T],
+        ),
+    ];
+    for (name, a, b, w) in rows.iter() {
+        let [lt, le, gt, ge, eq, ne, ov] = w;
+        want_tri(&format!("{} lt", name), a.lt(b), clone_tri(lt))?;
+        want_tri(&format!("{} le", name), a.le(b), clone_tri(le))?;
+        want_tri(&format!("{} gt", name), a.gt(b), clone_tri(gt))?;
+        want_tri(&format!("{} ge", name), a.ge(b), clone_tri(ge))?;
+        want_tri(&format!("{} eq", name), a.eq(b), clone_tri(eq))?;
+        want_tri(&format!("{} ne", name), a.ne(b), clone_tri(ne))?;
+        want_tri(&format!("{} overlaps", name), a.overlaps(b), clone_tri(ov))?;
+    }
+    // Any comparison with an Infinity radius is Unknown, even a ball against itself; it overlaps everything.
+    let ar = ok("ar", Ball::all_reals(64))?;
+    let p = pt(3, 64)?;
+    for (n, a, b) in [("ar ar", &ar, &ar), ("ar p", &ar, &p), ("p ar", &p, &ar)] {
+        for (op, t) in [
+            ("lt", a.lt(b)),
+            ("le", a.le(b)),
+            ("gt", a.gt(b)),
+            ("ge", a.ge(b)),
+            ("eq", a.eq(b)),
+            ("ne", a.ne(b)),
+        ] {
+            want_tri(&format!("{} {}", n, op), t, U)?;
+        }
+        want_tri(&format!("{} overlaps", n), a.overlaps(b), T)?;
+    }
+    // A gap far below every radius and midpoint is still decided exactly.
+    let tiny = ok("tiny", Ball::exact(pow2(-(1 << 20))?, 64))?;
+    want_tri("0 lt tiny", pt(0, 64)?.lt(&tiny), T)?;
+    want_tri("tiny gt 0", tiny.gt(&pt(0, 64)?), T)?;
+    let near = ball(pow2(-(1 << 20))?, mag(TOP, 1 - (1 << 20))?, 64)?;
+    want_tri("0 le [0, 2^-2^20+1]", pt(0, 64)?.le(&near), T)?;
+    want_tri("0 lt [0, 2^-2^20+1]", pt(0, 64)?.lt(&near), U)?;
+    Ok(())
+}
+
+fn clone_tri(t: &Tri) -> Tri {
+    match t {
+        Tri::True => Tri::True,
+        Tri::False => Tri::False,
+        Tri::Unknown => Tri::Unknown,
+    }
+}
+
+fn absn(x: &ExactNum) -> ExactNum {
+    if x.is_negative() {
+        num(0).sub_full_prec(x)
+    } else {
+        num(0).add_full_prec(x)
+    }
+}
+
+#[test]
+fn compare_rad_outside_exact_range_is_unknown() -> Result<(), String> {
+    // A finite radius whose exponent is outside the ExactNum range cannot be compared exactly: every decision is Unknown.
+    let wide = ball(num(0), mag(TOP, i64::MAX)?, 64)?;
+    let p = pt(1, 64)?;
+    want_tri("overlaps wide", wide.overlaps(&p), Tri::Unknown)?;
+    want_tri("overlaps wide rev", p.overlaps(&wide), Tri::Unknown)?;
+    want_tri("lt wide", wide.lt(&p), Tri::Unknown)?;
+    want_tri("eq wide", wide.eq(&p), Tri::Unknown)
+}
+
+/// 16.S1.7: under `Clip` a ball with a negative midpoint reaching above 0 has image `[0, sqrt(m + r)]`, and `m + r` is
+/// `r - |m|`, not `|m| + r`. `-1 ± 3` gives `[0, sqrt 2]`, so 3/2 is outside (kills 286-SQRTNEGHI, which used `|m| + r`).
+#[test]
+fn sqrt_clip_negative_mid_hull_is_m_plus_r() -> Result<(), String> {
+    let b = ok(
+        "clip -1±3",
+        ball(num(-1), mag(0xC000_0000_0000_0000, 2)?, 53)?.sqrt(53, &DomainPolicy::Clip),
+    )?;
+    want_contains("clip 0", &b, &num(0))?;
+    want_contains("clip sqrt2", &b, &num(2).sqrt(256, RoundingMode::Up))?;
+    match b.contains(&dy(3, -1)?) {
+        Tri::False => Ok(()),
+        t @ (Tri::True | Tri::Unknown) => Err(format!("clip -1±3: {:?} reaches 3/2 ({:?})", b, t)),
+    }
+}
+
+/// 16.S1.7: for `m - r > 0` the propagated radius is `r / sqrt(m)↓` rounded up, so it is at least `r / sqrt(m)`:
+/// `rad^2 · m >= r^2` exactly (at 4096 bits ε is far below the `Mag` rounding). Kills 287-SQRTROOTUP (`sqrt_up`).
+#[test]
+fn sqrt_radius_is_at_least_r_over_sqrt_m() -> Result<(), String> {
+    let r = mag(TOP, -9)?;
+    let rn = r.to_exact_num().map_err(|e| format!("r: {:?}", e))?;
+    let r2 = rn.mul_full_prec(&rn);
+    for v in 2i64..=200 {
+        let b = ok(
+            "sqrt",
+            ball(num(v), mag(TOP, -9)?, 4096)?.sqrt(4096, &DomainPolicy::Strict),
+        )?;
+        let rad = b
+            .rad()
+            .to_exact_num()
+            .map_err(|e| format!("rad {}: {:?}", v, e))?;
+        let lhs = rad.mul_full_prec(&rad).mul_full_prec(&num(v));
+        match lhs.partial_cmp(&r2) {
+            Some(core::cmp::Ordering::Greater | core::cmp::Ordering::Equal) => {}
+            other => {
+                return Err(format!(
+                    "sqrt({} ± 2^-10): rad {:?} below r/sqrt(m) ({:?})",
+                    v,
+                    b.rad(),
+                    other
+                ))
+            }
+        }
+    }
+    Ok(())
+}
+
+/// CONTRACT 10.4: only an INEXACT result in the top binade counts as overflow. An exact midpoint with exponent
+/// `EXPONENT_MAX` stays exact (kills 290-OVFEXACT, which dropped the `inexact()` test).
+#[test]
+fn exact_top_binade_midpoint_is_not_overflow() -> Result<(), String> {
+    let x = ExactNum::from_mag_parts(TOP, EXPONENT_MAX, 64).map_err(|e| format!("top: {:?}", e))?;
+    let top = || -> Result<Ball, String> { ok("top", Ball::exact(pow2(EXPONENT_MAX - 1)?, 53)) };
+    want_exact(
+        "top + 0",
+        &ok("add", top()?.add(&pt(0, 53)?, 53))?,
+        &x,
+        &Mag::zero(),
+    )?;
+    want_exact(
+        "top * 1",
+        &ok("mul", top()?.mul(&pt(1, 53)?, 53))?,
+        &x,
+        &Mag::zero(),
+    )?;
+    want_exact(
+        "2^(EMAX-2) * 2",
+        &ok(
+            "mul_2exp",
+            ok("half", Ball::exact(pow2(EXPONENT_MAX - 2)?, 53))?.mul_2exp(1, 53),
+        )?,
+        &x,
+        &Mag::zero(),
+    )
+}
+
+// ---- Harper S1 coverage rows (child module under tests/harness/slice_arith/) ----------------------------------------
+
+mod harper_s1cov;
+
+/// The borrowing S1 ops (CONTRACT 15.1, O14-W for abs): one ball feeds several ops and is still usable afterwards,
+/// as a complex ball's parts must be (16.S1.5-16.S1.8, 16.S1.10). On the by-value API this does not compile.
+#[test]
+fn borrowed_ops_reuse_the_same_ball() -> Result<(), String> {
+    let p = 64;
+    let a = pt(4, p)?;
+    let b = pt(3, p)?;
+    want_contains("sqr", &ok("sqr", a.sqr(p))?, &num(16))?;
+    want_contains("inv", &ok("inv", a.inv(p))?, &dy(1, -2)?)?;
+    want_contains(
+        "sqrt",
+        &ok("sqrt", a.sqrt(p, &DomainPolicy::Strict))?,
+        &num(2),
+    )?;
+    want_contains("hypot", &ok("hypot", a.hypot(&b, p))?, &num(5))?;
+    let hh = ok("hypot self", b.hypot(&b, p))?;
+    want_contains("hypot self", &ok("sqr", hh.sqr(p))?, &num(18))?;
+    want_contains("powi", &ok("powi", a.powi(3, p))?, &num(64))?;
+    want_contains("abs", &ok("abs", (-pt(4, p)?).abs(p))?, &num(4))?;
+    let n = -pt(4, p)?;
+    want_contains("abs twice", &ok("abs", n.abs(p))?, &num(4))?;
+    want_contains("abs twice", &ok("abs", n.abs(p))?, &num(4))?;
+    // `a` and `b` are still owned here: the by-value ops consume them last.
+    want_contains("add after", &ok("add", a.add(&b, p))?, &num(7))
 }

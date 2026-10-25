@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Hand-written mutant runner (TEST_PLAN section 11, default plan D3). No `cfg` switch is added to src/; a mutant is a patch.
 #
-# usage: tools/mutate.sh [--only MUTANT_ID] [--list] [--floor]
+# usage: tools/mutate.sh [--only MUTANT_ID] [--slice SLICE] [--list] [--floor] [--slices]
+#   --slices prints every slice name (central = manifest.txt, then each manifest.d/<slice>.txt) and exits.
+#   --slice SLICE limits --list, --floor and a run to that slice's ids; --floor/the run's floor check then use only that slice's floor
+#   (floor.txt for central, floor.d/SLICE.txt for a slice, 0 if it has none). An empty slice runs 0 mutants and passes a 0 floor.
+#   Every mutant prints `TIME <id> <seconds>s` after its result (tools/mutate_slice.sh reports the max; the gate budget comes from it).
 #   --list prints every mutant id (central manifest, then the per-slice includes) and exits; --floor prints the summed floor and exits.
 # PER-SLICE INCLUDES (S0, 2026-10-24), so parallel slices never edit a shared registry:
 #   manifest.d/<slice>.txt    more manifest rows (same 4 columns; the patch path is relative to the manifest's directory, e.g.
@@ -39,13 +43,15 @@ manifest=${MUTATE_MANIFEST:-$repo/tools/mutants/manifest.txt}
 equiv=${MUTATE_EQUIVALENT:-$(dirname "$manifest")/EQUIVALENT.txt}
 mfloor=${MUTATE_FLOOR:-$(dirname "$manifest")/floor.txt}
 ttl=${MUTATE_TIMEOUT:-20m}; bttl=${MUTATE_BUILD_TIMEOUT:-20m}
-only=""; list=0
+only=""; list=0; slice=
 while [ $# -gt 0 ]; do
   case "$1" in
     --only) only=${2:-}; shift 2 ;;
     --list) list=1; shift ;;
     --floor) list=2; shift ;;
-    *) echo "usage: tools/mutate.sh [--only MUTANT_ID] [--list] [--floor]"; exit 2 ;;
+    --slices) list=3; shift ;;
+    --slice) slice=${2:-}; [ -n "$slice" ] || { echo "mutate: --slice needs a name"; exit 2; }; shift 2 ;;
+    *) echo "usage: tools/mutate.sh [--only MUTANT_ID] [--slice SLICE] [--list] [--floor] [--slices]"; exit 2 ;;
   esac
 done
 [ -f "$manifest" ] || { echo "mutate: no manifest at $manifest"; exit 2; }
@@ -55,6 +61,7 @@ mdir=$(dirname "$manifest")
 badrows() { local bad; bad=$(printf '%s\n' "$2" | awk -F'\t' 'NF && (NF != 4 || $1 == "" || $2 == "" || $3 == "" || $4 == "")' | head -3)
   [ -z "$bad" ] || { printf 'mutate: FAIL %s: row needs 4 tab-separated columns: %s\n' "$1" "$bad"; exit 1; }; }
 badrows "$manifest" "$rows"
+slmap=$(printf '%s\n' "$rows" | awk -F'\t' 'NF { print $2 "\tcentral" }')   # id<TAB>slice, for --slice
 # per-slice includes (header above): append each file's rows after checking its `# range: LO-HI` line and its ids against it
 ranges=""
 for inc in "$mdir"/manifest.d/*.txt; do
@@ -80,16 +87,28 @@ for inc in "$mdir"/manifest.d/*.txt; do
     # owned by the slice: its patch lives under the slice's own patch dir
     case "$ipatch" in "$islice"/*) ;; *) echo "mutate: FAIL $inc: id $iid: patch $ipatch is not under $islice/ (not owned by slice $islice)"; exit 1 ;; esac
   done <<< "$irows"
-  [ -n "$irows" ] && rows+=$'\n'"$irows"
+  [ -n "$irows" ] && rows+=$'\n'"$irows" && slmap+=$'\n'$(printf '%s\n' "$irows" | awk -F'\t' -v s="$islice" 'NF { print $2 "\t" s }')
 done
 rows=$(printf '%s\n' "$rows" | grep -v -E '^[[:space:]]*$' || true)
 # inrange NUM: prints the include file whose range holds NUM (empty if none)
-inrange() { local olo ohi oname; while read -r olo ohi oname; do [ -n "$olo" ] && [ "$1" -ge "$olo" ] && [ "$1" -le "$ohi" ] && { echo "$oname"; return; }; done <<< "$ranges"; }
+# Contract: rc 0 on a hit AND on a miss (a miss is the normal case for central ids, so it must not trip the poplog
+# ERR trap); rc 2 + message only on a real failure (a malformed range row), which call sites leave unmasked so it is loud.
+inrange() {
+  local olo ohi oname
+  while read -r olo ohi oname; do
+    [ -n "$olo" ] || continue
+    [[ $olo =~ ^[0-9]+$ && $ohi =~ ^[0-9]+$ && $1 =~ ^[0-9]+$ ]] || { echo "mutate: internal: inrange $1: bad range row '$olo $ohi $oname'" >&2; return 2; }
+    # base 10 forced here: a leading-zero id (0213) is never octal
+    if (( 10#$1 >= 10#$olo && 10#$1 <= 10#$ohi )); then echo "$oname"; return 0; fi
+  done <<< "$ranges"
+  return 0
+}
 # a central-manifest id must not sit inside a slice's range: that number is owned by the slice's include file
 while IFS=$'\t' read -r _ cid _ _; do
   [ -n "$cid" ] || continue
   cnum=${cid%%-*}; [[ $cnum =~ ^[0-9]{1,6}$ ]] || { echo "mutate: FAIL $manifest: id $cid does not start with a number"; exit 1; }
-  owner=$(inrange "$((10#$cnum))")
+  owner=$(inrange "$((10#$cnum))"); irc=$?   # a miss is rc 0 (empty); nonzero is a real failure: left unmasked so the ERR trap logs it
+  [ "$irc" -eq 0 ] || { echo "mutate: FAIL inrange $cid: rc $irc"; exit 1; }
   [ -z "$owner" ] || { echo "mutate: FAIL $manifest: id $cid is inside the range of manifest.d/$owner (owned by slice ${owner%.txt}); move it there"; exit 1; }
 done <<< "$(grep -v -E '^[[:space:]]*(#|$)' "$manifest" || true)"
 # manifest integrity, before any mutant runs: every id exactly once, every referenced patch file present
@@ -121,7 +140,8 @@ for e in "${equivs[@]}"; do
     { [ "$eid" != "$eline" ] && [ -n "${ereason//[[:space:]]/}" ]; } || { echo "mutate: FAIL $e: entry '$eline' needs ID<TAB>REASON"; exit 1; }
     printf '%s\n' "$ids" | grep -qxF -- "$eid" || { echo "mutate: FAIL $e: equivalent id $eid is not in the manifest"; exit 1; }
     if [ -n "$eslice" ]; then
-      enum=${eid%%-*}; erange=$(inrange "$((10#$enum))")
+      enum=${eid%%-*}; erange=$(inrange "$((10#$enum))"); irc=$?
+      [ "$irc" -eq 0 ] || { echo "mutate: FAIL inrange $eid: rc $irc"; exit 1; }
       [ "$erange" = "$eslice.txt" ] || { echo "mutate: FAIL $e: id $eid is not in slice $eslice's range"; exit 1; }
     fi
   done < "$e"
@@ -134,7 +154,14 @@ for f in "$mdir"/floor.d/*.txt; do
     END { for (k in n) if (n[k] > 1) print "duplicate key " k; if (!n["killed"]) print "no killed row"; if (!n["killed+equivalent"]) print "no killed+equivalent row" }' "$f")
   [ -z "$fbad" ] || { echo "mutate: FAIL $f: $(printf '%s' "$fbad" | tr '\n' ';')"; exit 1; }
 done
-if [ "$list" = 1 ]; then printf '%s\n' "$ids"; exit 0; fi
+if [ "$list" = 3 ]; then echo central; for inc in "$mdir"/manifest.d/*.txt; do [ -f "$inc" ] && basename "$inc" .txt; done; exit 0; fi
+if [ -n "$slice" ]; then
+  [ "$slice" = central ] || [ -f "$mdir/manifest.d/$slice.txt" ] || { echo "mutate: FAIL no slice $slice (central or manifest.d/$slice.txt)"; exit 2; }
+  sids=$(printf '%s\n' "$slmap" | awk -F'\t' -v s="$slice" '$2 == s { print $1 }')
+  rows=$(printf '%s\n' "$rows" | awk -F'\t' -v keep="$sids" 'BEGIN { n = split(keep, a, "\n"); for (i = 1; i <= n; i++) k[a[i]] = 1 } NF && ($2 in k)')
+  ids=$sids
+fi
+if [ "$list" = 1 ]; then [ -z "$ids" ] || printf '%s\n' "$ids"; exit 0; fi
 # floor_total KEY: floor.txt's row plus every floor.d share (each a plain integer, a share may be 0); fails closed
 floor_total() {
   local f v tot=0 first=1
@@ -148,6 +175,17 @@ floor_total() {
   done
   printf '%s\n' "$tot"
 }
+# floor_slice KEY: the --slice share (floor.txt for central, with its 1-or-more rule; floor.d/SLICE.txt for a slice, 0 if absent)
+floor_slice() {
+  local f v
+  if [ "$slice" = central ]; then f=$mfloor; else f="$mdir/floor.d/$slice.txt"; [ -f "$f" ] || { echo 0; return 0; }; fi
+  [ -f "$f" ] || { echo "mutate: FAIL NOFLOOR: mutant floor $f is missing or unreadable" >&2; return 1; }
+  v=$(awk -F'\t' -v k="$1" '$1 == k { print $2; found = 1; exit } END { exit !found }' "$f") || { echo "mutate: FAIL NOFLOOR: no '$1' row in $f" >&2; return 1; }
+  [[ $v =~ ^[0-9]{1,18}$ ]] || { echo "mutate: FAIL BADCOUNT: floor value '$v' in $f is not a plain integer" >&2; return 1; }
+  if [ "$slice" = central ] && [[ $v =~ ^0+$ ]] && [ "${MUTATE_FLOOR_ZERO_OK:-}" != 1 ]; then echo "mutate: FAIL BADCOUNT: floor value '$v' in $f must be 1 or more" >&2; return 1; fi
+  printf '%s\n' "$((10#$v))"
+}
+if [ -n "$slice" ]; then floor_total() { floor_slice "$@"; }; fi
 if [ "$list" = 2 ]; then
   fk=$(floor_total killed) || exit 1; fke=$(floor_total killed+equivalent) || exit 1
   printf 'killed %s\nkilled+equivalent %s\n' "$fk" "$fke"; exit 0
@@ -198,7 +236,7 @@ newtgt
 if [ -n "$rows" ]; then
 while IFS="$(printf '\t')" read -r fnpath id patch suite; do
   [ -n "$only" ] && [ "$only" != "$id" ] && continue
-  total=$((total + 1))
+  total=$((total + 1)); t0=$SECONDS
   if [ -z "$fnpath" ] || [ -z "$id" ] || [ -z "$patch" ] || [ -z "$suite" ]; then echo "INVALID $id: manifest row needs 4 tab-separated columns"; ni=$((ni + 1)); continue; fi
   pfile=$(dirname "$manifest")/$patch
   [ -f "$pfile" ] || { echo "INVALID $id: patch file $pfile not found"; ni=$((ni + 1)); continue; }
@@ -211,7 +249,8 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
   if ! (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$bttl" cargo test --offline --frozen --test "$suite" --no-run >"$tgt/build.log" 2>&1 </dev/null); then
     echo "INVALID $id: mutant does not build suite $suite (see: first lines below)"; head -5 "$tgt/build.log" | sed 's/^/    /'; ni=$((ni + 1))
   else
-    (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$ttl" cargo test --offline --frozen --test "$suite" >"$tgt/run.log" 2>&1 </dev/null); rc=$?
+    # rc captured explicitly: a failing suite is the EXPECTED outcome for a mutant, so it must not trip the poplog ERR trap
+    rc=0; (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$ttl" cargo test --offline --frozen --test "$suite" >"$tgt/run.log" 2>&1 </dev/null) || rc=$?
     if [ "$rc" = 0 ]; then
       if [ "${#equivs[@]}" -gt 0 ] && awk -F'\t' -v id="$id" '!/^[[:space:]]*(#|$)/ && $1 == id { f = 1 } END { exit !f }' "${equivs[@]}"; then
         echo "SURVIVED-EQUIVALENT $id ($fnpath, suite $suite): documented in EQUIVALENT.txt or equivalent.d"; ne=$((ne + 1))
@@ -222,14 +261,16 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
     # a kill is a test binary that ran and failed: cargo then prints "error: test failed, to rerun pass". Anything else (resolve,
     # network, lock, I/O error) proves nothing about the mutant.
     elif grep -q '^error: test failed, to rerun pass' "$tgt/run.log"; then echo "KILLED $id ($fnpath, suite $suite): suite failed (rc $rc)"; nk=$((nk + 1))
-    else echo "INVALID $id: suite run failed without a test failure (rc $rc; see: first lines below)"; head -5 "$tgt/run.log" | sed 's/^/    /'; ni=$((ni + 1)); fi
+    else (exit "$rc")   # unexpected: re-raise rc so the ERR trap still records it
+      echo "INVALID $id: suite run failed without a test failure (rc $rc; see: first lines below)"; head -5 "$tgt/run.log" | sed 's/^/    /'; ni=$((ni + 1)); fi
   fi
   cleanup; newtgt
+  echo "TIME $id $((SECONDS - t0))s"
 done <<< "$rows"
 fi
 if [ -n "$only" ] && [ "$total" = 0 ]; then echo "mutate: no mutant with id $only"; exit 2; fi
 echo "mutate: $total mutants: $nk killed, $ns survived, $ne survived-equivalent, $ni invalid"
-[ "$total" -gt 0 ] || { echo "mutate: FAIL 0 mutants ran (an empty manifest proves nothing)"; exit 1; }
+[ "$total" -gt 0 ] || [ -n "$slice" ] || { echo "mutate: FAIL 0 mutants ran (an empty manifest proves nothing)"; exit 1; }
 [ "$ns" = 0 ] && [ "$ni" = 0 ] || exit 1
 # Mutant floor (Paul, 2026-10-23): a full run must kill at least the checked-in number, so a manifest that loses rows, or a suite that
 # stops killing, cannot pass. --only runs one row by design and skips it (it still needs its one mutant run, above). Fails closed.
