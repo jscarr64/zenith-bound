@@ -15,11 +15,11 @@ use super::{num, ok, pow2, row_val, want_contains};
 use crate::common::goldens::golden_dir;
 
 /// Rows the generator writes (v3): 13 random ops × 124 (add sub mul mul_exact sqr powi sqrt neg div inv hypot abs mul_2exp),
-/// then the fixed sections: 36 powi rows, 32 mul_2exp exponent-edge rows, 22 hypot edge rows, 4 mul_2exp_unf_rad rows
-/// (rad 2^-53, k = i64::MIN; appended last). A short file fails.
+/// then the fixed sections: 36 powi rows, 32 mul_2exp exponent-edge rows, 22 hypot edge rows, 2 mul_2exp_unf_rad rows
+/// (mid 0, rad 2^-53, k = i64::MIN; appended last). A short file fails.
 const WANT_RANDOM: usize = 1612;
 const WANT_POWI_FIXED: usize = 36;
-const WANT_ROWS: usize = 1706;
+const WANT_ROWS: usize = 1704;
 /// Exact row count per OP tag (every row is checked; a tag count off by one fails).
 const WANT_PER_OP: [(&str, usize); 16] = [
     ("add", 124),
@@ -37,7 +37,7 @@ const WANT_PER_OP: [(&str, usize); 16] = [
     ("mul_2exp", 140),
     ("mul_2exp_ovf", 8),
     ("mul_2exp_unf", 8),
-    ("mul_2exp_unf_rad", 4),
+    ("mul_2exp_unf_rad", 2),
 ];
 const LAMBDA: i64 = 1024;
 
@@ -162,6 +162,11 @@ fn check_row(line: &str) -> Result<(), String> {
             if res.rad() != &min_pos {
                 return Err(format!("underflow rad {:?}, want min_pos {:?}", res.rad(), min_pos));
             }
+            return if res.mid() == &num(0) {
+                Ok(())
+            } else {
+                Err(format!("mid 0 shifted to {:?}", res.mid()))
+            };
         }
         let bmax = pow2(EXPONENT_MIN.checked_sub(1).ok_or("EXPONENT_MIN - 1")?)?;
         want_contains("underflow 0", &res, &num(0))?;
