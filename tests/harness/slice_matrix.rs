@@ -3,7 +3,7 @@
 //! Golden file headers for this slice are declared here, not in tests/common/goldens.rs.
 //! CONTRACT 16.S6.0 to 16.S6.11. Oracle: exact Fraction golds from scripts/gen_matrix_goldens.py (gate file matrix_rows.txt; the heavy
 //! file matrix_rows_heavy.txt is replayed by the ignored heavy test when ZB_MATRIX_HEAVY points at it), plus hand rows below.
-//! COVERS: MagArray::from_mags, MagArray::get, BallArray::add, BallArray::sub, BallArray::mid_rad, BallArray::from_mid_rad, BallVec::dot, BallMat::matvec, BallMat::matmul, BallMat::norm_inf, BallMat::norm_1, BallMat::norm_frob_up
+//! COVERS: MagArray::from_mags, MagArray::get, BallArray::add, BallArray::sub, BallArray::mid_rad, BallArray::from_mid_rad, BallVec::dot, BallVec::norm_inf, BallVec::norm_1, BallVec::norm_2_up, BallMat::matvec, BallMat::matmul, BallMat::norm_inf, BallMat::norm_1, BallMat::norm_frob_up
 
 use crate::common::goldens::golden_dir;
 use zenith_bound::array::{BallArray, BallMat, BallVec};
@@ -15,8 +15,8 @@ use zenith_bound::matrix::MagArray;
 use zenith_bound::tri::Tri;
 use zenith_float_num::ExactNum;
 
-const GATE_ROWS: usize = 128;
-const HEAVY_ROWS: usize = 21;
+const GATE_ROWS: usize = 150;
+const HEAVY_ROWS: usize = 30;
 const TOP: u64 = 0x8000_0000_0000_0000;
 
 // ---- helpers ------------------------------------------------------------------------------------------------------------
@@ -89,6 +89,16 @@ fn within_slack(what: &str, x: &Mag, bound: &ExactNum) -> Result<(), String> {
     let limit = bound.add_full_prec(&slack);
     if sign_of(&xe, &limit) > 0 {
         return Err(format!("{what}: {x:?} exceeds {bound:?} * (1 + 2^-56)"));
+    }
+    Ok(())
+}
+
+/// `x <= 2 * tref` (the tightness factor of 16.S6.9; TREF = R1 + 2^(1-prec) S from the gold row).
+fn within_twice(what: &str, x: &Mag, tref: &ExactNum) -> Result<(), String> {
+    let xe = x.to_exact_num().map_err(|e| format!("{what}: radius {x:?} not finite: {e:?}"))?;
+    let limit = tref.add_full_prec(tref);
+    if sign_of(&xe, &limit) > 0 {
+        return Err(format!("{what}: {x:?} exceeds 2 * TREF {tref:?}"));
     }
     Ok(())
 }
@@ -187,17 +197,13 @@ fn header_rows(text: &str) -> Result<usize, String> {
         .map_err(|e| format!("bad '# rows:' header {line:?}: {e}"))
 }
 
-/// Checks one product output entry: mid == MIDR, contains P0 P1 P2, rad <= RREF (1 + 2^-56).
+/// Checks one product output entry: contains P0 P1 P2 (16.S6.8) and rad <= 2 TREF (16.S6.9). No midpoint is pinned (16.S6.7).
 fn check_entry(what: &str, c: &Ball, cur: &mut Cursor) -> Result<(), String> {
-    let midr = cur.val()?;
-    let rref = cur.val()?;
-    if sign_of(c.mid(), &midr) != 0 {
-        return Err(format!("{what}: mid {:?} != MIDR {midr:?}", c.mid()));
-    }
     for k in 0..3 {
         want_contains(&format!("{what} P{k}"), c, &cur.val()?)?;
     }
-    within_slack(&format!("{what} rad"), c.rad(), &rref)
+    let tref = cur.val()?;
+    within_twice(&format!("{what} rad"), c.rad(), &tref)
 }
 
 /// Replays one gold row through zenith-bound; Ok(()) when every check holds.
@@ -214,26 +220,41 @@ fn replay_row(line: &str) -> Result<(), String> {
     let n = cur.usize()?;
     let size = |a: usize, b: usize| a.checked_mul(b).ok_or_else(|| format!("{id}: dims overflow"));
     match op {
-        "norm_inf" | "norm_1" | "norm_frob" => {
-            let a = ok(id, BallMat::from_balls(m, n, cur.balls(size(m, n)?, prec)?))?;
+        "norm_inf" | "norm_1" | "norm_frob" | "vnorm_inf" | "vnorm_1" | "vnorm_2" => {
+            let balls = cur.balls(size(m, n)?, prec)?;
             let s = cur.val()?;
             let hi = cur.val()?;
-            let r = match op {
-                "norm_inf" => a.norm_inf(),
-                "norm_1" => a.norm_1(),
-                other => {
-                    if other != "norm_frob" {
-                        return Err(format!("{id}: op {other}"));
+            let squared = op == "norm_frob" || op == "vnorm_2";
+            let r = if op.starts_with('v') {
+                if m != 1 {
+                    return Err(format!("{id}: vector norm row with M = {m}"));
+                }
+                let v = BallVec::from_balls(balls);
+                match op {
+                    "vnorm_inf" => v.norm_inf(),
+                    "vnorm_1" => v.norm_1(),
+                    other => {
+                        if other != "vnorm_2" {
+                            return Err(format!("{id}: op {other}"));
+                        }
+                        v.norm_2_up()
                     }
-                    a.norm_frob_up()
+                }
+            } else {
+                let a = ok(id, BallMat::from_balls(m, n, balls))?;
+                match op {
+                    "norm_inf" => a.norm_inf(),
+                    "norm_1" => a.norm_1(),
+                    other => {
+                        if other != "norm_frob" {
+                            return Err(format!("{id}: op {other}"));
+                        }
+                        a.norm_frob_up()
+                    }
                 }
             };
             let re = r.to_exact_num().map_err(|e| format!("{id}: norm {r:?} not finite: {e:?}"))?;
-            let lhs = if op == "norm_frob" {
-                re.mul_full_prec(&re)
-            } else {
-                re
-            };
+            let lhs = if squared { re.mul_full_prec(&re) } else { re };
             if sign_of(&lhs, &s) < 0 {
                 return Err(format!("{id}: {op} {r:?} is below the exact value"));
             }
@@ -479,4 +500,42 @@ fn s6_elementwise_add_hand_row() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[test]
+fn s6_ballvec_norms_hand_row() -> Result<(), String> {
+    // v = (3, -4, 12): norm_inf = 12, norm_1 = 19, norm_2 = 13 exactly (3^2 + 4^2 + 12^2 = 169)
+    let v = vec_of(&[3, -4, 12])?;
+    let exact = |m: &Mag| m.to_exact_num().map_err(|e| format!("{e:?}"));
+    if sign_of(&exact(&v.norm_inf())?, &num(12)) != 0 || sign_of(&exact(&v.norm_1())?, &num(19)) != 0 {
+        return Err(format!("norm_inf {:?}, norm_1 {:?}", v.norm_inf(), v.norm_1()));
+    }
+    let f = exact(&v.norm_2_up())?;
+    if sign_of(&f.mul_full_prec(&f), &num(169)) < 0 {
+        return Err(format!("norm_2_up {f:?} below 13"));
+    }
+    within_slack("norm_2_up", &v.norm_2_up(), &num(13))?;
+    // radii count (mutants 914, 915): w = (-1 +- 2^-4, 1): |m| + r = (17/16, 1); inf 17/16, 1-norm 33/16, 2-norm^2 = 545/256
+    let w = BallVec::from_balls(vec![ball(-1, Mag::finite(TOP, -3).map_err(|e| format!("{e:?}"))?, 53)?, pt(1)?]);
+    let sixteenth = pow2(-4)?;
+    let want_inf = num(17).mul_full_prec(&sixteenth);
+    let want_1 = num(33).mul_full_prec(&sixteenth);
+    if sign_of(&exact(&w.norm_inf())?, &want_inf) != 0 || sign_of(&exact(&w.norm_1())?, &want_1) != 0 {
+        return Err(format!("radius: norm_inf {:?} (want 17/16), norm_1 {:?} (want 33/16)", w.norm_inf(), w.norm_1()));
+    }
+    let g = exact(&w.norm_2_up())?;
+    if sign_of(&g.mul_full_prec(&g), &num(545).mul_full_prec(&pow2(-8)?)) < 0 {
+        return Err(format!("radius: norm_2_up {g:?} below sqrt(545)/16"));
+    }
+    // empty vector: every norm is exactly 0; an Infinity radius makes every norm Infinity
+    let e = vec_of(&[])?;
+    if !e.norm_inf().is_zero() || !e.norm_1().is_zero() || !e.norm_2_up().is_zero() {
+        return Err("norms of the empty vector must be 0".to_string());
+    }
+    let inf = BallVec::from_balls(vec![pt(2)?, ball(1, Mag::infinity(), 53)?]);
+    if inf.norm_inf().is_infinity() && inf.norm_1().is_infinity() && inf.norm_2_up().is_infinity() {
+        Ok(())
+    } else {
+        Err("norms of a vector with an Infinity radius must be Infinity".to_string())
+    }
 }

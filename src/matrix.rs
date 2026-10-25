@@ -119,6 +119,25 @@ impl BallVec {
         let _unused = (self, other, prec);
         Err(todo_err("BallVec::dot"))
     }
+
+    /// Upper bound of the largest `|m| + r` over the entries (CONTRACT 16.S6.6, BallVec norms); 0 for the empty vector.
+    pub fn norm_inf(&self) -> Mag {
+        let _unused = self;
+        Mag::zero()
+    }
+
+    /// Upper bound of the sum of `|m| + r` over the entries (CONTRACT 16.S6.6, BallVec norms); 0 for the empty vector.
+    pub fn norm_1(&self) -> Mag {
+        let _unused = self;
+        Mag::zero()
+    }
+
+    /// Upper bound of the Euclidean norm of every vector in the ball, `sqrt(sum (|m| + r)^2)` rounded up (CONTRACT 16.S6.6);
+    /// 0 for the empty vector.
+    pub fn norm_2_up(&self) -> Mag {
+        let _unused = self;
+        Mag::zero()
+    }
 }
 
 impl BallMat {
