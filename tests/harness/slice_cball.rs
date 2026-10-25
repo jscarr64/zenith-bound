@@ -853,7 +853,7 @@ fn gold_four_product_sq(r: &GoldRow) -> Result<(Ball, Ball), String> {
 
 #[test]
 fn cball_sqr_gold_not_wider_than_four_product() -> Result<(), String> {
-    // 16.CB.5 on the 10 gold sqr rows: each part of sqr(a) is no wider than mul(a, a), in the four-product form until
+    // 16.CB.5 on the 11 gold sqr rows: each part of sqr(a) is no wider than mul(a, a), in the four-product form until
     // CBall::mul lands (cball_sqr_not_wider_than_mul keeps the direct comparison, ignored).
     let mut m = 0;
     for r in gold_rows()?.iter().filter(|r| r.op == "sqr") {
@@ -889,7 +889,7 @@ fn sqr_ref(r: &GoldRow) -> [ExactNum; 2] {
 
 #[test]
 fn cball_tightness_factors_sqr() -> Result<(), String> {
-    // 16.CB.10: each part of sqr(a) within 2·(RREF + second-order term) on all 10 gold sqr rows.
+    // 16.CB.10: each part of sqr(a) within 2·(RREF + second-order term) on all 11 gold sqr rows.
     let k = factor_log2("sqr")?;
     let mut n = 0;
     for r in gold_rows()?.iter().filter(|r| r.op == "sqr") {
