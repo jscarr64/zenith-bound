@@ -1,7 +1,7 @@
 //! Slice CB harness rows (`src/cball.rs`). Owned by slice CB alone.
 //! CONTRACT 16.CB.1 to 16.CB.11. Ownership is O9 (16.CB.0): a CB op takes `self` and borrows its second operand, so every
-//! use below builds its operands fresh. `mul` and `div` wait on borrowing zf ops (Rusty, after R9) and `sqr` on S1's borrowing
-//! `sqr`; their tests are `#[ignore]`d red until then.
+//! use below builds its operands fresh. `mul` and `div` wait on borrowing zf ops (Rusty, after R9);
+//! their tests (and sqr's width comparison against mul) are `#[ignore]`d red until then.
 //! Oracles: hand-verified exact rows (worked in the comment beside each) and containment of exact images computed with
 //! zenith-float's `add_full_prec`/`sub_full_prec`/`mul_full_prec` at sample points (corners and midpoints) of the inputs.
 //! The mpmath.mpc golden rows and the RREF tightness factors of 16.CB.10: tests/goldens/slices/cball/cball_rows.txt
@@ -236,14 +236,80 @@ fn cball_mul_rows() -> Result<(), String> {
 // ---- 16.CB.5 sqr ---------------------------------------------------------------------------------------------
 
 #[test]
-#[ignore = "red: not implemented: waits S1 borrowing sqr"]
 fn cball_sqr_rows() -> Result<(), String> {
     // (3+4i)^2 = 9-16 + 24i = -7+24i.
     want_point("sqr", &ok("sqr", cpt(3, 4, 53)?.sqr(53))?, -7, 24)
 }
 
 #[test]
-#[ignore = "red: not implemented: waits S1 borrowing sqr"]
+fn cball_sqr_contains_images() -> Result<(), String> {
+    // Every row and prec: sqr(a) contains (x+iy)^2 at the sample points; im is an exact doubling of re·im (16.CB.5).
+    for &prec in PRECS.iter() {
+        for &(re, im, k) in SQR_ROWS.iter() {
+            let s = ok("sqr", cbox(re, im, k, prec)?.sqr(prec))?;
+            want_finite_both("sqr", &s)?;
+            if s.prec() != prec {
+                return Err(format!("sqr prec {} != {}", s.prec(), prec));
+            }
+            for x in samples(re, k)?.iter() {
+                for y in samples(im, k)?.iter() {
+                    want_contains(
+                        "sqr re",
+                        s.re(),
+                        &x.mul_full_prec(x).sub_full_prec(&y.mul_full_prec(y)),
+                    )?;
+                    let xy = x.mul_full_prec(y);
+                    want_contains("sqr im", s.im(), &xy.add_full_prec(&xy))?;
+                }
+            }
+        }
+    }
+    // An all-reals part spreads to both output parts; a prec mismatch or prec 0 is refused.
+    let h = ok(
+        "new",
+        CBall::new(ok("all_reals", Ball::all_reals(53))?, pt(1, 53)?),
+    )?;
+    want_all_reals_both("sqr all-reals re", &ok("sqr", h.sqr(53))?)?;
+    if !matches!(cpt(1, 2, 53)?.sqr(0), Err(BoundError::InvalidArgument { .. })) {
+        return Err("sqr prec 0 not InvalidArgument".into());
+    }
+    Ok(())
+}
+
+const SQR_ROWS: [(i64, i64, i64); 5] = [(0, 0, 1), (0, 3, 2), (1, -1, 4), (-7, 2, 10), (5, 0, 0)];
+
+/// `a·a` in the 16.CB.4 four-product form, each product `Ball::mul` and each combination `Ball::sub`/`add`: what
+/// `CBall::mul(a, a)` computes. Every operand is built fresh (O9).
+fn four_product_sq(re: i64, im: i64, k: i64, prec: usize) -> Result<(Ball, Ball), String> {
+    let e = 1i64.checked_sub(k).ok_or("k")?;
+    let part = |v: i64| -> Result<Ball, String> { ball(v, mag(TOP, e)?, prec) };
+    let rr = ok("mul", part(re)?.mul(&part(re)?, prec))?;
+    let ii = ok("mul", part(im)?.mul(&part(im)?, prec))?;
+    let ri = ok("mul", part(re)?.mul(&part(im)?, prec))?;
+    let ir = ok("mul", part(im)?.mul(&part(re)?, prec))?;
+    Ok((ok("sub", rr.sub(&ii, prec))?, ok("add", ri.add(&ir, prec))?))
+}
+
+#[test]
+fn cball_sqr_not_wider_than_four_product() -> Result<(), String> {
+    // Every row and prec: each part of sqr(a) is no wider than the four-product a·a of 16.CB.4 (16.CB.5).
+    for &prec in PRECS.iter() {
+        for &(re, im, k) in SQR_ROWS.iter() {
+            let s = ok("sqr", cbox(re, im, k, prec)?.sqr(prec))?;
+            let (mre, mim) = four_product_sq(re, im, k, prec)?;
+            if s.re().rad() > mre.rad() || s.im().rad() > mim.rad() {
+                return Err(format!(
+                    "sqr wider than four-product at prec {} for ({}, {}, 2^-{}): {:?} vs {:?} {:?}",
+                    prec, re, im, k, s, mre, mim
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "red: the width comparison waits CBall::mul (zf borrowing ops)"]
 fn cball_sqr_not_wider_than_mul() -> Result<(), String> {
     // Every row: each part of sqr(a) is no wider than the same part of mul(a, a) (16.CB.5).
     for &prec in PRECS.iter() {
@@ -733,30 +799,30 @@ fn gold_tight(ops: &[&str]) -> Result<usize, String> {
 
 #[test]
 fn cball_golden_rows_contained() -> Result<(), String> {
-    let n = gold_contained(&["add", "sub", "abs"])?;
-    if n != 30 {
-        return Err(format!("want 30 add/sub/abs gold rows, got {}", n));
+    let n = gold_contained(&["add", "sub", "abs", "sqr"])?;
+    if n != 40 {
+        return Err(format!("want 40 add/sub/abs/sqr gold rows, got {}", n));
     }
     Ok(())
 }
 
 #[test]
 fn cball_tightness_factors() -> Result<(), String> {
-    let n = gold_tight(&["add", "sub", "abs"])?;
-    if n != 30 {
-        return Err(format!("want 30 add/sub/abs gold rows, got {}", n));
+    let n = gold_tight(&["add", "sub", "abs", "sqr"])?;
+    if n != 40 {
+        return Err(format!("want 40 add/sub/abs/sqr gold rows, got {}", n));
     }
     Ok(())
 }
 
 #[test]
 #[ignore = "red: not implemented: waits zf borrowing ops"]
-fn cball_golden_rows_contained_mul_sqr_div() -> Result<(), String> {
-    gold_contained(&["mul", "sqr", "div"]).map(|_| ())
+fn cball_golden_rows_contained_mul_div() -> Result<(), String> {
+    gold_contained(&["mul", "div"]).map(|_| ())
 }
 
 #[test]
 #[ignore = "red: not implemented: waits zf borrowing ops"]
-fn cball_tightness_factors_mul_sqr_div() -> Result<(), String> {
-    gold_tight(&["mul", "sqr", "div"]).map(|_| ())
+fn cball_tightness_factors_mul_div() -> Result<(), String> {
+    gold_tight(&["mul", "div"]).map(|_| ())
 }
