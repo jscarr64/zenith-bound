@@ -15,12 +15,13 @@ use super::{num, ok, pow2, row_val, want_contains};
 use crate::common::goldens::golden_dir;
 
 /// Rows the generator writes (v3): 13 random ops × 124 (add sub mul mul_exact sqr powi sqrt neg div inv hypot abs mul_2exp),
-/// then the fixed sections: 36 powi rows, 32 mul_2exp exponent-edge rows, 22 hypot edge rows. A short file fails.
+/// then the fixed sections: 36 powi rows, 32 mul_2exp exponent-edge rows, 22 hypot edge rows, 4 mul_2exp_unf_rad rows
+/// (rad 2^-53, k = i64::MIN; appended last). A short file fails.
 const WANT_RANDOM: usize = 1612;
 const WANT_POWI_FIXED: usize = 36;
-const WANT_ROWS: usize = 1702;
+const WANT_ROWS: usize = 1706;
 /// Exact row count per OP tag (every row is checked; a tag count off by one fails).
-const WANT_PER_OP: [(&str, usize); 15] = [
+const WANT_PER_OP: [(&str, usize); 16] = [
     ("add", 124),
     ("sub", 124),
     ("mul", 124),
@@ -36,6 +37,7 @@ const WANT_PER_OP: [(&str, usize); 15] = [
     ("mul_2exp", 140),
     ("mul_2exp_ovf", 8),
     ("mul_2exp_unf", 8),
+    ("mul_2exp_unf_rad", 4),
 ];
 const LAMBDA: i64 = 1024;
 
@@ -97,7 +99,7 @@ fn run(op: &str, prec: usize, k: i64, a: Ball, b: &Ball, bmid: &ExactNum) -> Res
         "inv" => ok("inv", a.inv(prec)),
         "hypot" => ok("hypot", a.hypot(b, prec)),
         "abs" => ok("abs", a.abs(prec)),
-        "mul_2exp" | "mul_2exp_ovf" | "mul_2exp_unf" => ok("mul_2exp", a.mul_2exp(k, prec)),
+        "mul_2exp" | "mul_2exp_ovf" | "mul_2exp_unf" | "mul_2exp_unf_rad" => ok("mul_2exp", a.mul_2exp(k, prec)),
         other => Err(format!("unknown op {}", other)),
     }
 }
@@ -153,7 +155,14 @@ fn check_row(line: &str) -> Result<(), String> {
             Ok(())
         };
     }
-    if op == "mul_2exp_unf" {
+    if op == "mul_2exp_unf" || op == "mul_2exp_unf_rad" {
+        if op == "mul_2exp_unf_rad" {
+            // A positive radius shifted below the Mag range clamps up to min_pos = finite(HALF_MANT, i64::MIN), never 0.
+            let min_pos = Mag::finite(0x8000_0000_0000_0000, i64::MIN).map_err(|e| format!("min_pos: {:?}", e))?;
+            if res.rad() != &min_pos {
+                return Err(format!("underflow rad {:?}, want min_pos {:?}", res.rad(), min_pos));
+            }
+        }
         let bmax = pow2(EXPONENT_MIN.checked_sub(1).ok_or("EXPONENT_MIN - 1")?)?;
         want_contains("underflow 0", &res, &num(0))?;
         return want_contains("underflow bound", &res, &if sign_neg { -bmax } else { bmax });
