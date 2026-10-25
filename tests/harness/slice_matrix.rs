@@ -3,7 +3,7 @@
 //! Golden file headers for this slice are declared here, not in tests/common/goldens.rs.
 //! CONTRACT 16.S6.0 to 16.S6.11. Oracle: exact Fraction golds from scripts/gen_matrix_goldens.py (gate file matrix_rows.txt; the heavy
 //! file matrix_rows_heavy.txt is replayed by the ignored heavy test when ZB_MATRIX_HEAVY points at it), plus hand rows below.
-//! COVERS: MagArray::from_mags, MagArray::get, BallArray::add, BallArray::sub, BallArray::mid_rad, BallArray::from_mid_rad, BallVec::dot, BallVec::norm_inf, BallVec::norm_1, BallVec::norm_2_up, BallMat::matvec, BallMat::matmul, BallMat::norm_inf, BallMat::norm_1, BallMat::norm_frob_up
+//! COVERS: MagArray::from_mags, MagArray::get, MagArray::shape, MagArray::rank, MagArray::len, MagArray::is_empty, MagArray::as_slice, MagArray::into_parts, BallArray::add, BallArray::sub, BallArray::mid_rad, BallArray::from_mid_rad, BallVec::dot, BallVec::norm_inf, BallVec::norm_1, BallVec::norm_2_up, BallMat::matvec, BallMat::matmul, BallMat::norm_inf, BallMat::norm_1, BallMat::norm_frob_up
 
 use crate::common::goldens::golden_dir;
 use zenith_bound::array::{BallArray, BallMat, BallVec};
@@ -673,4 +673,162 @@ fn s6_from_mid_rad_keeps_mid_radius() -> Result<(), String> {
     let reach = pow2(-4)?.add_full_prec(&pow2(-6)?);
     want_contains("s + r lower", b0, &num(5).sub_full_prec(&reach))?;
     want_contains("s + r upper", b0, &num(5).add_full_prec(&reach))
+}
+
+// ---- MagArray accessors (shape, rank, len, is_empty, as_slice, into_parts) ------------------------------------------------
+/// The distinct finite magnitudes `1, 2, ..., n` (each `v * 2^-64`), in that order.
+fn mags_1_to(n: u64) -> Result<Vec<Mag>, String> {
+    (1..=n)
+        .map(|v| Mag::finite(v, 0).map_err(|e| format!("finite({v}): {e:?}")))
+        .collect()
+}
+
+/// Checks every accessor of `m` against the expected shape and the expected row-major elements `1..=n`.
+fn want_accessors(what: &str, m: &MagArray, shape: &[usize], n: u64) -> Result<(), String> {
+    let want = mags_1_to(n)?;
+    let product = shape
+        .iter()
+        .try_fold(1usize, |a, d| a.checked_mul(*d))
+        .ok_or("product")?;
+    if m.shape() != shape {
+        return Err(format!("{what}: shape {:?}, want {shape:?}", m.shape()));
+    }
+    if m.rank() != shape.len() {
+        return Err(format!("{what}: rank {}, want {}", m.rank(), shape.len()));
+    }
+    if m.len() != product || m.len() != want.len() {
+        return Err(format!("{what}: len {}, want {product}", m.len()));
+    }
+    if m.is_empty() != (product == 0) {
+        return Err(format!("{what}: is_empty {}", m.is_empty()));
+    }
+    if m.as_slice() != want.as_slice() {
+        return Err(format!(
+            "{what}: as_slice {:?}, want {want:?}",
+            m.as_slice()
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn s6_magarray_rank0_scalar_accessors() -> Result<(), String> {
+    let m = ok(
+        "from_mags",
+        MagArray::from_mags(Box::new([]), mags_1_to(1)?),
+    )?;
+    want_accessors("rank 0", &m, &[], 1)?;
+    if m.rank() != 0 || m.len() != 1 || m.is_empty() || !m.shape().is_empty() {
+        return Err("rank 0: a scalar has rank 0, one element and an empty shape".to_string());
+    }
+    Ok(())
+}
+
+#[test]
+fn s6_magarray_1d_accessors_keep_order() -> Result<(), String> {
+    let m = ok(
+        "from_mags",
+        MagArray::from_mags(Box::new([3]), mags_1_to(3)?),
+    )?;
+    want_accessors("[3]", &m, &[3], 3)?;
+    let last = m.as_slice().last().ok_or("last")?;
+    if *last != Mag::finite(3, 0).map_err(|e| format!("{e:?}"))? || m.len() != 3 || m.rank() != 1 {
+        return Err(format!("[3]: last {last:?}"));
+    }
+    Ok(())
+}
+
+#[test]
+fn s6_magarray_nd_accessors_row_major() -> Result<(), String> {
+    let m = ok(
+        "from_mags",
+        MagArray::from_mags(Box::new([2, 3, 4]), mags_1_to(24)?),
+    )?;
+    want_accessors("[2,3,4]", &m, &[2, 3, 4], 24)?;
+    if m.len() != 24 || m.rank() != 3 || m.shape() != [2, 3, 4] {
+        return Err("[2,3,4]: len 24, rank 3".to_string());
+    }
+    // Row-major: index [1,2,3] is offset 1*12 + 2*4 + 3 = 23, the 24th element; [0,1,0] is offset 4, the 5th.
+    let at = |idx: &[usize], v: u64| -> Result<(), String> {
+        let got = m.get(idx).ok_or("get")?;
+        let flat = m
+            .as_slice()
+            .iter()
+            .nth(usize::try_from(v - 1).map_err(|e| format!("{e}"))?)
+            .ok_or("nth")?;
+        if *got != Mag::finite(v, 0).map_err(|e| format!("{e:?}"))? || got != flat {
+            return Err(format!("[2,3,4] {idx:?}: {got:?}, want {v}"));
+        }
+        Ok(())
+    };
+    at(&[1, 2, 3], 24)?;
+    at(&[0, 1, 0], 5)
+}
+
+#[test]
+fn s6_magarray_zero_length_dims_are_empty() -> Result<(), String> {
+    let a = ok("from_mags", MagArray::from_mags(Box::new([0]), Vec::new()))?;
+    want_accessors("[0]", &a, &[0], 0)?;
+    let b = ok(
+        "from_mags",
+        MagArray::from_mags(Box::new([2, 0, 3]), Vec::new()),
+    )?;
+    want_accessors("[2,0,3]", &b, &[2, 0, 3], 0)?;
+    if !a.is_empty() || a.rank() != 1 || !b.is_empty() || b.rank() != 3 {
+        return Err("zero-length dims: empty, len 0, rank kept".to_string());
+    }
+    if !a.as_slice().is_empty() || !b.as_slice().is_empty() {
+        return Err("zero-length dims: as_slice not empty".to_string());
+    }
+    Ok(())
+}
+
+#[test]
+fn s6_magarray_into_parts_round_trips() -> Result<(), String> {
+    let m = ok(
+        "from_mags",
+        MagArray::from_mags(Box::new([2, 3]), mags_1_to(6)?),
+    )?;
+    let (shape, data) = m.into_parts();
+    if *shape != [2, 3] {
+        return Err(format!("into_parts shape {shape:?}"));
+    }
+    if *data != *mags_1_to(6)?.into_boxed_slice() {
+        return Err(format!("into_parts data {data:?}"));
+    }
+    let again = ok(
+        "from_mags again",
+        MagArray::from_mags(shape, data.into_vec()),
+    )?;
+    want_accessors("rebuilt [2,3]", &again, &[2, 3], 6)?;
+    let (s0, d0) = ok(
+        "from_mags",
+        MagArray::from_mags(Box::new([]), mags_1_to(1)?),
+    )?
+    .into_parts();
+    if !s0.is_empty() || *d0 != *mags_1_to(1)?.into_boxed_slice() {
+        return Err(format!("rank-0 into_parts {s0:?} {d0:?}"));
+    }
+    Ok(())
+}
+
+#[test]
+fn s6_magarray_from_mags_rejects_bad_shapes() -> Result<(), String> {
+    let cases: [(&str, Box<[usize]>, u64); 5] = [
+        ("rank 0 with no element", Box::new([]), 0),
+        ("rank 0 with two elements", Box::new([]), 2),
+        ("[2,3] with 5", Box::new([2, 3]), 5),
+        ("[0] with 1", Box::new([0]), 1),
+        ("[usize::MAX, 2] overflow", Box::new([usize::MAX, 2]), 0),
+    ];
+    for (what, shape, n) in cases {
+        match MagArray::from_mags(shape, mags_1_to(n)?) {
+            Err(BoundError::InvalidArgument {
+                op: "MagArray::from_mags",
+                ..
+            }) => {}
+            other => return Err(format!("{what}: {other:?}")),
+        }
+    }
+    Ok(())
 }

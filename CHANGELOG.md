@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- MagArray accessor coverage (harper, 2026-10-25): 6 harness tests in tests/harness/slice_matrix.rs (`s6_magarray_*`) assert exact shape, rank, len, is_empty, as_slice order and into_parts round-trip for rank 0, 1-D, N-D and zero-length dims, plus from_mags InvalidArgument rejections (rank-0 count, length mismatch, [0] with 1, shape overflow). COVERS now names MagArray::shape, rank, len, is_empty, as_slice, into_parts; pubfn-coverage drops them (log harper/2026-10-25/1220-full_gate.log). Red-first: a wrong [1,2,3] expectation (23) failed s6_magarray_nd_accessors_row_major.
+
 
 - 16.CB.10 RESOLVED (Spence ruling, 2026-10-25): the sqr tightness bound was mis-specified, not the code. Per part rad(sqr) ≤ 2·(RREF + S2), S2 = r_re² + r_im² (re) and 2·r_re·r_im (im), computed exactly from the gold input radii (test helper `sqr_ref`). `cball_tightness_factors_sqr` is no longer ignored; all 11 gold sqr rows pass (the 10 original rows, including the 3 that failed 2·RREF (pop-logs cassie/2026-10-25/0817-cb10-sqr-try), plus one wide-imaginary sqr row). Golds extended by that one wide-im sqr row in cball_rows.txt, which kills 1523-SQRREFNOIM; SHA256SUMS updated. CONTRACT 16.CB.10 amended.
 
