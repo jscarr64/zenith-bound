@@ -229,19 +229,20 @@ fn s1cov_compare_extremes_signed_zero_and_ties() -> Result<(), String> {
         &pt(i64::MAX, P)?,
         [T, T, F, F, F, T, F],
     )?;
-    // Ties (touching endpoints): MIN ± 1 touches MIN + 1; 0 ± 1 touches 2 ± 1 at 1; -0 ± 1 touches 1.
+    // Ties (touching endpoints): MIN ± 1 touches MIN + 1; 0 ± 1 touches 2 ± 1 at 1; -0 ± 1 touches 1. The upper ball is
+    // certainly not below the lower one, so its lt (the lower one's gt) is False (review nit a).
     let mb = ball(num(i64::MIN), mag(TOP, 1)?, P)?;
-    want_cmp("MIN±1 vs MIN+1", &mb, &pt(m1, P)?, [U, T, U, U, U, U, T])?;
-    want_cmp("MIN+1 vs MIN±1", &pt(m1, P)?, &mb, [U, U, U, T, U, U, T])?;
+    want_cmp("MIN±1 vs MIN+1", &mb, &pt(m1, P)?, [U, T, F, U, U, U, T])?;
+    want_cmp("MIN+1 vs MIN±1", &pt(m1, P)?, &mb, [F, U, U, T, U, U, T])?;
     let a = ball(num(0), mag(TOP, 1)?, P)?;
     want_cmp(
         "0±1 vs 2±1",
         &a,
         &ball(num(2), mag(TOP, 1)?, P)?,
-        [U, T, U, U, U, U, T],
+        [U, T, F, U, U, U, T],
     )?;
     let nzb = ball(-num(0), mag(TOP, 1)?, P)?;
-    want_cmp("-0±1 vs 1", &nzb, &pt(1, P)?, [U, T, U, U, U, U, T])?;
+    want_cmp("-0±1 vs 1", &nzb, &pt(1, P)?, [U, T, F, U, U, U, T])?;
     want_cmp("-0±1 vs +0", &nzb, &pt(0, P)?, [U, U, U, U, U, U, T])?;
     // One step past the tie is decided: 0 ± 1 vs 2 ± 1/2 is disjoint by 1/2.
     want_cmp(
