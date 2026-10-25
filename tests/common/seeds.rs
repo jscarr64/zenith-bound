@@ -23,7 +23,7 @@ pub struct SuiteSeed {
 }
 
 /// The single table of per-suite seeds (suite ids are never reused or renumbered). Names follow TEST_PLAN section 1 levels.
-pub const SUITES: [SuiteSeed; 7] = [
+pub const SUITES: [SuiteSeed; 8] = [
     SuiteSeed {
         name: "common",
         suite_id: 0,
@@ -51,6 +51,10 @@ pub const SUITES: [SuiteSeed; 7] = [
     SuiteSeed {
         name: "l4_workflows",
         suite_id: 6,
+    },
+    SuiteSeed {
+        name: "s6_matrix",
+        suite_id: 17,
     },
 ];
 
