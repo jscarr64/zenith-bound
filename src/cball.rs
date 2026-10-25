@@ -6,6 +6,8 @@
 
 use zenith_float_num::ExactNum;
 
+use std::ops::Neg;
+
 use crate::ball::Ball;
 use crate::enclosure::Enclosure;
 use crate::error::{BoundError, BoundResult};
@@ -64,19 +66,11 @@ impl CBall {
         self.re.identical(&other.re) && self.im.identical(&other.im)
     }
 
-    /// `(−re, −im)`, exact.
-    pub fn neg(self) -> CBall {
-        CBall {
-            re: -self.re,
-            im: -self.im,
-        }
-    }
-
     /// `(re, −im)`, exact.
     pub fn conj(self) -> CBall {
         CBall {
             re: self.re,
-            im: -self.im,
+            im: self.im.negated(),
         }
     }
 
@@ -123,5 +117,17 @@ impl CBall {
             op: "cball_div",
             detail: "not implemented: waits zf borrowing ops",
         })
+    }
+}
+
+impl Neg for CBall {
+    type Output = CBall;
+
+    /// `(−re, −im)`: exact and infallible (each part via `Ball`'s exact negation, CONTRACT 16.CB.3).
+    fn neg(self) -> CBall {
+        CBall {
+            re: self.re.negated(),
+            im: self.im.negated(),
+        }
     }
 }
