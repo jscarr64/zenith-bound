@@ -1,13 +1,13 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index deeda66..528a82f 100644
+index 4ed7629..8bbcd62 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -109,7 +109,7 @@ impl Ball {
+@@ -123,7 +123,7 @@ impl Ball {
+         // The exact square, then one rounding to `prec`. `inexact()` of a product is its own per-operation flag, so it
          // reports only a loss inside the square itself (an exponent underflow), which forces ε (16.S1.5).
-         m.set_inexact(false);
-         let sq = m.mul_full_prec(&m);
--        let lost = sq.inexact_accumulated();
+         let sq = m.mul_full_prec(m);
+-        let lost = sq.inexact();
 +        let lost = false;
-         finish("Ball::sqr", round_to(&sq, prec), rad, prec, lost)
+         finish("Ball::sqr", round_to(&sq, prec), &rad, prec, lost)
      }
  

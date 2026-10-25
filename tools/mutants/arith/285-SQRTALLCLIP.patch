@@ -1,7 +1,8 @@
 diff --git a/src/arith.rs b/src/arith.rs
+index 4ed7629..9b33551 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -181,7 +181,7 @@
+@@ -180,7 +180,7 @@ impl Ball {
              return if strict {
                  Err(domain(OP, "the all-reals ball reaches below 0"))
              } else {
@@ -9,4 +10,4 @@ diff --git a/src/arith.rs b/src/arith.rs
 +                Err(domain(OP, "mutant"))
              };
          }
-         let Some(ord) = cmp_abs_rad(&m, &r) else {
+         let Some(ord) = cmp_abs_rad(m, r) else {
