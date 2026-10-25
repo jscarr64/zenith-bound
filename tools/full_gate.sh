@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Canonical full gate for zenith-bound. usage: tools/full_gate.sh TAG
+# Goldens: goldens-regen skips python when its input key is unchanged (mode=cached), else checks heavy rows by HEAVY.SHA256 pin only.
+# A merge-point gate runs with ZB_GATE_MODE=merge GOLDENS_REGEN_ARGS=--regen (full regen, heavy rows recomputed); merge without --regen fails.
 # Every step runs under `timeout` (STEP_TIMEOUT, default 20m); the rc of each step is written to $T/TAG.rc and its
 # output to $T/TAG-<step>.log (T defaults to $(zb_scratch)/zb-gate-logs, tools/scratch.sh: never /tmp). REPO selects the checkout (default: this one);
 # CARGO_TARGET_DIR is REQUIRED and belongs to one worktree (Paul, 2026-10-23: /tmp/target-<agent>-<worktree>, e.g.
@@ -73,7 +75,10 @@ run derive-scan "no_hits '' -rPzl --include='*.rs' '#\\[derive\\([^)]*\\b(Clone|
 run manifest-scan "no_hits ':[0-9]+:\s*(//|\*|//!)' -rn --include='*.rs' -F 'env!(\"CARGO_MANIFEST_DIR\")'"
 run gate-selftest "require mktemp ln sed grep wc stat tee touch cargo git timeout && tools/full_gate_selftest.sh && tools/fresh_test_run_selftest.sh && tools/no_tmp_selftest.sh && tools/runlog_selftest.sh && tools/mutate_selftest.sh"
 run pubfn-coverage "require awk grep git && tools/pubfn_coverage_selftest.sh && tools/pubfn_coverage.sh"
-run goldens-regen "require sha256sum grep cmp && tools/goldens_regen_selftest.sh && tools/popguard_selftest.sh && tools/goldens_regen.sh"
+run gen-la-guard "require python3 env && tools/gen_la_guard_selftest.sh"
+run gen-la-heavy "require python3 && tools/gen_la_progress_selftest.sh && tools/gen_la_pins_selftest.sh"
+run la4-red-markers "require grep awk && tools/la4_red_markers_selftest.sh && tools/la4_red_markers.sh"
+run goldens-regen "require sha256sum grep cmp && tools/goldens_regen_selftest.sh && tools/popguard_selftest.sh && tools/goldens_regen.sh \${GOLDENS_REGEN_ARGS:-}"
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"
