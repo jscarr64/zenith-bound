@@ -1,2 +1,2 @@
 # Slice S6 golden checksums (sha256sum format), checked by tools/goldens_regen.sh. Every *.txt in this directory must be listed.
-# EMPTY: no goldens yet (delete this line with the first entry)
+48145f37126a7987931f4ab2dce77b8786e4b6fbefd749759b144e4b4a09d917  matrix_rows.txt
