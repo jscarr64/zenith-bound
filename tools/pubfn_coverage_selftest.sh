@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Self-test for tools/pubfn_coverage.sh: builds fixture trees under /tmp at run time and proves the check
 # (1) lists exactly the expected public items, (2) PASSES on a clean fixture, (3) FAILS on each failure mode
-# (UNCOVERED, STALE, NOTEST), (4) honours the exemption list for UNCOVERED only, reads a present list (6) and handles an empty one with no ERR (7). No repo files are touched.
+# (UNCOVERED, STALE, NOTEST), (4) honours the exemption list for UNCOVERED only, reads a present list (6) and handles an empty one with no ERR (7), and FAILS STALE-EXEMPT on an exempt entry that is not an item (8). No repo files are touched.
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap pubfn_coverage_selftest "$@"   # run log (tools/runlog.sh)
 runlog_detach_children
@@ -119,5 +119,9 @@ before=$(wc -l < "$POPLOG_FILE")
 ck; out="$(export POPLOG_FILE POPLOG_STATE_DIR POPLOG_PID POPLOG_PROGRESS_FILE; chk "$e")" || fail "empty exempt list failed: $out"
 ck; echo "$out" | grep -c "exempt list is empty" > /dev/null || fail "empty exempt: not reported explicitly: $out"
 ck; if tail -n "+$((before + 1))" "$POPLOG_FILE" | grep "ERR rc=" | grep -q "pubfn_coverage.sh"; then fail "empty exempt: ERR line logged: $(tail -n "+$((before + 1))" "$POPLOG_FILE" | grep "ERR rc=")"; fi
-st_done pubfn_coverage 22   # WANT: cases this script runs (tools/selftest_cases.sh)
+# 8. STALE-EXEMPT: an exempt entry that names no public item must FAIL (a clean, fully covered tree otherwise)
+q="$t/staleexempt"; mkfix "$q"; printf 'Foo::ghost\tno such item\n' > "$q/tools/pubfn_coverage_exempt.txt"
+ck; out="$(chk "$q")" && fail "stale exempt entry passed: $out"
+ck; echo "$out" | grep -c "FAIL STALE-EXEMPT: Foo::ghost is in the exempt list but is not a public item" > /dev/null || fail "stale exempt: wrong report: $out"
+st_done pubfn_coverage 24   # WANT: cases this script runs (tools/selftest_cases.sh)
 echo "pubfn_coverage selftest: ok"
