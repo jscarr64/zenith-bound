@@ -81,6 +81,8 @@ printf '#!/bin/sh\necho stub mutate_selftest.sh\n' > "$t/mu/tools/mutate_selftes
 # slicesbad (--slices exits 1 after two stderr lines).
 cat > "$t/mu/tools/mutate.sh" <<'FAKE'
 #!/usr/bin/env bash
+# the real mutate.sh reads these (a stale one points it at another manifest/floor/repo); the gate must never pass them on
+for v in MUTATE_REPO MUTATE_MANIFEST MUTATE_EQUIVALENT MUTATE_FLOOR MUTATE_TIMEOUT MUTATE_BUILD_TIMEOUT MUTATE_TMP MUTATE_PERSIST; do [ -z "${!v+x}" ] || { echo "fake mutate.sh: leaked $v=${!v}" >&2; exit 1; }; done
 sc=${FAKE_MUT:-ok}; mode=run; slice=""; only=""
 while [ $# -gt 0 ]; do case $1 in --list) mode=list ;; --floor) mode=floor ;; --slices) mode=slices ;; --slice) slice=$2; shift ;; --only) only=$2; shift ;; esac; shift; done
 ids() { case $1 in central) printf '001-a\n002-b\n' ;; s1) printf '201-x\n' ;; s2) ;; *) ids central; ids s1 ;; esac; }
@@ -137,6 +139,10 @@ ck; { grep -qE '(^|: )TIMEOUT 002-b' "$t/logs/mu-hang-mutants.log" 2>/dev/null &
 # MUTATE_SETUP_S and MUTATE_SH. Junk values (or a missing runner) would fail it; a 1s budget with no setup would cut the 3s slow mutant.
 ck; tag=mu-leakjunk; mu env FAKE_MUT=ok MUTANT_TIMEOUT_S=x MUTANT_BUDGET_S=x MUTATE_SETUP_S=x MUTATE_SH="$t/no-such-mutate.sh" || miss+="[leak: junk MUTANT_*/MUTATE_SETUP_S/MUTATE_SH reached the gate: $(tail -2 "$t/logs/mu-leakjunk-mutants.log" 2>/dev/null)] "
 ck; tag=mu-leakbudget; mu env FAKE_MUT=slow MUTANT_BUDGET_S=1 MUTATE_SETUP_S=0 || miss+="[leak: MUTANT_BUDGET_S=1 MUTATE_SETUP_S=0 reached the gate: $(tail -2 "$t/logs/mu-leakbudget-mutants.log" 2>/dev/null)] "
+# a stale MUTATE_FLOOR / MUTATE_EQUIVALENT / MUTATE_MANIFEST (or any other env mutate.sh reads) must not reach the gate's mutate.sh
+ck; tag=mu-leakmut; mu env FAKE_MUT=ok MUTATE_REPO="$t/stale" MUTATE_MANIFEST="$t/stale/manifest.txt" MUTATE_EQUIVALENT="$t/stale/EQUIVALENT.txt" \
+  MUTATE_FLOOR="$t/stale/floor.txt" MUTATE_TIMEOUT=1s MUTATE_BUILD_TIMEOUT=1s MUTATE_TMP="$t/stale" MUTATE_PERSIST="$t/stale" \
+  || miss+="[leak: stale MUTATE_* reached the gate's mutate.sh: $(tail -3 "$t/logs/mu-leakmut-mutants.log" 2>/dev/null)] "
 # 7. ID_REGEX: `mutate_slice.sh SLICE ID_REGEX` runs only matching ids, skips floor/completeness and says so, never prints a full pass
 ms() { "${fe[@]}" PATH="$t/mu-bin:$PATH" "$@"; }
 ck; ms env FAKE_MUT=floor "$t/mu/tools/mutate_slice.sh" central '^001' > "$t/rx.out" 2>&1 || miss+="[regex: partial run with a floor miss exited nonzero] "
@@ -171,10 +177,10 @@ ck; grep -q 'TIMEOUT' "$t/d-oom.out" && miss+="[oom: reported as TIMEOUT: $(grep
 ck; tag=mu-slicesbad; mu env FAKE_MUT=slicesbad && miss+="[slicesbad: gate exited 0] "
 ck; grep -q 'the --slices cause' "$t/logs/mu-slicesbad-mutants.log" 2>/dev/null || miss+="[slicesbad: step log lost the cause: $(cat "$t/logs/mu-slicesbad-mutants.log" 2>/dev/null)] "
 [ -z "$miss" ] || fail "mutants step did not catch: $miss"
-st_done full_gate 117   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done full_gate 118   # WANT: cases this script runs (tools/selftest_cases.sh)
 # the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 (only the selftest fixture may use a 0 floor), nor the selftest-only
-# MUTANT_TIMEOUT_S / MUTANT_BUDGET_S / MUTATE_SETUP_S / MUTATE_SH, in its --all run or in its --step-timeout computation
-u='env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice\.sh'
+# MUTANT_TIMEOUT_S / MUTANT_BUDGET_S / MUTATE_SETUP_S / MUTATE_SH, nor any env mutate.sh reads (MUTATE_REPO MUTATE_MANIFEST MUTATE_EQUIVALENT MUTATE_FLOOR MUTATE_TIMEOUT MUTATE_BUILD_TIMEOUT MUTATE_TMP MUTATE_PERSIST), in its --all run or in its --step-timeout computation
+u='env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH -u MUTATE_REPO -u MUTATE_MANIFEST -u MUTATE_EQUIVALENT -u MUTATE_FLOOR -u MUTATE_TIMEOUT -u MUTATE_BUILD_TIMEOUT -u MUTATE_TMP -u MUTATE_PERSIST tools/mutate_slice\.sh'
 grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -q "$u --all\"$" || fail "mutants step runs tools/mutate_slice.sh --all without $u"
 [ "$(grep -c "$u --step-timeout" "$root/tools/full_gate.sh")" = 1 ] || fail "the mutants step timeout is computed without $u --step-timeout"
 echo "full_gate selftest: ok"
