@@ -3,7 +3,7 @@
 Generates tests/goldens/slices/arith/arith_oracle_rows.txt: slice S1 (src/arith.rs) oracle rows for the Ball ops that exist in src
 (add, sub, mul, mul_exact, sqr, powi, sqrt, neg; div/inv/hypot wait for zf R13, CONTRACT 16.S1.8) at 26 precisions from 1 to 4096 bits.
     ~/.local/oracle-venv/bin/python scripts/gen_arith_oracle.py              write the golden (only inside a popslot/poprun scope on Pop)
-    ~/.local/oracle-venv/bin/python scripts/gen_arith_oracle.py --check DIR  regenerate into DIR and compare byte for byte (tools/goldens_regen.sh)
+    ~/.local/oracle-venv/bin/python scripts/gen_arith_oracle.py --check DIR [--skip-heavy]  regenerate into DIR and compare byte for byte (tools/goldens_regen.sh)
     ~/.local/oracle-venv/bin/python scripts/gen_arith_oracle.py --sample DIR N   write only the first N precisions into DIR (the RSS proof run)
     ~/.local/oracle-venv/bin/python scripts/gen_arith_oracle.py --selftest   negative tests of this generator
 
@@ -299,23 +299,39 @@ def selftest():
     print("gen_arith_oracle selftest: ok")
 
 
+def parse_args(argv):
+    """(mode, dir, n) or None. --skip-heavy is accepted after --check DIR (tools/goldens_regen.sh regen-gate mode); S1 has no heavy rows."""
+    if len(argv) == 2 and argv[0] == "--check":
+        return ("check", argv[1], None)
+    if len(argv) == 3 and argv[0] == "--check" and argv[2] == "--skip-heavy":
+        return ("check", argv[1], None)
+    if len(argv) == 3 and argv[0] == "--sample":
+        return ("sample", argv[1], int(argv[2]))
+    if argv == []:
+        return ("write", GOLDEN_DIR, None)
+    if argv == ["--selftest"]:
+        return ("selftest", None, None)
+    return None
+
+
 def main(argv):
     _guard()
     selftest()
-    if len(argv) == 2 and argv[0] == "--check":
-        os.makedirs(argv[1], exist_ok=True)
-        stream(os.path.join(argv[1], GOLDEN_NAME), PS)
-        return 1 if goldlib.check_against(argv[1], GOLDEN_DIR, [GOLDEN_NAME]) else 0
-    if len(argv) == 3 and argv[0] == "--sample":
-        os.makedirs(argv[1], exist_ok=True)
-        stream(os.path.join(argv[1], GOLDEN_NAME), PS[:int(argv[2])])
+    parsed = parse_args(argv)
+    if parsed is None:
+        raise SystemExit("usage: scripts/gen_arith_oracle.py [--check DIR [--skip-heavy] | --sample DIR N | --selftest]")
+    mode, d, n = parsed
+    if mode == "check":
+        os.makedirs(d, exist_ok=True)
+        stream(os.path.join(d, GOLDEN_NAME), PS)
+        return 1 if goldlib.check_against(d, GOLDEN_DIR, [GOLDEN_NAME]) else 0
+    if mode == "sample":
+        os.makedirs(d, exist_ok=True)
+        stream(os.path.join(d, GOLDEN_NAME), PS[:n])
         return 0
-    if argv == []:
-        stream(os.path.join(GOLDEN_DIR, GOLDEN_NAME), PS)
-        return 0
-    if argv == ["--selftest"]:
-        return 0
-    raise SystemExit("usage: scripts/gen_arith_oracle.py [--check DIR | --sample DIR N | --selftest]")
+    if mode == "write":
+        stream(os.path.join(d, GOLDEN_NAME), PS)
+    return 0
 
 
 if __name__ == "__main__":
