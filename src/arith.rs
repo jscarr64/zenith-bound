@@ -122,6 +122,8 @@ impl Ball {
         let rad = t.add_up(&t).add_up(&r.mul_up(r));
         // The exact square, then one rounding to `prec`. `inexact()` of a product is its own per-operation flag, so it
         // reports only a loss inside the square itself (an exponent underflow), which forces ε (16.S1.5).
+        // A `mul_full_prec` exponent overflow passes through `finish` to all reals; pinned by
+        // tests/harness/slice_arith.rs `overflow_is_all_reals` (line 424).
         let sq = m.mul_full_prec(m);
         let lost = sq.inexact();
         finish("Ball::sqr", round_to(&sq, prec), &rad, prec, lost)
@@ -356,10 +358,10 @@ impl Ball {
     pub fn lt(&self, other: &Ball) -> Tri {
         match gaps(self, other) {
             Some((Ordering::Less, _)) => Tri::True,
-            Some((_, Ordering::Greater)) => Tri::False,
-            Some((Ordering::Equal, Ordering::Equal)) => Tri::False,
-            Some((Ordering::Equal | Ordering::Greater, Ordering::Equal | Ordering::Less))
-            | None => Tri::Unknown,
+            // lo(a) >= hi(b): every point of `a` is >= every point of `b`, so `a < b` is certainly False, also when the
+            // balls only touch (R > 0, lo(a) = hi(b)).
+            Some((_, Ordering::Greater | Ordering::Equal)) => Tri::False,
+            Some((Ordering::Equal | Ordering::Greater, Ordering::Less)) | None => Tri::Unknown,
         }
     }
 
@@ -557,6 +559,8 @@ fn classify(op: &'static str, raw: ExactNum) -> BoundResult<Mid> {
             }),
         };
     }
+    // Deliberate: an inexact result in the top binade (exponent EXPONENT_MAX) may have been clamped there by zf, so
+    // its true value can lie beyond any finite enclosure; it is reported as overflow, i.e. all reals (CONTRACT 15.1).
     if raw.inexact() && raw.exponent() == Some(EXPONENT_MAX) {
         return Ok(Mid::Overflow);
     }
