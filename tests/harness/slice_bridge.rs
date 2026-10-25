@@ -5,7 +5,7 @@
 //! (value in the comment beside each), and for random in-range cases zenith-float's exact `sub_full_prec` plus `abs_cmp`
 //! against the radius converted by `to_exact_num` (in range only; the out-of-range rows are worked by hand).
 //! Constant bridge (16.S2.6): tests/goldens/slices/bridge/bridge_consts.txt (scripts/gen_bridge_const_goldens.py, mpmath).
-//! COVERS: Mag::cmp_exact_num, Mag::cmp_exact_diff, Mag::from_exact_num, Mag::from_exact_num_lower, Mag::to_exact_num, constant_ball
+//! COVERS: Mag::cmp_exact_num, Mag::cmp_exact_diff, Mag::from_exact_num, Mag::from_exact_num_lower, Mag::to_exact_num, bridge::constant_ball
 
 use core::cmp::Ordering;
 
@@ -1007,3 +1007,6 @@ fn from_to_exact_num_sets_and_p9() -> Result<(), String> {
     }
     Ok(())
 }
+
+// Harper S2 gate edges (2026-10-25): signed zero, i64 exponent ends, huge precision, cancellation, round trips.
+mod harper_s2_edges;
