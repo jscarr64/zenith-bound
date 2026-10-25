@@ -65,7 +65,7 @@ HEADER = [
     "# [LO, HI]: exact image endpoints of the input ball(s) (sqrt/div/inv/hypot: rounded inward to W bits, outward only when that pair crosses); sqrt over [max(lo,0), hi] (Clip); div/inv divisors exclude 0; RREF = hull spread + U, up to 64 bits",
     "# checks: containment of [LO, HI]; tight rad <= tau*RREF; loose rad <= 2^10*RREF (D2 placeholders); mpmath.iv cross-checked at W + 64",
     "# rows in generation order (OP order above, PREC, draw); draws: goldlib.SplitMix64 from stream_seed(200, op index << 16 | prec)",
-    "# then fixed sections: 36 powi (1+(37j+5)2^-20)^(100+71j+i) at PREC 53/64/113; 32 mul_2exp exponent edges (mul_2exp_ovf/_unf: LO HI RREF '0 0 0', class by mpmath); 22 hypot edges; 2 mul_2exp_unf_rad (mid 0, rad 2^-53, k = i64::MIN: radius clamps to min_pos)",
+    "# then fixed sections: 36 powi (1+(37j+5)2^-20)^(100+71j+i) at PREC 53/64/113; 32 mul_2exp exponent edges (mul_2exp_ovf/_unf: LO HI RREF '0 0 0', class by mpmath); 22 hypot edges; 2 mul_2exp_unf_rad (mid 0, rad 2^-53, k = i64::MIN: radius clamps to min_pos; LO HI RREF at scale 2^-N, truth +-2^(-53+N) by mpmath.iv)",
     "# edge rows near EXPONENT_MAX/MIN = +-(2^62-1) are built at scale 0 and shifted (every quantity is scale-invariant); mpmath.iv checks them at full scale; RREF '0 0 0' on an exact (rad 0) row whose U is below EXPONENT_MIN",
     "# generated in the oracle venv (mpmath 1.3.0, sympy 1.14.0, gmpy2 2.3.2, python-flint 0.9.0)",
 ]
@@ -215,7 +215,7 @@ def in_range(v):
     return v[2] == 0 or EXPONENT_MIN <= v[1] <= EXPONENT_MAX
 
 
-def make_row(op, prec, n, a, ar_v, b, br_v, shift=0, row="?"):
+def make_row(op, prec, n, a, ar_v, b, br_v, shift=0, row="?", truth_at_scale0=False):
     """One row at scale 2^shift: computed exactly at scale 0, every value's exponent then shifted (all scale-invariant).
     mul_2exp edge rows pass n = 0 at scale 0 and the shift k; the written N is then k."""
     am, ar, bm, br = vfrac(a), vfrac(ar_v), vfrac(b), vfrac(br_v)
@@ -225,8 +225,8 @@ def make_row(op, prec, n, a, ar_v, b, br_v, shift=0, row="?"):
     if lo > hi:
         raise RowRejected("empty truth interval")
     cross_check(op, prec, n, w, am, ar, bm, br, lo, hi, outward, shift, row)
-    vals = [shifted(v, shift) for v in (from_fraction(lo), from_fraction(hi), from_fraction(rref))]
-    if shift and not in_range(vals[2]):
+    vals = [shifted(v, 0 if truth_at_scale0 else shift) for v in (from_fraction(lo), from_fraction(hi), from_fraction(rref))]
+    if shift and not truth_at_scale0 and not in_range(vals[2]):
         if ar != 0 or br != 0 or lo != hi:
             raise RowRejected("row %s: RREF below EXPONENT_MIN on a non-exact row" % row)
         vals[2] = ZERO   # exact ball, exact image: the only tight radius is 0
@@ -345,8 +345,10 @@ def fixed_rows():
     for op, prec, n, a, ar, b, br, sh in hypot_edge_rows():
         lines.append(make_row(op, prec, n, a, ar, b, br, shift=sh, row="hypot-edge %d p=%d shift=%d" % (len(lines), prec, sh)))
     for op, prec, k, a, rad in mul_2exp_unf_rad_rows():
-        lines.append(goldlib.fmt_row(op, prec, 2 * prec + 64, k, venc(a), venc(rad), venc(ZERO), venc(ZERO),
-                                     venc(ZERO), venc(ZERO), venc(ZERO)))
+        # the normal truth + hard cross_check path (mpmath.iv at full scale 2^k); LO HI RREF are written at scale 0
+        line = make_row("mul_2exp", prec, 0, a, rad, ZERO, ZERO, shift=k, row="mul_2exp_unf_rad p=%d" % prec,
+                        truth_at_scale0=True)
+        lines.append(op + line[len("mul_2exp"):])
     if len(lines) != FIXED_ROWS:
         raise SystemExit("gen_arith_oracle: %d fixed rows, want exactly %d" % (len(lines), FIXED_ROWS))
     return lines
