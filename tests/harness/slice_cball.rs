@@ -527,11 +527,9 @@ fn gold_val(sign: &str, exp: &str, hex: &str) -> Result<ExactNum, String> {
     let base = e - bitlen;
     let mut acc = num(0);
     let digits = hex.as_bytes();
-    let mut end = digits.len();
     let mut shift = 0i64;
-    while end > 0 {
-        let start = if end > 16 { end - 16 } else { 0 };
-        let bytes = digits.get(start..end).ok_or("hex slice")?;
+    // Least significant 16 hex digits (64 bits) first.
+    for bytes in digits.rchunks(16) {
         let chunk = std::str::from_utf8(bytes).map_err(|_| "utf8")?;
         let c = u64::from_str_radix(chunk, 16).map_err(|_| format!("bad hex {:?}", chunk))?;
         if c != 0 {
@@ -541,7 +539,6 @@ fn gold_val(sign: &str, exp: &str, hex: &str) -> Result<ExactNum, String> {
             acc = acc.add_full_prec(&part);
         }
         shift += 64;
-        end = start;
     }
     if sign == "0" {
         Ok(acc)
