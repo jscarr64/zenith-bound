@@ -84,12 +84,19 @@ fn rounded(op: &'static str, raw: ExactNum, prec: Precision) -> BoundResult<Step
             Some(Error::PrecisionRetryExhausted) => {
                 Err(resource(op, "zf precision retry exhausted"))
             }
-            Some(Error::DivisionByZero) | Some(Error::InvalidArgument) | None => {
-                Err(BoundError::Representation {
-                    op,
-                    detail: "zf NaN from a product step",
-                })
-            }
+            // Mapped as S1 does (`arith::classify`, CONTRACT O2).
+            Some(Error::DivisionByZero) => Err(BoundError::Domain {
+                op,
+                detail: "zf division by zero",
+            }),
+            Some(Error::InvalidArgument) => Err(BoundError::InvalidArgument {
+                op,
+                detail: "zf invalid argument",
+            }),
+            None => Err(BoundError::Representation {
+                op,
+                detail: "zf NaN without an error kind",
+            }),
         };
     }
     if raw.inexact() && raw.exponent() == Some(EXPONENT_MAX) {
