@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 16.CB.10 RESOLVED (Spence ruling, 2026-10-25): the sqr tightness bound was mis-specified, not the code. Per part rad(sqr) ≤ 2·(RREF + S2), S2 = r_re² + r_im² (re) and 2·r_re·r_im (im), computed exactly from the gold input radii (test helper `sqr_ref`). `cball_tightness_factors_sqr` is no longer ignored; all 10 gold sqr rows pass, including the 3 that failed 2·RREF (pop-logs cassie/2026-10-25/0817-cb10-sqr-try). Golds unchanged. CONTRACT 16.CB.10 amended.
+
 - S1 borrowing, option B (2026-10-24, Jeff): `Ball::sqr`, `inv`, `sqrt`, `hypot`, `powi` and `abs` take `&self` (API change; callers
   no longer give up the ball). `sqr` uses `mul_full_prec` and its per-operation `inexact()` flag; `abs` rounds `|m|` as
   `ExactNum::from(±1).mul(m)`. `add`, `sub`, `mul`, `mul_exact`, `div`, `mul_2exp`, `neg` stay by value until zenith-float has
