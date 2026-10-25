@@ -13,7 +13,7 @@ use zenith_bound::error::BoundError;
 use zenith_bound::mag::Mag;
 use zenith_bound::matrix::MagArray;
 use zenith_bound::tri::Tri;
-use zenith_float_num::ExactNum;
+use zenith_float_num::{ExactNum, RoundingMode};
 
 const GATE_ROWS: usize = 150;
 const HEAVY_ROWS: usize = 30;
@@ -469,7 +469,7 @@ fn s6_mid_rad_round_trip_encloses() -> Result<(), String> {
     let r = Mag::finite(TOP, -3).map_err(|e| format!("{e:?}"))?;
     let balls = vec![ball(5, Mag::finite(TOP, -3).map_err(|e| format!("{e:?}"))?, 53)?, pt(-7)?];
     let arr = ok("from_balls", BallArray::from_balls(Box::new([2]), balls))?;
-    let (mids, rads) = arr.mid_rad();
+    let (mids, rads) = ok("mid_rad", arr.mid_rad())?;
     if rads.shape() != [2] || mids.shape() != [2] {
         return Err(format!("split shapes {:?} {:?}", mids.shape(), rads.shape()));
     }
@@ -538,4 +538,32 @@ fn s6_ballvec_norms_hand_row() -> Result<(), String> {
     } else {
         Err("norms of a vector with an Infinity radius must be Infinity".to_string())
     }
+}
+
+/// Spence ruling b (2026-10-25): a K = 1 dot is the S1 product plus its own rounding. With `w = prec + 3` the midpoint is
+/// `round(round(m(a)·m(b), w), prec)`; when the product fits `w` the dot is identical to `Ball::mul`; otherwise it still contains the
+/// exact product box and its radius stays within 2·TREF (16.S6.9).
+#[test]
+fn s6_k1_dot_is_s1_mul_plus_own_rounding() -> Result<(), String> {
+    let half = |e: i64| Mag::finite(TOP, e).map_err(|x| format!("{x:?}"));
+    // 15 fits w = 5 bits but not prec = 2: identical to S1 mul (mid and radius)
+    let d = ok("dot", BallVec::from_balls(vec![ball(3, half(-9)?, 2)?]).dot(&BallVec::from_balls(vec![ball(5, half(-11)?, 2)?]), 2))?;
+    let s1 = ok("Ball::mul", ball(3, half(-9)?, 2)?.mul(&ball(5, half(-11)?, 2)?, 2))?;
+    if sign_of(d.mid(), s1.mid()) != 0 || d.rad() != s1.rad() {
+        return Err(format!("short K=1 dot {d:?} != S1 mul {s1:?}"));
+    }
+    // 255 * 253 = 64515 needs 16 bits: rounded at w = 11, then at prec = 8
+    let a = ball(255, half(-19)?, 8)?;
+    let d = ok("dot", BallVec::from_balls(vec![a]).dot(&BallVec::from_balls(vec![pt(253)?]), 8))?;
+    let want = num(255).mul(&num(253), 11, RoundingMode::ToEven).ldexp(0, 8, RoundingMode::ToEven);
+    if sign_of(d.mid(), &want) != 0 {
+        return Err(format!("long K=1 dot mid {:?} != round(round(64515, 11), 8) {want:?}", d.mid()));
+    }
+    let lo = num(255).sub_full_prec(&pow2(-20)?).mul_full_prec(&num(253));
+    let hi = num(255).add_full_prec(&pow2(-20)?).mul_full_prec(&num(253));
+    want_contains("K=1 P0", &d, &num(64515))?;
+    want_contains("K=1 low corner", &d, &lo)?;
+    want_contains("K=1 high corner", &d, &hi)?;
+    let tref = num(253).mul_full_prec(&pow2(-20)?).add_full_prec(&num(64515).mul_full_prec(&pow2(-7)?));
+    within_twice("K=1 radius", d.rad(), &tref)
 }
