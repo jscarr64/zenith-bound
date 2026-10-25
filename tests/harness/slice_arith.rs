@@ -1476,6 +1476,20 @@ fn bl(v: i64, rad_exp: i64) -> Result<Ball, String> {
     ball(num(v), mag(TOP, rad_exp)?, 64)
 }
 
+/// R > 0 and lo(a) = hi(b): every point of `a` is >= every point of `b`, so `a < b` is certainly False (review nit a).
+#[test]
+fn lt_touching_from_above_is_false() -> Result<(), String> {
+    for (name, a, b) in [
+        ("[2,4] < [0,2]", bl(3, 1)?, bl(1, 1)?),
+        ("2 < [0,2]", pt(2, 64)?, bl(1, 1)?),
+        ("[0,2] < 0", bl(1, 1)?, pt(0, 64)?),
+    ] {
+        want_tri(&format!("{} lt", name), a.lt(&b), Tri::False)?;
+        want_tri(&format!("{} gt", name), b.gt(&a), Tri::False)?;
+    }
+    Ok(())
+}
+
 #[test]
 fn tri_compare_rows() -> Result<(), String> {
     use Tri::{False as F, True as T, Unknown as U};
@@ -1485,13 +1499,13 @@ fn tri_compare_rows() -> Result<(), String> {
             "touching [0,2] [2,4]",
             bl(1, 1)?,
             bl(3, 1)?,
-            [U, T, U, U, U, U, T],
+            [U, T, F, U, U, U, T],
         ),
         (
             "touching [2,4] [0,2]",
             bl(3, 1)?,
             bl(1, 1)?,
-            [U, U, U, T, U, U, T],
+            [F, U, U, T, U, U, T],
         ),
         (
             "disjoint [0,2] [4,6]",
@@ -1521,13 +1535,13 @@ fn tri_compare_rows() -> Result<(), String> {
             "[0,2] vs edge point 2",
             bl(1, 1)?,
             pt(2, 64)?,
-            [U, T, U, U, U, U, T],
+            [U, T, F, U, U, U, T],
         ),
         (
             "edge point 0 vs [0,2]",
             pt(0, 64)?,
             bl(1, 1)?,
-            [U, T, U, U, U, U, T],
+            [U, T, F, U, U, U, T],
         ),
         (
             "interior point 1",
