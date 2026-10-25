@@ -259,7 +259,10 @@ _Empty (S0 stub). Owner: slice LA3._
 
 ### Slice LA4 (`src/gls.rs`)
 
-_Empty (S0 stub). Owner: slice LA4._
+Owner: slice LA4. Status: red (the tests named below stay `#[ignore = "red: not implemented: ..."]` until the API lands).
+
+- **LA4.1** (gls): `zb::gls` reproduces every row of `tests/goldens/slices/gls/la_gls.txt` (exact-rational oracle, `scripts/gen_la_goldens.py`): the returned balls for the GLS estimate beta, its covariance and the residual sum of squares each enclose the oracle value at the row's precision, and every refusal row returns the named error instead of a value. Test: the replay test in `tests/harness/slice_gls.rs`. Heavy rows are pinned in `tests/goldens/slices/gls/HEAVY.SHA256`.
+- **LA4.2** (logdet): the logdet API (slice LA1, `src/cholesky.rs`) reproduces every `cosmo_*` row of `tests/goldens/slices/cholesky/la_logdet.txt`: the sign is exact, the returned det ball encloses det, its ln|det| lies inside the row's [lo256, hi256] enclosure, and singular rows return `ERR Singular`. Test: the logdet replay test in `tests/harness/slice_cholesky.rs`. Heavy rows are pinned in `tests/goldens/slices/cholesky/HEAVY.SHA256`.
 
 ### Slice LA5 (`src/eigen.rs`)
 
