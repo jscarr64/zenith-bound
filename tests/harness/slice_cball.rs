@@ -6,7 +6,7 @@
 //! zenith-float's `add_full_prec`/`sub_full_prec`/`mul_full_prec` at sample points (corners and midpoints) of the inputs.
 //! The mpmath.mpc golden rows and the RREF tightness factors of 16.CB.10: tests/goldens/slices/cball/cball_rows.txt
 //! (scripts/gen_cball_goldens.py).
-//! COVERS: CBall::new, CBall::from_real, CBall::all_complex, CBall::re, CBall::im, CBall::prec, CBall::identical, CBall::neg, CBall::conj, CBall::add, CBall::sub, CBall::mul, CBall::sqr, CBall::abs, CBall::div
+//! COVERS: CBall::new, CBall::from_real, CBall::all_complex, CBall::re, CBall::im, CBall::prec, CBall::identical, Neg for CBall, CBall::conj, CBall::add, CBall::sub, CBall::mul, CBall::sqr, CBall::abs, CBall::div
 
 use std::fs;
 
@@ -163,7 +163,7 @@ fn cball_add_sub_neg_conj_rows() -> Result<(), String> {
     let b = cpt(-1, 2, 53)?;
     want_point("add", &ok("add", a()?.add(&b, 53))?, 2, 7)?; // (3+5i)+(-1+2i) = 2+7i
     want_point("sub", &ok("sub", a()?.sub(&b, 53))?, 4, 3)?; // (3+5i)-(-1+2i) = 4+3i
-    want_point("neg", &a()?.neg(), -3, -5)?;
+    want_point("neg", &(-a()?), -3, -5)?;
     want_point("conj", &a()?.conj(), 3, -5)?;
     if !a()?.conj().conj().identical(&a()?) {
         return Err("conj∘conj".into());
@@ -430,7 +430,7 @@ fn cball_all_reals_propagation() -> Result<(), String> {
     for (what, s) in [
         ("add", ok("add", h()?.add(&cpt(1, 1, 53)?, 53))?),
         ("sub", ok("sub", h()?.sub(&cpt(1, 1, 53)?, 53))?),
-        ("neg", h()?.neg()),
+        ("neg", -h()?),
         ("conj", h()?.conj()),
     ] {
         if s.re().is_informative() || !s.im().is_informative() {
