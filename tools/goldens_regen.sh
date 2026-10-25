@@ -29,6 +29,7 @@ for arg in "$@"; do case $arg in --slices-only) slices_only=1 ;; --regen) regen=
 # ZB_GATE_MODE=merge (merge points) REFUSES (exit 2) without --regen, and with --slices-only (the merge gate runs every generator;
 # Spence LA4 nit, 2026-10-25). ZB_GATE_MODE is recorded first thing, then the mode and its reason are logged.
 # The key also covers scripts/requirements.lock (the oracle pins).
+echo "goldens-regen: ZB_GATE_MODE=${ZB_GATE_MODE:-regular}"   # recorded first, also before an unknown-mode refusal
 case "${ZB_GATE_MODE:-regular}" in regular|merge) ;; *) echo "goldens-regen: REFUSING: unknown ZB_GATE_MODE=${ZB_GATE_MODE} (want regular or merge)"; exit 2 ;; esac
 gate_mode=${ZB_GATE_MODE:-regular}
 echo "goldens-regen: ZB_GATE_MODE=$gate_mode"
