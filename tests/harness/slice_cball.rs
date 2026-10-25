@@ -187,7 +187,7 @@ fn cball_add_sub_neg_conj_rows() -> Result<(), String> {
 // ---- 16.CB.4 mul ---------------------------------------------------------------------------------------------
 
 #[test]
-#[ignore = "red: not implemented: waits zf borrowing ops"]
+#[ignore = "red: not implemented: CONTRACT CB.4 (mul): waits zf borrowing ops"]
 fn cball_mul_rows() -> Result<(), String> {
     // (1+2i)(3+4i) = (3-8) + (4+6)i = -5+10i.
     want_point(
@@ -394,7 +394,7 @@ fn cball_abs_i64_extremes() -> Result<(), String> {
 // ---- 16.CB.7 div ---------------------------------------------------------------------------------------------
 
 #[test]
-#[ignore = "red: not implemented: waits zf borrowing ops"]
+#[ignore = "red: not implemented: CONTRACT CB.7 (div): waits zf borrowing ops"]
 fn cball_div_rows() -> Result<(), String> {
     // (2+4i)/(1+i) = (2+4i)(1-i)/2 = (2+4 + (4-2)i)/2 = 3+i.
     let q = ok("div", cpt(2, 4, 53)?.div(&cpt(1, 1, 53)?, 53))?;
@@ -410,7 +410,7 @@ fn cball_div_rows() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: not implemented: waits zf borrowing ops"]
+#[ignore = "red: not implemented: CONTRACT CB.7 (div all reals R1): waits zf borrowing ops"]
 fn cball_div_rectangle_containing_zero_is_all_reals() -> Result<(), String> {
     // R1: both parts reach 0 → Ok with both parts all reals (never Domain).
     let exact_zero = cpt(0, 0, 53)?;
@@ -453,7 +453,7 @@ fn cball_r2_row_s1_sqr_reaches_zero() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: not implemented: waits zf borrowing ops"]
+#[ignore = "red: not implemented: CONTRACT CB.7 (div all reals R2): waits zf borrowing ops"]
 fn cball_div_mid_rad_sqr_widening_is_all_reals() -> Result<(), String> {
     // R2 (16.CB.7), kept as a defensive check: R1 does not hold, but d = sqr(b.re) + sqr(b.im) reaches 0 because S1's
     // sqr is mid-rad (see cball_r2_row_s1_sqr_reaches_zero). Observed behavior: both parts all reals, at every prec.
@@ -468,7 +468,7 @@ fn cball_div_mid_rad_sqr_widening_is_all_reals() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: not implemented: waits zf borrowing ops"]
+#[ignore = "red: not implemented: CONTRACT CB.7 (div exact scaling): waits zf borrowing ops"]
 fn cball_div_scaling_exact() -> Result<(), String> {
     // The common 2^-k on both operands leaves the quotient unchanged: (2+4i)·2^K / ((1+i)·2^K) contains 3+i at
     // K = ±2^40, where |b|^2 unscaled would leave the midpoint range.
@@ -515,7 +515,7 @@ fn cball_all_reals_propagation() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: not implemented: waits zf borrowing ops"]
+#[ignore = "red: not implemented: CONTRACT CB.9 (all-reals propagation): waits zf borrowing ops"]
 fn cball_all_reals_propagation_mul() -> Result<(), String> {
     // mul: both output parts use the all-reals re part.
     let h = ok(
@@ -553,7 +553,7 @@ fn cball_prec_sweep() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: not implemented: waits zf borrowing ops"]
+#[ignore = "red: not implemented: CONTRACT CB.9 (one prec per call): waits zf borrowing ops"]
 fn cball_prec_sweep_mul_sqr_div() -> Result<(), String> {
     let a = || cbox(7, -5, 3, 1024);
     for &prec in PRECS.iter() {
@@ -819,7 +819,7 @@ fn cball_tightness_factors() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: not implemented: waits zf borrowing ops"]
+#[ignore = "red: not implemented: CONTRACT CB.10 (golds): waits zf borrowing ops"]
 fn cball_golden_rows_contained_mul_div() -> Result<(), String> {
     gold_contained(&["mul", "div"]).map(|_| ())
 }
@@ -918,7 +918,7 @@ fn cball_tightness_factors_sqr() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: not implemented: waits zf borrowing ops"]
+#[ignore = "red: not implemented: CONTRACT CB.10 (tightness): waits zf borrowing ops"]
 fn cball_tightness_factors_mul_div() -> Result<(), String> {
     gold_tight(&["mul", "div"]).map(|_| ())
 }
