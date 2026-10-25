@@ -122,11 +122,19 @@ HMARGS=--regen; hm ZB_GATE_MODE=merge
 ck; [ "$grc" = 2 ] || fail "merge-gate --regen --slices-only exited $grc, want 2: $out"
 ck; grep -q 'goldens-regen: REFUSING: ZB_GATE_MODE=merge does not allow --slices-only' <<< "$out" || fail "merge --slices-only refusal unclear: $out"
 ck; ran && fail "merge --slices-only refusal still ran python"
-# the full (not --slices-only) merge --regen run is accepted and logged; its rc is not checked (the fixture has no top-level goldens)
+# the full (not --slices-only) merge --regen run is accepted, logged and PASSES (Spence BLOCK 0843-rv-la4n-3628469: the rc was never
+# asserted, so a mutant forcing every merge-mode full run to exit 1 still printed ok). The fixture gets top-level tests/goldens: the
+# fake python prints nothing, so the stdout generator's committed file is empty, and SHA256SUMS lists it.
 hf() { : > "$t/genargs"; out=$(env ZB_GATE_MODE= "$@" GOLDENS_PYTHON="$t/venv/bin/python" GOLDENS_KEY_DIR="$t/keys" POPGUARD="$t/okguard" GOLDENS_ROOT="$root" RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 "$here/goldens_regen.sh" $HMARGS 2>&1); grc=$?; }
+: > "$root/tests/goldens/mag_ops_review.txt"; (cd "$root/tests/goldens" && sha256sum mag_ops_review.txt > SHA256SUMS)
 HMARGS=--regen; hf ZB_GATE_MODE=merge
+ck; [ "$grc" = 0 ] || fail "merge-gate --regen (full run) exited $grc, want 0: $out"
 ck; grep -q 'REFUSING' <<< "$out" && fail "merge-gate --regen (full run) was refused: $out"
 ck; ran && grep -q '^goldens-regen: mode=regen-full (--regen; gate mode=merge); heavy rows recomputed$' <<< "$out" || fail "merge-gate --regen (full run) did not run python or log regen-full: $out"
+# a failing generator in a merge-mode full run FAILS (non-zero rc, named)
+HMARGS=--regen; hf ZB_GATE_MODE=merge FAKEPY_RC=1
+ck; [ "$grc" != 0 ] || fail "merge-gate --regen (full run) with a failing generator exited 0: $out"
+ck; grep -q 'goldens-regen: .* FAILED' <<< "$out" || fail "merge-gate failing generator not named: $out"
 # Spence LA4 nit 2: the start output records ZB_GATE_MODE (also on a refusal)
 HMARGS=; hm
 ck; grep -qx 'goldens-regen: ZB_GATE_MODE=regular' <<< "$out" || fail "regular run did not record ZB_GATE_MODE: $out"
@@ -139,5 +147,7 @@ printf 'mpmath==1.3.0\n' > "$root/scripts/requirements.lock"; hm
 ck; ran || fail "a changed scripts/requirements.lock did not rerun python: $out"
 HMARGS=; hm ZB_GATE_MODE=bogus
 ck; [ "$grc" = 2 ] || fail "an unknown ZB_GATE_MODE exited $grc, want 2: $out"
+# Spence LA4 minor: an unknown mode also records the ZB_GATE_MODE= line, before the refusal
+ck; grep -qx 'goldens-regen: ZB_GATE_MODE=bogus' <<< "$out" || fail "unknown ZB_GATE_MODE refusal did not record ZB_GATE_MODE first: $out"
 echo "goldens_regen selftest: ok"
-st_done goldens_regen 56   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done goldens_regen 60   # WANT: cases this script runs (tools/selftest_cases.sh)
