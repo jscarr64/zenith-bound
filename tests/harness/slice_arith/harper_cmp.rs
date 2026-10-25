@@ -330,3 +330,33 @@ fn compare_consistency_seeded() -> Result<(), String> {
     }
     Ok(())
 }
+
+/// 16.S1.11 with 16.S2.1/16.S2.2: a finite radius below zenith-float's range is still compared exactly when the other
+/// radius is zero or inside the range (the in-range radius is converted, the tiny one only compared), so `0 ± 2^(EXPONENT_MIN
+/// − 101)` is disjoint from 1 and from `1 ± 1/2`.
+#[test]
+fn compare_radius_below_zf_range_decided() -> Result<(), String> {
+    let e = EXPONENT_MIN.checked_sub(100).ok_or("emin-100")?;
+    let tiny = ball(num(0), mag(TOP, e)?, P)?;
+    let one = pt(1, P)?;
+    let one_half = ball(num(1), mag(TOP, 0)?, P)?;
+    want_cmp("tiny vs 1", &tiny, &one, [T, T, F, F, F, T, F])?;
+    want_cmp("1 vs tiny", &one, &tiny, [F, F, T, T, F, T, F])?;
+    want_cmp("tiny vs 1±1/2", &tiny, &one_half, [T, T, F, F, F, T, F])?;
+    want_cmp("1±1/2 vs tiny", &one_half, &tiny, [F, F, T, T, F, T, F])
+}
+
+/// Kills 277-OVFALSE: both radii `2^(EXPONENT_MIN − 65)` lie below zenith-float's range, so `0 ± r` against `2^(EXPONENT_MIN
+/// − 64) ± r` (touching: `|D| = R`) is undecided; overlaps must be Unknown, never False.
+#[test]
+fn compare_both_radii_below_zf_range_touching_not_false() -> Result<(), String> {
+    let e = EXPONENT_MIN.checked_sub(64).ok_or("emin-64")?;
+    let a = ball(num(0), mag(TOP, e)?, P)?;
+    let b = ball(pow2(e)?, mag(TOP, e)?, P)?;
+    for (what, t) in [("a b", a.overlaps(&b)), ("b a", b.overlaps(&a))] {
+        if t == Tri::False {
+            return Err(format!("{}: touching balls below the zf range reported disjoint", what));
+        }
+    }
+    Ok(())
+}
