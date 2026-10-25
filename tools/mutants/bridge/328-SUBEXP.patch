@@ -1,5 +1,5 @@
 diff --git a/src/mag/convert.rs b/src/mag/convert.rs
-index 67b8452..6f5aafd 100644
+index 130a321..c2c2fcf 100644
 --- a/src/mag/convert.rs
 +++ b/src/mag/convert.rs
 @@ -143,7 +143,7 @@ impl Mag {
@@ -9,5 +9,5 @@ index 67b8452..6f5aafd 100644
 -            exponent: exp.max(EXPONENT_MIN),
 +            exponent: exp,
              inexact: false,
+             op_inexact: false,
          };
-         ExactNum::from_raw_parts(&parts).map_err(|e| map_zf_error(OP, e))

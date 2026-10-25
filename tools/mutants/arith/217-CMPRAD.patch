@@ -1,13 +1,13 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index deeda66..f273ff5 100644
+index 4a73525..a66cfdf 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -220,7 +220,7 @@ fn endpoint_ball(op: &'static str, u: Mag, prec: Precision) -> BoundResult<Ball>
- /// `|m|` against `r`, decided exactly; `None` only if neither the exact path nor the `Mag` bounds decide it.
- fn cmp_abs_rad(m: &ExactNum, r: &Mag) -> Option<Ordering> {
-     match r.to_exact_num() {
--        Ok(rn) => m.abs_cmp(&rn).map(|c| c.cmp(&0)),
-+        Ok(rn) => m.abs_cmp(&rn).map(|c| 0.cmp(&c)),
-         // r is outside zenith-float's exponent range, so it differs from every zenith-float value; bound |m| by Mag.
-         Err(_) => {
-             if *r < Mag::from_exact_num_lower(m) {
+@@ -185,7 +185,7 @@ impl Ball {
+                 Ball::all_reals(prec)
+             };
+         }
+-        let Some(ord) = r.cmp_exact_num(m).map(Ordering::reverse) else {
++        let Some(ord) = r.cmp_exact_num(m) else {
+             return Err(BoundError::Resource {
+                 op: OP,
+                 detail: "cannot decide the sign of m - r",

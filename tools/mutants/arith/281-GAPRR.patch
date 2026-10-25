@@ -1,13 +1,13 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index 1f8372d..0e3340e 100644
+index 4a73525..e590e77 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -417,7 +417,7 @@ impl Ball {
- fn gaps(a: &Ball, b: &Ball) -> Option<(Ordering, Ordering)> {
-     let (ra, rb) = (a.rad().to_exact_num().ok()?, b.rad().to_exact_num().ok()?);
-     let d = a.mid().sub_full_prec(b.mid());
--    let rr = ra.add_full_prec(&rb);
-+    let rr = ra.sub_full_prec(&rb);
-     let zero = ExactNum::from(0i64);
-     let hi = d.add_full_prec(&rr).partial_cmp(&zero)?;
-     let lo = d.sub_full_prec(&rr).partial_cmp(&zero)?;
+@@ -442,7 +442,7 @@ fn endpoint_signs(a: &Ball, b: &Ball) -> Option<(Ordering, Ordering)> {
+             if d.is_negative() {
+                 rn.inv_sign();
+             }
+-            r2.cmp_exact_diff(&d, &rn)?.reverse()
++            r2.cmp_exact_diff(&d, &rn)?
+         }
+     };
+     let sd = if d.is_zero() {

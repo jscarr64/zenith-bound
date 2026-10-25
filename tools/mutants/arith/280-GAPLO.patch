@@ -1,13 +1,13 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index 1f8372d..68a0380 100644
+index 4a73525..405c8e0 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -420,7 +420,7 @@ fn gaps(a: &Ball, b: &Ball) -> Option<(Ordering, Ordering)> {
-     let rr = ra.add_full_prec(&rb);
-     let zero = ExactNum::from(0i64);
-     let hi = d.add_full_prec(&rr).partial_cmp(&zero)?;
--    let lo = d.sub_full_prec(&rr).partial_cmp(&zero)?;
-+    let lo = d.add_full_prec(&rr).partial_cmp(&zero)?;
-     Some((hi, lo))
- }
- 
+@@ -455,7 +455,7 @@ fn endpoint_signs(a: &Ball, b: &Ball) -> Option<(Ordering, Ordering)> {
+     let lo = if sd == Ordering::Less {
+         Ordering::Less
+     } else {
+-        c
++        c.reverse()
+     };
+     let hi = if sd == Ordering::Greater {
+         Ordering::Greater

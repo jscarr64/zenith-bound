@@ -18,7 +18,7 @@ src/arith.rs:eps	213-EPSBOT	arith/213-EPSBOT.patch	harness
 src/arith.rs:eps	214-EPSEX	arith/214-EPSEX.patch	harness
 src/arith.rs:classify	215-OVF	arith/215-OVF.patch	harness
 src/arith.rs:check_prec	216-PREC	arith/216-PREC.patch	harness
-src/arith.rs:cmp_abs_rad	217-CMPRAD	arith/217-CMPRAD.patch	harness
+src/arith.rs:Ball::sqrt	217-CMPRAD	arith/217-CMPRAD.patch	harness
 src/arith.rs:Ball::div	218-DIVZERO	arith/218-DIVZERO.patch	harness
 src/arith.rs:Ball::div	219-DIVNUMS	arith/219-DIVNUMS.patch	harness
 src/arith.rs:Ball::div	220-DIVNUMR	arith/220-DIVNUMR.patch	harness
@@ -80,10 +80,10 @@ src/arith.rs:Ball::ne	275-NEFALSE	arith/275-NEFALSE.patch	harness
 src/arith.rs:Ball::overlaps	276-OVINF	arith/276-OVINF.patch	harness
 src/arith.rs:Ball::overlaps	277-OVFALSE	arith/277-OVFALSE.patch	harness
 src/arith.rs:Ball::overlaps	278-OVTRUE	arith/278-OVTRUE.patch	harness
-src/arith.rs:gaps	279-GAPHI	arith/279-GAPHI.patch	harness
-src/arith.rs:gaps	280-GAPLO	arith/280-GAPLO.patch	harness
-src/arith.rs:gaps	281-GAPRR	arith/281-GAPRR.patch	harness
-src/arith.rs:gaps	282-GAPD	arith/282-GAPD.patch	harness
+src/arith.rs:endpoint_signs	279-GAPHI	arith/279-GAPHI.patch	harness
+src/arith.rs:endpoint_signs	280-GAPLO	arith/280-GAPLO.patch	harness
+src/arith.rs:endpoint_signs	281-GAPRR	arith/281-GAPRR.patch	harness
+src/arith.rs:endpoint_signs	282-GAPD	arith/282-GAPD.patch	harness
 src/arith.rs:Ball::abs	283-ABSRAD	arith/283-ABSRAD.patch	harness
 src/arith.rs:Ball::sqrt	284-SQRTCLIP0	arith/284-SQRTCLIP0.patch	harness
 src/arith.rs:Ball::sqrt	285-SQRTALLCLIP	arith/285-SQRTALLCLIP.patch	harness
