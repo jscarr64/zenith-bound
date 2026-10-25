@@ -1,7 +1,7 @@
 //! Slice CB: complex balls `CBall { re, im }`, a closed rectangle of two independent real [`Ball`] parts (CONTRACT 16.CB).
 //! Built only on the public `Ball` API and S1; no radius arithmetic of its own. Ownership is O9 (16.CB.0): an op takes
 //! `self` and borrows its second operand; a part is consumed where the inner `Ball` op consumes it.
-//! `sqr` waits on S1's borrowing `sqr`; `mul` and `div` wait on borrowing once-rounded zf ops (Rusty, after R9). Until
+//! `mul` and `div` wait on borrowing once-rounded zf ops (Rusty, after R9). Until
 //! then they return `Resource` with a `detail` naming the wait, and their tests are ignored red.
 
 use zenith_float_num::ExactNum;
@@ -95,12 +95,15 @@ impl CBall {
         self.re.hypot(&self.im, prec)
     }
 
-    /// 16.CB.5. Not implemented: each part is used twice, which needs S1's borrowing `sqr` (SHA pending).
-    pub fn sqr(self, _prec: Precision) -> BoundResult<CBall> {
-        Err(BoundError::Resource {
-            op: "cball_sqr",
-            detail: "not implemented: waits S1 borrowing sqr",
-        })
+    /// `a²` (16.CB.5): `re = sqr(re) − sqr(im)` by `Ball::sqr`, `im = 2·re·im` by one `Ball::mul` and an exact
+    /// `mul_2exp(·, 1)`. Each part is no wider than the same part of `mul(a, a)`: `Ball::sqr` is no wider than
+    /// `Ball::mul(x, x)`, and the doubling replaces a rounded `add` of two equal products.
+    pub fn sqr(self, prec: Precision) -> BoundResult<CBall> {
+        let rr = self.re.sqr(prec)?;
+        let ii = self.im.sqr(prec)?;
+        let re = rr.sub(&ii, prec)?;
+        let im = self.re.mul(&self.im, prec)?.mul_2exp(1, prec)?;
+        CBall::new(re, im)
     }
 
     /// 16.CB.4. Not implemented: waits on borrowing once-rounded zf ops (Rusty, after R9).
