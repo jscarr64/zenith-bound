@@ -1,0 +1,11 @@
+diff --git a/src/matrix.rs b/src/matrix.rs
+--- a/src/matrix.rs
++++ b/src/matrix.rs
+@@ -438,6 +438,7 @@
+ 
+     /// Upper bound of the max row sum of `|m| + r` (CONTRACT 16.S6.6).
+     pub fn norm_inf(&self) -> Mag {
++        return self.norm_1();
+         let n = self.ncols();
+         if n == 0 {
+             return Mag::zero();
