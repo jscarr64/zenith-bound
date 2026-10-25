@@ -688,8 +688,8 @@ fn gold_rows() -> Result<Vec<GoldRow>, String> {
             refs,
         });
     }
-    if rows.len() != 60 {
-        return Err(format!("want 60 gold rows, got {}", rows.len()));
+    if rows.len() != 61 {
+        return Err(format!("want 61 gold rows, got {}", rows.len()));
     }
     Ok(rows)
 }
@@ -803,8 +803,8 @@ fn gold_tight(ops: &[&str]) -> Result<usize, String> {
 #[test]
 fn cball_golden_rows_contained() -> Result<(), String> {
     let n = gold_contained(&["add", "sub", "abs", "sqr"])?;
-    if n != 40 {
-        return Err(format!("want 40 add/sub/abs/sqr gold rows, got {}", n));
+    if n != 41 {
+        return Err(format!("want 41 add/sub/abs/sqr gold rows, got {}", n));
     }
     Ok(())
 }
@@ -867,8 +867,8 @@ fn cball_sqr_gold_not_wider_than_four_product() -> Result<(), String> {
         }
         m += 1;
     }
-    if m != 10 {
-        return Err(format!("want 10 sqr gold rows, got {}", m));
+    if m != 11 {
+        return Err(format!("want 11 sqr gold rows, got {}", m));
     }
     Ok(())
 }
@@ -911,8 +911,8 @@ fn cball_tightness_factors_sqr() -> Result<(), String> {
         }
         n += 1;
     }
-    if n != 10 {
-        return Err(format!("want 10 sqr gold rows, got {}", n));
+    if n != 11 {
+        return Err(format!("want 11 sqr gold rows, got {}", n));
     }
     Ok(())
 }
