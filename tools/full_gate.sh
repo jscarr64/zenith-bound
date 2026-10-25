@@ -66,7 +66,7 @@ run() { name=$1; shift
     # mutate_slice.sh: not here, not in the mutants step below (Spence, 1742-zb-fgself2-9ea44e6)
     # ALL of its output goes to the step log on failure (a `| tail -1` here lost the cause of 1706-zb-mslice-9ea44e6-selftests)
     local out trc=0
-    out=$(env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice.sh --step-timeout 2>&1) || trc=$?
+    out=$(env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH -u MUTATE_REPO -u MUTATE_MANIFEST -u MUTATE_EQUIVALENT -u MUTATE_FLOOR -u MUTATE_TIMEOUT -u MUTATE_BUILD_TIMEOUT -u MUTATE_TMP -u MUTATE_PERSIST tools/mutate_slice.sh --step-timeout 2>&1) || trc=$?
     to=${out##*$'\n'}
     if [ "$trc" != 0 ] || [[ ! $to =~ ^[0-9]+$ ]]; then
       printf 'mutants: FAIL cannot compute the step timeout (tools/mutate_slice.sh --step-timeout exited %s), its output:\n%s\n' "$trc" "$out" > "$T/$tag-$name.log"
@@ -98,6 +98,6 @@ run goldens-regen "require sha256sum grep cmp && tools/goldens_regen_selftest.sh
 run wildcard-enum "require cargo awk grep && tools/wildcard_enum_selftest.sh"
 run tightness "require /usr/bin/python3 && tools/tightness_selftest.sh && tools/tightness_check.sh"
 run digests "require cargo grep && tools/digests_selftest.sh && tools/digests.sh all"
-run mutants "require cargo git timeout grep awk && mt=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:?}/mutate} && CARGO_TARGET_DIR=\$mt tools/fresh_test_run.sh --claim && tools/mutate_selftest.sh && MUTATE_TARGET=\$mt env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH tools/mutate_slice.sh --all"
+run mutants "require cargo git timeout grep awk && mt=\${MUTATE_TARGET:-\${CARGO_TARGET_DIR:?}/mutate} && CARGO_TARGET_DIR=\$mt tools/fresh_test_run.sh --claim && tools/mutate_selftest.sh && MUTATE_TARGET=\$mt env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH -u MUTATE_REPO -u MUTATE_MANIFEST -u MUTATE_EQUIVALENT -u MUTATE_FLOOR -u MUTATE_TIMEOUT -u MUTATE_BUILD_TIMEOUT -u MUTATE_TMP -u MUTATE_PERSIST tools/mutate_slice.sh --all"
 if [ "$gate_rc" = 0 ]; then echo "done" >> "$T/$tag.rc"; else echo "failed" >> "$T/$tag.rc"; fi
 exit "$gate_rc"

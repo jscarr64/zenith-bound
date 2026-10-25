@@ -7,7 +7,7 @@
   change a real run. A result is only an UNINDENTED `KILLED|SURVIVED-EQUIVALENT|SURVIVED|INVALID <id>` line for the --only id (a forged
   indented line is suite output; a result for another id fails). A runner SIGKILLed before its limit (exit 137) is `KILLED-OOM <id>` and
   fails, not TIMEOUT. A --step-timeout failure writes its whole output to the step log (`| tail -1` lost the cause of the one-off
-  1706-zb-mslice-9ea44e6-selftests failure). full_gate_selftest has 111 cases (+19: leaks, duplicate/unknown/forged results, unreadable
+  1706-zb-mslice-9ea44e6-selftests failure). full_gate_selftest has 118 cases and logs the count (+6 from main's 25-step gate; +1: a stale MUTATE_REPO/MANIFEST/EQUIVALENT/FLOOR/TIMEOUT/BUILD_TIMEOUT/TMP/PERSIST must not reach mutate.sh, so the gate unsets every env mutate.sh reads except MUTATE_TARGET, which it sets; +19: leaks, duplicate/unknown/forged results, unreadable
   floor/list, runner rc, OOM, --slices cause).
 
 - full_gate mutants step per slice (Spence-approved design, 2026-10-24): the step runs tools/mutate_slice.sh --all, which runs each slice

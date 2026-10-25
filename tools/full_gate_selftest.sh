@@ -183,4 +183,4 @@ st_done full_gate 118   # WANT: cases this script runs (tools/selftest_cases.sh)
 u='env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH -u MUTATE_REPO -u MUTATE_MANIFEST -u MUTATE_EQUIVALENT -u MUTATE_FLOOR -u MUTATE_TIMEOUT -u MUTATE_BUILD_TIMEOUT -u MUTATE_TMP -u MUTATE_PERSIST tools/mutate_slice\.sh'
 grep -E '^run mutants ' "$root/tools/full_gate.sh" | grep -q "$u --all\"$" || fail "mutants step runs tools/mutate_slice.sh --all without $u"
 [ "$(grep -c "$u --step-timeout" "$root/tools/full_gate.sh")" = 1 ] || fail "the mutants step timeout is computed without $u --step-timeout"
-echo "full_gate selftest: ok"
+echo "full_gate selftest: ok ($(grep -c x "$ST_CASES") cases)"
