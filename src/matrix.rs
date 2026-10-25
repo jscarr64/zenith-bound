@@ -81,11 +81,15 @@ fn rounded(op: &'static str, raw: ExactNum, prec: Precision) -> BoundResult<Step
         return match raw.err() {
             Some(Error::ExponentOverflow(_)) => Ok(Step::Overflow),
             Some(Error::MemoryAllocation) => Err(resource(op, "zf memory allocation")),
-            Some(Error::PrecisionRetryExhausted) => Err(resource(op, "zf precision retry exhausted")),
-            Some(Error::DivisionByZero) | Some(Error::InvalidArgument) | None => Err(BoundError::Representation {
-                op,
-                detail: "zf NaN from a product step",
-            }),
+            Some(Error::PrecisionRetryExhausted) => {
+                Err(resource(op, "zf precision retry exhausted"))
+            }
+            Some(Error::DivisionByZero) | Some(Error::InvalidArgument) | None => {
+                Err(BoundError::Representation {
+                    op,
+                    detail: "zf NaN from a product step",
+                })
+            }
         };
     }
     if raw.inexact() && raw.exponent() == Some(EXPONENT_MAX) {
@@ -94,7 +98,9 @@ fn rounded(op: &'static str, raw: ExactNum, prec: Precision) -> BoundResult<Step
     if !raw.inexact() {
         return Ok(Step::Value(raw, Mag::zero()));
     }
-    let normal = raw.exponent().filter(|e| *e > EXPONENT_MIN && !raw.is_zero());
+    let normal = raw
+        .exponent()
+        .filter(|e| *e > EXPONENT_MIN && !raw.is_zero());
     let eps = match normal {
         Some(e) => Mag::half_ulp(e, prec),
         None => Mag::ulp_mag(EXPONENT_MIN, 0),
@@ -143,9 +149,14 @@ where
 
 /// Row `i` of a row-major `? x k` matrix.
 fn row_of<'a>(op: &'static str, data: &'a [Ball], i: usize, k: usize) -> BoundResult<&'a [Ball]> {
-    let start = i.checked_mul(k).ok_or_else(|| resource(op, "row offset overflows usize"))?;
-    let end = start.checked_add(k).ok_or_else(|| resource(op, "row offset overflows usize"))?;
-    data.get(start..end).ok_or_else(|| resource(op, "row out of range"))
+    let start = i
+        .checked_mul(k)
+        .ok_or_else(|| resource(op, "row offset overflows usize"))?;
+    let end = start
+        .checked_add(k)
+        .ok_or_else(|| resource(op, "row offset overflows usize"))?;
+    data.get(start..end)
+        .ok_or_else(|| resource(op, "row out of range"))
 }
 
 /// `|m| + r` rounded up (16.S6.6).
@@ -291,14 +302,21 @@ impl BallArray {
             rads.push(r);
         }
         let rad_shape = Box::<[usize]>::from(&*shape);
-        Ok((BallArray::from_balls(shape, mids)?, MagArray::from_mags(rad_shape, rads)?))
+        Ok((
+            BallArray::from_balls(shape, mids)?,
+            MagArray::from_mags(rad_shape, rads)?,
+        ))
     }
 
     /// Rebuilds balls `round(m_i) ± (s_i + r_i + ε)` from midpoints and extra radii, enlarging only (CONTRACT 16.S6.5).
     ///
     /// # Errors
     /// `InvalidArgument` for a bad `prec`, `DimensionMismatch` for unequal shapes, `Resource` on allocation failure.
-    pub fn from_mid_rad(mids: BallArray, rads: &MagArray, prec: Precision) -> BoundResult<BallArray> {
+    pub fn from_mid_rad(
+        mids: BallArray,
+        rads: &MagArray,
+        prec: Precision,
+    ) -> BoundResult<BallArray> {
         const OP: &str = "BallArray::from_mid_rad";
         check_prec(OP, prec)?;
         if mids.shape() != rads.shape() {
@@ -344,7 +362,10 @@ impl BallVec {
         }
         let x = self.as_array().as_slice();
         let y = other.as_array().as_slice();
-        let terms = x.iter().zip(y).map(|(a, b)| (a.mid(), a.rad(), b.mid(), b.rad()));
+        let terms = x
+            .iter()
+            .zip(y)
+            .map(|(a, b)| (a.mid(), a.rad(), b.mid(), b.rad()));
         product_entry(OP, terms, k, prec)
     }
 
@@ -402,7 +423,10 @@ impl BallMat {
         let mut out = reserve(OP, m)?;
         for i in 0..m {
             let row = row_of(OP, a, i, k)?;
-            let terms = row.iter().zip(v).map(|(p, q)| (p.mid(), p.rad(), q.mid(), q.rad()));
+            let terms = row
+                .iter()
+                .zip(v)
+                .map(|(p, q)| (p.mid(), p.rad(), q.mid(), q.rad()));
             out.push(product_entry(OP, terms, k, prec)?);
         }
         Ok(BallVec::from_balls(out))
@@ -429,7 +453,10 @@ impl BallMat {
             let row = row_of(OP, a, i, k)?;
             for j in 0..n {
                 let col = b.iter().skip(j).step_by(n);
-                let terms = row.iter().zip(col).map(|(p, q)| (p.mid(), p.rad(), q.mid(), q.rad()));
+                let terms = row
+                    .iter()
+                    .zip(col)
+                    .map(|(p, q)| (p.mid(), p.rad(), q.mid(), q.rad()));
                 out.push(product_entry(OP, terms, k, prec)?);
             }
         }
