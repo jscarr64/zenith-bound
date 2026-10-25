@@ -753,8 +753,7 @@ fn s6_magarray_nd_accessors_row_major() -> Result<(), String> {
         let got = m.get(idx).ok_or("get")?;
         let flat = m
             .as_slice()
-            .iter()
-            .nth(usize::try_from(v - 1).map_err(|e| format!("{e}"))?)
+            .get(usize::try_from(v - 1).map_err(|e| format!("{e}"))?)
             .ok_or("nth")?;
         if *got != Mag::finite(v, 0).map_err(|e| format!("{e:?}"))? || got != flat {
             return Err(format!("[2,3,4] {idx:?}: {got:?}, want {v}"));
