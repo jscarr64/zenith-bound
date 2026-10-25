@@ -682,8 +682,18 @@ type Spec = (i64, i64, Option<i64>);
 
 const VA: [Spec; 3] = [(5, -2, Some(-4)), (-3, 0, None), (7, -3, Some(-2))];
 const VB: [Spec; 3] = [(1, -1, Some(-4)), (3, -2, Some(-2)), (-7, -3, None)];
-const MA: [Spec; 4] = [(5, -2, Some(-4)), (-3, 0, None), (7, -3, Some(-2)), (9, 0, Some(-1))];
-const MB: [Spec; 4] = [(1, -1, Some(-4)), (3, -2, Some(-2)), (-7, -3, None), (-1, -3, Some(-3))];
+const MA: [Spec; 4] = [
+    (5, -2, Some(-4)),
+    (-3, 0, None),
+    (7, -3, Some(-2)),
+    (9, 0, Some(-1)),
+];
+const MB: [Spec; 4] = [
+    (1, -1, Some(-4)),
+    (3, -2, Some(-2)),
+    (-7, -3, None),
+    (-1, -3, Some(-3)),
+];
 
 fn spec_mid(s: &Spec) -> Result<ExactNum, String> {
     Ok(num(s.0).mul_full_prec(&pow2(s.1)?))
@@ -740,7 +750,9 @@ fn check_elementwise(
             .map_err(|e| format!("{what}[{i}]: radius not finite: {e:?}"))?;
         let bound = rx.add_full_prec(&ry);
         if sign_of(&ge, &bound) > 0 {
-            return Err(format!("{what}[{i}]: radius {ge:?} exceeds r_a + r_b = {bound:?}"));
+            return Err(format!(
+                "{what}[{i}]: radius {ge:?} exceeds r_a + r_b = {bound:?}"
+            ));
         }
         let xs = [mx.sub_full_prec(&rx), mx.add_full_prec(&rx)];
         let ys = [my.sub_full_prec(&ry), my.add_full_prec(&ry)];
@@ -776,9 +788,20 @@ fn s6_ballvec_add_sub_hand_rows() -> Result<(), String> {
     check_elementwise("BallVec::add", s.as_array().as_slice(), &VA, &VB, false)?;
     let d = ok("BallVec::sub", va()?.sub(&vb, 53))?;
     check_elementwise("BallVec::sub", d.as_array().as_slice(), &VA, &VB, true)?;
-    want_dim_mismatch("BallVec::add 3 + 2", vec_of(&[1, 2, 3])?.add(&vec_of(&[1, 2])?, 53))?;
-    want_dim_mismatch("BallVec::sub 3 - 2", vec_of(&[1, 2, 3])?.sub(&vec_of(&[1, 2])?, 53))?;
-    let inf = || Ok::<BallVec, String>(BallVec::from_balls(vec![ball(1, Mag::infinity(), 53)?, pt(2)?]));
+    want_dim_mismatch(
+        "BallVec::add 3 + 2",
+        vec_of(&[1, 2, 3])?.add(&vec_of(&[1, 2])?, 53),
+    )?;
+    want_dim_mismatch(
+        "BallVec::sub 3 - 2",
+        vec_of(&[1, 2, 3])?.sub(&vec_of(&[1, 2])?, 53),
+    )?;
+    let inf = || {
+        Ok::<BallVec, String>(BallVec::from_balls(vec![
+            ball(1, Mag::infinity(), 53)?,
+            pt(2)?,
+        ]))
+    };
     let w = vec_of(&[3, 4])?;
     let s = ok("BallVec::add Infinity", inf()?.add(&w, 53))?;
     want_all_reals_first_only("BallVec::add", s.as_array().as_slice())?;
@@ -788,8 +811,16 @@ fn s6_ballvec_add_sub_hand_rows() -> Result<(), String> {
 
 #[test]
 fn s6_ballmat_add_sub_hand_rows() -> Result<(), String> {
-    let ma = || ok("BallMat::from_balls", BallMat::from_balls(2, 2, spec_balls(&MA)?));
-    let mb = ok("BallMat::from_balls", BallMat::from_balls(2, 2, spec_balls(&MB)?))?;
+    let ma = || {
+        ok(
+            "BallMat::from_balls",
+            BallMat::from_balls(2, 2, spec_balls(&MA)?),
+        )
+    };
+    let mb = ok(
+        "BallMat::from_balls",
+        BallMat::from_balls(2, 2, spec_balls(&MB)?),
+    )?;
     let s = ok("BallMat::add", ma()?.add(&mb, 53))?;
     if s.nrows() != 2 || s.ncols() != 2 {
         return Err(format!("BallMat::add shape {}x{}", s.nrows(), s.ncols()));
@@ -802,10 +833,22 @@ fn s6_ballmat_add_sub_hand_rows() -> Result<(), String> {
     check_elementwise("BallMat::sub", d.as_array().as_slice(), &MA, &MB, true)?;
     // equal length, different shape (2x3 vs 3x2), and different length (2x2 vs 2x3)
     let six = [1, 2, 3, 4, 5, 6];
-    want_dim_mismatch("BallMat::add 2x3 + 3x2", mat(2, 3, &six)?.add(&mat(3, 2, &six)?, 53))?;
-    want_dim_mismatch("BallMat::sub 2x3 - 3x2", mat(2, 3, &six)?.sub(&mat(3, 2, &six)?, 53))?;
-    want_dim_mismatch("BallMat::add 2x2 + 2x3", mat(2, 2, &[1, 2, 3, 4])?.add(&mat(2, 3, &six)?, 53))?;
-    want_dim_mismatch("BallMat::sub 2x2 - 2x3", mat(2, 2, &[1, 2, 3, 4])?.sub(&mat(2, 3, &six)?, 53))?;
+    want_dim_mismatch(
+        "BallMat::add 2x3 + 3x2",
+        mat(2, 3, &six)?.add(&mat(3, 2, &six)?, 53),
+    )?;
+    want_dim_mismatch(
+        "BallMat::sub 2x3 - 3x2",
+        mat(2, 3, &six)?.sub(&mat(3, 2, &six)?, 53),
+    )?;
+    want_dim_mismatch(
+        "BallMat::add 2x2 + 2x3",
+        mat(2, 2, &[1, 2, 3, 4])?.add(&mat(2, 3, &six)?, 53),
+    )?;
+    want_dim_mismatch(
+        "BallMat::sub 2x2 - 2x3",
+        mat(2, 2, &[1, 2, 3, 4])?.sub(&mat(2, 3, &six)?, 53),
+    )?;
     let inf = || {
         let balls = vec![ball(1, Mag::infinity(), 53)?, pt(2)?];
         ok("BallMat::from_balls", BallMat::from_balls(1, 2, balls))
