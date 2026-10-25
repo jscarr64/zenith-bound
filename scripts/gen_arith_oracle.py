@@ -291,6 +291,11 @@ def selftest():
     must_raise(RowRejected, lambda: make_row("div", 8, 0, one, ZERO, one, two), "a div divisor reaching 0")
     must_raise(SystemExit, lambda: rss_check(RSS_CAP_KIB + 1), "a peak RSS over the cap")
     rss_check(RSS_CAP_KIB)
+    # tools/goldens_regen.sh passes --skip-heavy to every slice generator in regen-gate mode (01af08d); S1 has no heavy rows, so it must parse
+    if parse_args(["--check", "D", "--skip-heavy"]) != ("check", "D", None) or parse_args(["--check", "D"]) != ("check", "D", None):
+        raise SystemExit("gen_arith_oracle selftest: --check DIR [--skip-heavy] not accepted")
+    if parse_args(["--check", "D", "--bogus"]) is not None or parse_args(["--skip-heavy"]) is not None:
+        raise SystemExit("gen_arith_oracle selftest: a bad argument list was accepted")
     print("gen_arith_oracle selftest: ok")
 
 
