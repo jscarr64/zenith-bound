@@ -1,8 +1,8 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index deeda66..b9b77c6 100644
+index 4ed7629..77e9e85 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -158,7 +158,7 @@ impl Ball {
+@@ -172,7 +172,7 @@ impl Ball {
          const OP: &str = "Ball::sqrt";
          check_prec(OP, prec)?;
          let strict = match policy {
@@ -10,4 +10,4 @@ index deeda66..b9b77c6 100644
 +            DomainPolicy::Strict => false,
              DomainPolicy::Clip => false,
          };
-         let (m, r, _) = self.into_parts();
+         let (m, r) = (self.mid(), self.rad());

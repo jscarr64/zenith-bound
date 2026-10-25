@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- S1 borrowing, option B (2026-10-24, Jeff): `Ball::sqr`, `inv`, `sqrt`, `hypot`, `powi` and `abs` take `&self` (API change; callers
+  no longer give up the ball). `sqr` uses `mul_full_prec` and its per-operation `inexact()` flag; `abs` rounds `|m|` as
+  `ExactNum::from(±1).mul(m)`. `add`, `sub`, `mul`, `mul_exact`, `div`, `mul_2exp`, `neg` stay by value until zenith-float has
+  borrowing correctly-rounded ops (Rusty). No `*_ref`, no new copy; rules_scan baselines unchanged. CONTRACT 15.1, O9, O14-W amended.
+  Test: harness `borrowed_ops_reuse_the_same_ball`.
+
 - goldens_regen.sh SHA256SUMS line check quiet/loud (2026-10-24): the malformed-line `grep -v` returns 1 when every line is valid,
   which tripped `ERR rc=1 line=65` on a clean run. rc 1 is now normal (clean rc 0, no ERR); a real malformed line still fails with
   its text, and a grep rc 2 fails with "grep failed (rc 2)". goldens_regen_selftest has 25 cases (+6).

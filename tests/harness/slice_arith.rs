@@ -1687,3 +1687,33 @@ fn exact_top_binade_midpoint_is_not_overflow() -> Result<(), String> {
         &Mag::zero(),
     )
 }
+
+// ---- Harper S1 coverage rows (child module under tests/harness/slice_arith/) ----------------------------------------
+
+mod harper_s1cov;
+
+/// The borrowing S1 ops (CONTRACT 15.1, O14-W for abs): one ball feeds several ops and is still usable afterwards,
+/// as a complex ball's parts must be (16.S1.5-16.S1.8, 16.S1.10). On the by-value API this does not compile.
+#[test]
+fn borrowed_ops_reuse_the_same_ball() -> Result<(), String> {
+    let p = 64;
+    let a = pt(4, p)?;
+    let b = pt(3, p)?;
+    want_contains("sqr", &ok("sqr", a.sqr(p))?, &num(16))?;
+    want_contains("inv", &ok("inv", a.inv(p))?, &dy(1, -2)?)?;
+    want_contains(
+        "sqrt",
+        &ok("sqrt", a.sqrt(p, &DomainPolicy::Strict))?,
+        &num(2),
+    )?;
+    want_contains("hypot", &ok("hypot", a.hypot(&b, p))?, &num(5))?;
+    let hh = ok("hypot self", b.hypot(&b, p))?;
+    want_contains("hypot self", &ok("sqr", hh.sqr(p))?, &num(18))?;
+    want_contains("powi", &ok("powi", a.powi(3, p))?, &num(64))?;
+    want_contains("abs", &ok("abs", (-pt(4, p)?).abs(p))?, &num(4))?;
+    let n = -pt(4, p)?;
+    want_contains("abs twice", &ok("abs", n.abs(p))?, &num(4))?;
+    want_contains("abs twice", &ok("abs", n.abs(p))?, &num(4))?;
+    // `a` and `b` are still owned here: the by-value ops consume them last.
+    want_contains("add after", &ok("add", a.add(&b, p))?, &num(7))
+}
