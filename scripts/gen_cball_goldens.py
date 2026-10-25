@@ -5,6 +5,8 @@ and div, plus per-part first-order radii RREF for the tightness factors. Run wit
     scripts/gen_cball_goldens.py              write tests/goldens/slices/cball/cball_rows.txt
     scripts/gen_cball_goldens.py --check DIR  regenerate into DIR (never tests/goldens) and compare byte for byte
     scripts/gen_cball_goldens.py --selftest   the generator's own checks
+--skip-heavy may follow any of these and is a documented no-op: cball has no heavy tier, but tools/goldens_regen.sh passes it to every
+generator in gate mode (as gen_la_goldens.py takes it).
 
 REFERENCES. For each row the input rectangles are A = [ARE +- ARER] x [AIM +- AIMR] (and B likewise). Three sample points are taken: the midpoints
 (A.mid, B.mid), the low corner of A with the high corner of B, and the high corner of A with the low corner of B (unary ops: mid, low corner, high
@@ -252,7 +254,22 @@ def stream_rows(out):
                 got += 1
                 n += 1
                 print("progress: op=%s case=p%d-%d tier=gate row_s=%.3f elapsed_s=%.3f" % (op, prec, got, time.monotonic() - t1, time.monotonic() - t0), flush=True)
+    for op, prec, a in extra_rows():
+        t1 = time.monotonic()
+        out.write(make_row(op, prec, a, None) + "\n")
+        out.flush()
+        n += 1
+        print("progress: op=%s case=p%d-extra tier=gate row_s=%.3f elapsed_s=%.3f" % (op, prec, time.monotonic() - t1, time.monotonic() - t0), flush=True)
     return n
+
+
+def extra_rows():
+    """Hand-picked rows appended after the drawn stream (the drawn rows stay byte-identical).
+    sqr p=53, A = 1 + (0 +- 2)i: a WIDE imaginary radius with an exact real part, so the 16.CB.10 second-order term
+    rad(im)^2 = 4 dominates the re part (RREF_re is one ulp) and a sqr reference without it cannot cover re = 1 - [0, 4]
+    (Spence, 2026-10-25)."""
+    zero = (0, 0, 0)
+    return [("sqr", 53, (canon(0, 1, 0), zero, zero, canon(0, 1, 1)))]
 
 
 def write_file(path):
@@ -282,12 +299,23 @@ def selftest():
     row = make_row("abs", 8, (canon(0, 3, 0), zero, canon(0, 1, 2), zero), None)
     if row.split(" ")[-18:-12] != ["0", "3", "5", "0", "0", "0"]:
         raise SystemExit("gen_cball_goldens selftest: |3+4i|")
+    # --skip-heavy is a no-op (no heavy tier): stripped wherever it appears, nothing else changes
+    if strip_skip_heavy(["--check", "D", "--skip-heavy"]) != ["--check", "D"] or strip_skip_heavy(["--skip-heavy"]) != []:
+        raise SystemExit("gen_cball_goldens selftest: --skip-heavy not stripped")
+    if strip_skip_heavy(["--selftest"]) != ["--selftest"]:
+        raise SystemExit("gen_cball_goldens selftest: argv changed without --skip-heavy")
     print("gen_cball_goldens selftest: ok")
+
+
+def strip_skip_heavy(argv):
+    """Drop --skip-heavy (documented no-op: cball has no heavy tier; tools/goldens_regen.sh passes it in gate mode)."""
+    return [a for a in argv if a != "--skip-heavy"]
 
 
 def main(argv):
     goldlib.require_mpmath()
     selftest()
+    argv = strip_skip_heavy(argv)
     if len(argv) == 2 and argv[0] == "--check":
         os.makedirs(argv[1], exist_ok=True)
         write_file(os.path.join(argv[1], GOLDEN_NAME))
@@ -297,7 +325,7 @@ def main(argv):
         return 0
     if argv == ["--selftest"]:
         return 0
-    raise SystemExit("usage: scripts/gen_cball_goldens.py [--check DIR | --selftest]")
+    raise SystemExit("usage: scripts/gen_cball_goldens.py [--check DIR | --selftest] [--skip-heavy]")
 
 
 if __name__ == "__main__":
