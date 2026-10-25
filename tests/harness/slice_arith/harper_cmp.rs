@@ -65,10 +65,11 @@ fn compare_balls_disjoint_touching_straddling() -> Result<(), String> {
     // [-1, 1] vs 5 and its mirror: disjoint, decided.
     want_cmp("0±1 vs 5", &bk(0, 0)?, &pt(5, P)?, [T, T, F, F, F, T, F])?;
     want_cmp("5 vs 0±1", &pt(5, P)?, &bk(0, 0)?, [F, F, T, T, F, T, F])?;
-    // [0, 2] vs [2, 4] touch at 2 (CONTRACT 15.2 touching edges): le/ge on the right side True, lt/gt/eq Unknown on
-    // either side, they overlap (279/280 flip the D ± R signs).
-    want_cmp("1±1 vs 3±1", &bk(1, 0)?, &bk(3, 0)?, [U, T, U, U, U, U, T])?;
-    want_cmp("3±1 vs 1±1", &bk(3, 0)?, &bk(1, 0)?, [U, U, U, T, U, U, T])?;
+    // [0, 2] vs [2, 4] touch at 2 (CONTRACT 15.2 touching edges): le/ge on the right side True; the upper ball is
+    // certainly not below the lower one (R > 0, lo(upper) = hi(lower)), so its lt (the lower one's gt) is False (S1 nit a,
+    // spence/zb-s1 026e979); the other strict order and eq stay Unknown; they overlap (279/280 flip the D ± R signs).
+    want_cmp("1±1 vs 3±1", &bk(1, 0)?, &bk(3, 0)?, [U, T, F, U, U, U, T])?;
+    want_cmp("3±1 vs 1±1", &bk(3, 0)?, &bk(1, 0)?, [F, U, U, T, U, U, T])?;
     // [-2, 2] vs 1: straddles, nothing decided but overlap (281 uses r1 - r2).
     want_cmp("0±2 vs 1", &bk(0, 1)?, &pt(1, P)?, [U, U, U, U, U, U, T])?;
     // R = r1 + r2 must be the sum: (1 ± 1/2) vs (2 ± 1/4) is disjoint by 1/4; (1 ± 1/2) vs (2 ± 1/2) touches at 3/2.
@@ -82,7 +83,7 @@ fn compare_balls_disjoint_touching_straddling() -> Result<(), String> {
         "1±1/2 vs 2±1/2",
         &bk(1, -1)?,
         &bk(2, -1)?,
-        [U, T, U, U, U, U, T],
+        [U, T, F, U, U, U, T],
     )?;
     // overlapping but neither contains the other: (0 ± 1) vs (1 ± 1).
     want_cmp("0±1 vs 1±1", &bk(0, 0)?, &bk(1, 0)?, [U, U, U, U, U, U, T])?;
@@ -309,13 +310,16 @@ fn compare_consistency_seeded() -> Result<(), String> {
                 U
             }
         };
-        // 16.S1.11 from exact endpoints: touching edges decide only le/ge.
+        // 16.S1.11 from exact endpoints: touching edges decide le/ge, and (R > 0) the upper ball's lt / lower ball's gt
+        // is False (S1 nit a).
         let peq = point && alo == blo;
+        let a_on_top = !point && alo == bhi;
+        let b_on_top = !point && blo == ahi;
         let disjoint = ahi < blo || bhi < alo;
         let want = [
-            tri(ahi < blo, alo > bhi || peq),
+            tri(ahi < blo, alo > bhi || peq || a_on_top),
             tri(ahi <= blo, alo > bhi),
-            tri(bhi < alo, blo > ahi || peq),
+            tri(bhi < alo, blo > ahi || peq || b_on_top),
             tri(bhi <= alo, blo > ahi),
             tri(peq, disjoint),
             tri(disjoint, peq),
