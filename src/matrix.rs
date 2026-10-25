@@ -493,3 +493,36 @@ impl BallMat {
         sum_sq_up(self.as_array().as_slice().iter()).sqrt_up()
     }
 }
+
+/// zf NaN error kinds from a product step map as in S1 (`arith::classify`, CONTRACT O2): `DivisionByZero` is `Domain`,
+/// `InvalidArgument` is `InvalidArgument`, a NaN without an error kind is `Representation`.
+#[cfg(test)]
+mod slice_matrix_nan_map {
+    use super::{rounded, Step};
+    use crate::error::BoundError;
+    use zenith_float_num::{Error, ExactNum};
+
+    fn step_error(err: Option<Error>) -> Result<BoundError, String> {
+        match rounded("nan_map", ExactNum::nan(err), 53) {
+            Err(e) => Ok(e),
+            Ok(Step::Value(..)) | Ok(Step::Overflow) => Err(String::from("a NaN step did not error")),
+        }
+    }
+
+    #[test]
+    fn slice_matrix_zf_nan_errors_map_as_s1() -> Result<(), String> {
+        let e = step_error(Some(Error::DivisionByZero))?;
+        if !(matches!(e, BoundError::Domain { .. }) && e.detail() == "zf division by zero") {
+            return Err(format!("DivisionByZero mapped to {e:?}"));
+        }
+        let e = step_error(Some(Error::InvalidArgument))?;
+        if !(matches!(e, BoundError::InvalidArgument { .. }) && e.detail() == "zf invalid argument") {
+            return Err(format!("InvalidArgument mapped to {e:?}"));
+        }
+        let e = step_error(None)?;
+        if !(matches!(e, BoundError::Representation { .. }) && e.detail() == "zf NaN without an error kind") {
+            return Err(format!("kindless NaN mapped to {e:?}"));
+        }
+        Ok(())
+    }
+}
