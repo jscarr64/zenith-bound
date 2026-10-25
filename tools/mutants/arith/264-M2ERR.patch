@@ -1,13 +1,13 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index 1f8372d..cc7469f 100644
+index 5995d15..18d397f 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -438,7 +438,7 @@ fn mag_mul_2exp_up(r: &Mag, k: i64) -> Mag {
-         None if k < 0 => Mag::finite(HALF_MANT, i64::MIN),
-         None => return Mag::infinity(),
-     };
--    shifted.unwrap_or_else(|_| Mag::infinity())
-+    shifted.unwrap_or_else(|_| Mag::zero())
+@@ -452,7 +452,7 @@ fn mag_mul_2exp_up(r: &Mag, k: i64) -> Mag {
+     // which has lz = 0 too. Infinity is kept as the outward-safe answer should that ever change.
+     match shifted {
+         Ok(m) => m,
+-        Err(_) => Mag::infinity(),
++        Err(_) => Mag::zero(),
+     }
  }
  
- /// A lower bound on `min |m ± r|` at `wp` bits: 0 when the ball reaches 0, else `|m| - r` rounded toward 0.

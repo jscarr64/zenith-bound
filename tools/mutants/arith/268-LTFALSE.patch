@@ -1,13 +1,14 @@
 diff --git a/src/arith.rs b/src/arith.rs
-index 1f8372d..2b6985d 100644
+index 5995d15..6c04131 100644
 --- a/src/arith.rs
 +++ b/src/arith.rs
-@@ -350,7 +350,7 @@ impl Ball {
-     pub fn lt(&self, other: &Ball) -> Tri {
-         match gaps(self, other) {
+@@ -360,7 +360,8 @@ impl Ball {
              Some((Ordering::Less, _)) => Tri::True,
--            Some((_, Ordering::Greater)) => Tri::False,
+             // lo(a) >= hi(b): every point of `a` is >= every point of `b`, so `a < b` is certainly False, also when the
+             // balls only touch (R > 0, lo(a) = hi(b)).
+-            Some((_, Ordering::Greater | Ordering::Equal)) => Tri::False,
 +            Some((_, Ordering::Greater)) => Tri::Unknown,
-             Some((Ordering::Equal, Ordering::Equal)) => Tri::False,
-             Some((Ordering::Equal | Ordering::Greater, Ordering::Equal | Ordering::Less))
-             | None => Tri::Unknown,
++            Some((_, Ordering::Equal)) => Tri::False,
+             Some((Ordering::Equal | Ordering::Greater, Ordering::Less)) | None => Tri::Unknown,
+         }
+     }
