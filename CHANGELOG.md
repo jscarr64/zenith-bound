@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- 16.CB.10 RESOLVED (Spence ruling, 2026-10-25): the sqr tightness bound was mis-specified, not the code. Per part rad(sqr) ≤ 2·(RREF + S2), S2 = r_re² + r_im² (re) and 2·r_re·r_im (im), computed exactly from the gold input radii (test helper `sqr_ref`). `cball_tightness_factors_sqr` is no longer ignored; all 11 gold sqr rows pass (the 10 original rows, including the 3 that failed 2·RREF (pop-logs cassie/2026-10-25/0817-cb10-sqr-try), plus one wide-imaginary sqr row). Golds extended by that one wide-im sqr row in cball_rows.txt, which kills 1523-SQRREFNOIM; SHA256SUMS updated. CONTRACT 16.CB.10 amended.
+- cball follow-up (Spence, 2026-10-25): hand gold row sqr p=53, A = (0 ± 2) + (0 ± 2)i (gen_cball_goldens.py extra_rows; mpmath 1.3.0), where RREF is 0 and the im radius rests on 2·r_re·r_im alone. Not red-first: the new mutant 1524-SQRREFNOXY (sqr_ref without 2·r_re·r_im) is already killed by drawn row 40 (sqr p=2, A = (0 ± 2^-3) + (0 ± 7·2^-23)i; pop-logs cassie/2026-10-25/1142-f2-cb-red); the new row passes and kills it too. 62 gold rows (12 sqr, 42 contained); cball floor 16.
+
+- 16.CB.10 RESOLVED (Spence ruling, 2026-10-25): the sqr tightness bound was mis-specified, not the code. Per part rad(sqr) ≤ 2·(RREF + S2), S2 = r_re² + r_im² (re) and 2·r_re·r_im (im), computed exactly from the gold input radii (test helper `sqr_ref`). `cball_tightness_factors_sqr` is no longer ignored; all 12 gold sqr rows pass (the 10 original rows, including the 3 that failed 2·RREF (pop-logs cassie/2026-10-25/0817-cb10-sqr-try), plus one wide-imaginary sqr row and one zero-mid row with both radii nonzero). Golds extended by that one wide-im sqr row in cball_rows.txt, which kills 1523-SQRREFNOIM; SHA256SUMS updated. CONTRACT 16.CB.10 amended.
 
 - S1 borrowing, option B (2026-10-24, Jeff): `Ball::sqr`, `inv`, `sqrt`, `hypot`, `powi` and `abs` take `&self` (API change; callers
   no longer give up the ball). `sqr` uses `mul_full_prec` and its per-operation `inexact()` flag; `abs` rounds `|m|` as
