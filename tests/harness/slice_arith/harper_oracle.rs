@@ -99,7 +99,9 @@ fn run(op: &str, prec: usize, k: i64, a: Ball, b: &Ball, bmid: &ExactNum) -> Res
         "inv" => ok("inv", a.inv(prec)),
         "hypot" => ok("hypot", a.hypot(b, prec)),
         "abs" => ok("abs", a.abs(prec)),
-        "mul_2exp" | "mul_2exp_ovf" | "mul_2exp_unf" | "mul_2exp_unf_rad" => ok("mul_2exp", a.mul_2exp(k, prec)),
+        "mul_2exp" | "mul_2exp_ovf" | "mul_2exp_unf" | "mul_2exp_unf_rad" => {
+            ok("mul_2exp", a.mul_2exp(k, prec))
+        }
         other => Err(format!("unknown op {}", other)),
     }
 }
@@ -158,9 +160,14 @@ fn check_row(line: &str) -> Result<(), String> {
     if op == "mul_2exp_unf" || op == "mul_2exp_unf_rad" {
         if op == "mul_2exp_unf_rad" {
             // A positive radius shifted below the Mag range clamps up to min_pos = finite(HALF_MANT, i64::MIN), never 0.
-            let min_pos = Mag::finite(0x8000_0000_0000_0000, i64::MIN).map_err(|e| format!("min_pos: {:?}", e))?;
+            let min_pos = Mag::finite(0x8000_0000_0000_0000, i64::MIN)
+                .map_err(|e| format!("min_pos: {:?}", e))?;
             if res.rad() != &min_pos {
-                return Err(format!("underflow rad {:?}, want min_pos {:?}", res.rad(), min_pos));
+                return Err(format!(
+                    "underflow rad {:?}, want min_pos {:?}",
+                    res.rad(),
+                    min_pos
+                ));
             }
             return if res.mid() == &num(0) {
                 Ok(())
@@ -170,7 +177,11 @@ fn check_row(line: &str) -> Result<(), String> {
         }
         let bmax = pow2(EXPONENT_MIN.checked_sub(1).ok_or("EXPONENT_MIN - 1")?)?;
         want_contains("underflow 0", &res, &num(0))?;
-        return want_contains("underflow bound", &res, &if sign_neg { -bmax } else { bmax });
+        return want_contains(
+            "underflow bound",
+            &res,
+            &if sign_neg { -bmax } else { bmax },
+        );
     }
     want_contains("LO", &res, &lo)?;
     want_contains("HI", &res, &hi)?;
@@ -306,12 +317,21 @@ fn powi_fixed_rows_within_one_ulp() -> Result<(), String> {
         .take(WANT_POWI_FIXED)
         .collect();
     if rows.len() != WANT_POWI_FIXED {
-        return Err(format!("{} fixed powi rows, want {}", rows.len(), WANT_POWI_FIXED));
+        return Err(format!(
+            "{} fixed powi rows, want {}",
+            rows.len(),
+            WANT_POWI_FIXED
+        ));
     }
     let mut informative = 0usize;
     for (at, (line, (i, j))) in rows
         .iter()
-        .zip([53usize, 64, 113].into_iter().enumerate().flat_map(|(i, p)| (0..12i64).map(move |j| (i, (p, j)))))
+        .zip(
+            [53usize, 64, 113]
+                .into_iter()
+                .enumerate()
+                .flat_map(|(i, p)| (0..12i64).map(move |j| (i, (p, j)))),
+        )
         .enumerate()
     {
         let (prec, jj) = j;
@@ -324,9 +344,13 @@ fn powi_fixed_rows_within_one_ulp() -> Result<(), String> {
         let v: Vec<&str> = line.split_whitespace().collect();
         let want_head = format!("powi {}", prec);
         if !line.starts_with(&want_head) || field(&v, 3)? != n.to_string() {
-            return Err(format!("fixed powi row {}: want {} n {}: {}", at, want_head, n, line));
+            return Err(format!(
+                "fixed powi row {}: want {} n {}: {}",
+                at, want_head, n, line
+            ));
         }
-        check_row(line).map_err(|e| format!("fixed powi row {} (p {} n {}): {}", at, prec, n, e))?;
+        check_row(line)
+            .map_err(|e| format!("fixed powi row {} (p {} n {}): {}", at, prec, n, e))?;
         let a = ok(
             "a",
             Ball::from_mid_rad(value(&v, 4)?, Mag::from_exact_num(&value(&v, 7)?), prec),
@@ -336,7 +360,12 @@ fn powi_fixed_rows_within_one_ulp() -> Result<(), String> {
             continue;
         }
         if !within(res.rad(), 1, &value(&v, 22)?)? {
-            return Err(format!("fixed powi p {} n {}: rad {:?} > one ulp RREF", prec, n, res.rad()));
+            return Err(format!(
+                "fixed powi p {} n {}: rad {:?} > one ulp RREF",
+                prec,
+                n,
+                res.rad()
+            ));
         }
         informative = informative.checked_add(1).ok_or("c")?;
     }
