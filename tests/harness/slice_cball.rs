@@ -270,7 +270,10 @@ fn cball_sqr_contains_images() -> Result<(), String> {
         CBall::new(ok("all_reals", Ball::all_reals(53))?, pt(1, 53)?),
     )?;
     want_all_reals_both("sqr all-reals re", &ok("sqr", h.sqr(53))?)?;
-    if !matches!(cpt(1, 2, 53)?.sqr(0), Err(BoundError::InvalidArgument { .. })) {
+    if !matches!(
+        cpt(1, 2, 53)?.sqr(0),
+        Err(BoundError::InvalidArgument { .. })
+    ) {
         return Err("sqr prec 0 not InvalidArgument".into());
     }
     Ok(())
