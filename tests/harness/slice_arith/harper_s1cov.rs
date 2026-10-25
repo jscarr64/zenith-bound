@@ -2,7 +2,6 @@
 //! Hand-verified rows at the edges the parent rows leave out: i64::MIN and i64::MIN + 1 midpoints and shift counts,
 //! signed zero on both sides, round-to-even ties of the midpoint, |m| = r exactly, touching endpoints, and every
 //! precision error path.
-//! COVERS: Ball::abs, Ball::mul_2exp, Ball::lt, Ball::le, Ball::gt, Ball::ge, Ball::eq, Ball::ne, Ball::overlaps
 
 use zenith_bound::ball::Ball;
 use zenith_bound::enclosure::Enclosure;

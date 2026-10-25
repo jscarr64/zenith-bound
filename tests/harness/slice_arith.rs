@@ -831,6 +831,13 @@ fn enclosure_rows_contained() -> Result<(), String> {
     Ok(())
 }
 
+// ---- Harper L0b harness (child modules under tests/harness/slice_arith/) -------------------------------------------
+
+mod harper_cmp;
+mod harper_edges;
+mod harper_oracle;
+mod harper_props;
+
 // ---- div, inv, hypot (16.S1.8, zenith-float R13) -----------------------------------------------------------------
 
 /// `[lo, hi]` brackets of an exact quotient or hypot at 256 bits, directed by zenith-float (Down / Up).

@@ -446,7 +446,14 @@ fn mag_mul_2exp_up(r: &Mag, k: i64) -> Mag {
         None if k < 0 => Mag::finite(HALF_MANT, i64::MIN),
         None => return Mag::infinity(),
     };
-    shifted.unwrap_or_else(|_| Mag::infinity())
+    // The Err arm is unreachable: `r` is a canonical Mag (from_canonical keeps the mantissa's top bit set), so
+    // Mag::finite's normalising shift is lz = 0 and `ne` itself is the stored exponent, which fits i64 by
+    // construction; the only out-of-range case (e + k below i64::MIN) is handled above as finite(HALF_MANT, i64::MIN),
+    // which has lz = 0 too. Infinity is kept as the outward-safe answer should that ever change.
+    match shifted {
+        Ok(m) => m,
+        Err(_) => Mag::infinity(),
+    }
 }
 
 /// A lower bound on `min |m ± r|` at `wp` bits: 0 when the ball reaches 0, else `|m| - r` rounded toward 0.
