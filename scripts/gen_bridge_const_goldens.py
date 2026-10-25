@@ -11,10 +11,14 @@ ORACLE. mpmath 1.3.0 libmp. Every directed result is settled twice, as zenith-fl
 generator of zf's r14_consts.jsonl, whose Down/Up rows this file matches at the shared precisions): the round-to-nearest value
 at p + 256 and at p + 512 bits, widened by one ulp of that precision, must round to one p-bit result in the mode, and the two must
 agree. Each row is then checked: DOWN < TLO < THI < UP and UP - DOWN is exactly one ulp of DOWN's binade at p.
+FRACTIONS SELFTEST. fraction_check re-reads every row text with Python's fractions (no mpmath): the ordering, the one-ulp width,
+ends of at most p bits, and for the algebraic constants the defining sign: x^2 - 2 for Sqrt2, x^2 - x - 1 for Phi, negative at
+DOWN and TLO, positive at THI and UP. It runs on freshly generated rows before writing and, with --selftest, on the committed file.
 A consumer asserts that its enclosure of c contains [TLO, THI] and, for the tightness check, that its ends are DOWN and UP.
 """
 import os
 import sys
+from fractions import Fraction
 
 import goldlib
 from mpmath import libmp as L
@@ -80,6 +84,42 @@ def check_row(name, p, down, up, tlo, thi):
         raise Unsettled("%s p=%d: an end is wider than p bits" % (name, p))
 
 
+def frac(exp, man):
+    e, m = int(exp), int(man, 16)
+    return Fraction(m) * (Fraction(2) ** e)
+
+
+def fraction_check(lines):
+    """Exact Fraction re-check of golden rows (CONTRACT 16.S2.5); independent of mpmath."""
+    signs = {"Sqrt2": lambda x: x * x - 2, "Phi": lambda x: x * x - x - 1}
+    n = 0
+    for line in lines:
+        if line.startswith("#"):
+            continue
+        f = line.split()
+        if len(f) != 10:
+            raise Unsettled("fractions: bad row %r" % line)
+        name, p = f[0], int(f[1])
+        down, up, tlo, thi = (frac(f[i], f[i + 1]) for i in (2, 4, 6, 8))
+        if not (down < tlo < thi < up):
+            raise Unsettled("fractions: %s p=%d not DOWN < TLO < THI < UP" % (name, p))
+        for v, man in ((down, f[3]), (up, f[5])):
+            if int(man, 16).bit_length() > p:
+                raise Unsettled("fractions: %s p=%d an end is wider than p bits" % (name, p))
+        k = 0
+        while Fraction(2) ** (k + 1) <= down:
+            k += 1
+        while Fraction(2) ** k > down:
+            k -= 1
+        if up - down != Fraction(2) ** (k + 1 - p):
+            raise Unsettled("fractions: %s p=%d UP - DOWN is not one ulp" % (name, p))
+        g = signs.get(name)
+        if g is not None and not (g(down) < 0 and g(tlo) < 0 and g(thi) > 0 and g(up) > 0):
+            raise Unsettled("fractions: %s p=%d the defining polynomial does not change sign inside [TLO, THI]" % (name, p))
+        n += 1
+    return n
+
+
 def rows():
     out = []
     for name, fn in CONSTS:
@@ -105,10 +145,20 @@ def selftest():
         pass
     else:
         raise Unsettled("selftest: a two-ulp row was accepted")
+    # fractions: sqrt2 at 2 bits: DOWN 1, UP 3/2, bracket [11/8, 23/16]; a row whose bracket misses sqrt2 must be refused
+    fraction_check(["Sqrt2 2 0 1 -1 3 -3 b -4 17"])
+    try:
+        fraction_check(["Sqrt2 2 0 1 -1 3 -2 5 -3 b"])
+    except Unsettled:
+        pass
+    else:
+        raise Unsettled("selftest: fractions accepted a bracket that misses sqrt2")
 
 
 def write_file(path):
-    goldlib.write_lines(path, HEADER + rows())
+    body = rows()
+    fraction_check(body)
+    goldlib.write_lines(path, HEADER + body)
 
 
 def main(argv):
@@ -122,6 +172,9 @@ def main(argv):
         write_file(os.path.join(GOLDEN_DIR, GOLDEN_NAME))
         return 0
     if argv == ["--selftest"]:
+        with open(os.path.join(GOLDEN_DIR, GOLDEN_NAME)) as fh:
+            n = fraction_check([ln.rstrip("\n") for ln in fh if ln.strip()])
+        print("gen_bridge_const_goldens: fractions selftest: %d rows exact" % n)
         return 0
     raise SystemExit("usage: ~/.local/oracle-venv/bin/python scripts/gen_bridge_const_goldens.py [--check DIR | --selftest]")
 
