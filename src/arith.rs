@@ -121,7 +121,8 @@ impl Ball {
         let t = Mag::from_exact_num(m).mul_up(r);
         let rad = t.add_up(&t).add_up(&r.mul_up(r));
         // The exact square, then one rounding to `prec`. `inexact()` of a product is its own per-operation flag, so it
-        // reports only a loss inside the square itself (an exponent underflow), which forces ε (16.S1.5).
+        // reports only a real dropped bit inside the square, which forces ε (16.S1.5). Since zf 0cfee92 a square below the
+        // range keeps every bit (up to MAX_PRECISION), so `lost` is false there and ε comes from round_to's own flag.
         // A `mul_full_prec` exponent overflow passes through `finish` to all reals; pinned by
         // tests/harness/slice_arith.rs `overflow_is_all_reals` (line 424).
         let sq = m.mul_full_prec(m);

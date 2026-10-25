@@ -611,14 +611,25 @@ fn div_inv_hypot_edges() -> Result<(), String> {
     Ok(())
 }
 
-/// Pins Ball::sqr soundness below the zf range (206-SQRLOST is equivalent at 627fedd, see equivalent.d/arith.txt): an exact midpoint `2^e` or `3 * 2^e`, `e = EXPONENT_MIN / 2 - drop` with drop ≥ 40, whose square lies below zenith-float's range (16.S1.5). The square is nonzero,
+/// Pins Ball::sqr soundness below the zf range (206-SQRLOST is equivalent at 627fedd, see equivalent.d/arith.txt). Since zf 0cfee92 the full-precision square is exact there (inexact() == false, every bit kept), so the test also asserts the square scaled back up is exactly 1 or 9: a future silent clamp in zf fails here. Midpoints: an exact `2^e` or `3 * 2^e`, `e = EXPONENT_MIN / 2 - drop` with drop ≥ 40, whose square lies below zenith-float's range (16.S1.5). The square is nonzero,
 /// so the ball must not be an exact point `v ± 0`; it must carry ε and contain a positive value.
 #[test]
 fn sqr_below_zf_range_is_not_exact() -> Result<(), String> {
     let half = EXPONENT_MIN.checked_div(2).ok_or("emin/2")?;
     for drop in [40i64, 63, 64, 100, 1000] {
         let e = half.checked_sub(drop).ok_or("e")?;
-        for m in [pow2(e)?, ExactNum::from(3i64).mul_full_prec(&pow2(e)?)] {
+        let up = pow2(e.checked_neg().ok_or("-e")?)?;
+        for (m, want) in [
+            (pow2(e)?, 1i64),
+            (ExactNum::from(3i64).mul_full_prec(&pow2(e)?), 9),
+        ] {
+            let sq = m.mul_full_prec(&m);
+            if sq.inexact() || sq.mul_full_prec(&up).mul_full_prec(&up) != ExactNum::from(want) {
+                return Err(format!(
+                    "drop {}: full_prec square not exact: {:?}",
+                    drop, sq
+                ));
+            }
             let b = ok("exact", Ball::exact(m, 53))?;
             let s = ok("sqr", b.sqr(53))?;
             if s.rad().is_zero() {
