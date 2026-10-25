@@ -355,7 +355,10 @@ fn compare_both_radii_below_zf_range_touching_not_false() -> Result<(), String> 
     let b = ball(pow2(e)?, mag(TOP, e)?, P)?;
     for (what, t) in [("a b", a.overlaps(&b)), ("b a", b.overlaps(&a))] {
         if t == Tri::False {
-            return Err(format!("{}: touching balls below the zf range reported disjoint", what));
+            return Err(format!(
+                "{}: touching balls below the zf range reported disjoint",
+                what
+            ));
         }
     }
     Ok(())

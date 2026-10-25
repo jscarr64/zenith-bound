@@ -622,7 +622,10 @@ fn sqr_below_zf_range_is_not_exact() -> Result<(), String> {
             let b = ok("exact", Ball::exact(m, 53))?;
             let s = ok("sqr", b.sqr(53))?;
             if s.rad().is_zero() {
-                return Err(format!("drop {}: sqr below zf range gave an exact point {:?}", drop, s));
+                return Err(format!(
+                    "drop {}: sqr below zf range gave an exact point {:?}",
+                    drop, s
+                ));
             }
         }
     }
