@@ -32,7 +32,6 @@ for arg in "$@"; do case $arg in --slices-only) slices_only=1 ;; --regen) regen=
 echo "goldens-regen: ZB_GATE_MODE=${ZB_GATE_MODE:-regular}"   # recorded first, also before an unknown-mode refusal
 case "${ZB_GATE_MODE:-regular}" in regular|merge) ;; *) echo "goldens-regen: REFUSING: unknown ZB_GATE_MODE=${ZB_GATE_MODE} (want regular or merge)"; exit 2 ;; esac
 gate_mode=${ZB_GATE_MODE:-regular}
-echo "goldens-regen: ZB_GATE_MODE=$gate_mode"
 if [ "$gate_mode" = merge ] && [ "$regen" != 1 ]; then echo "goldens-regen: REFUSING: ZB_GATE_MODE=merge needs --regen (the merge gate must regenerate and recompute every heavy row)"; exit 2; fi
 if [ "$gate_mode" = merge ] && [ "$slices_only" = 1 ]; then echo "goldens-regen: REFUSING: ZB_GATE_MODE=merge does not allow --slices-only (the merge gate must run every generator, not only the per-slice checks)"; exit 2; fi
 cd "$root" || exit 2

@@ -116,6 +116,7 @@ ck; grep -q -- '--skip-heavy' "$t/genargs" && fail "--regen passed --skip-heavy:
 HMARGS=; hm ZB_GATE_MODE=merge
 ck; [ "$grc" = 2 ] || fail "merge-gate mode without --regen exited $grc, want 2: $out"
 ck; grep -q 'goldens-regen: REFUSING: ZB_GATE_MODE=merge needs --regen' <<< "$out" || fail "merge refusal unclear: $out"
+[ "$(grep -cF 'goldens-regen: ZB_GATE_MODE=merge' <<< "$out")" = 1 ] || fail "ZB_GATE_MODE line not printed exactly once: $out"
 ck; ran && fail "merge refusal still ran python"
 # Spence LA4 nit 1 (2026-10-25): the merge gate must run every generator, so ZB_GATE_MODE=merge REFUSES --slices-only even with --regen.
 HMARGS=--regen; hm ZB_GATE_MODE=merge

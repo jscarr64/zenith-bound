@@ -267,9 +267,13 @@ def extra_rows():
     """Hand-picked rows appended after the drawn stream (the drawn rows stay byte-identical).
     sqr p=53, A = 1 + (0 +- 2)i: a WIDE imaginary radius with an exact real part, so the 16.CB.10 second-order term
     rad(im)^2 = 4 dominates the re part (RREF_re is one ulp) and a sqr reference without it cannot cover re = 1 - [0, 4]
-    (Spence, 2026-10-25)."""
+    (Spence, 2026-10-25).
+    sqr p=53, A = (0 +- 2) + (0 +- 2)i: both radii nonzero and both mids 0, so RREF is 0 in both parts; the im part
+    rests on the second-order term 2*rad(re)*rad(im) = 8 alone and the re part on rad(re)^2 + rad(im)^2 = 8
+    (Spence cball follow-up, 2026-10-25)."""
     zero = (0, 0, 0)
-    return [("sqr", 53, (canon(0, 1, 0), zero, zero, canon(0, 1, 1)))]
+    return [("sqr", 53, (canon(0, 1, 0), zero, zero, canon(0, 1, 1))),
+            ("sqr", 53, (zero, canon(0, 1, 1), zero, canon(0, 1, 1)))]
 
 
 def write_file(path):
