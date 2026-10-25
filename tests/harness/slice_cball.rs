@@ -808,9 +808,9 @@ fn cball_golden_rows_contained() -> Result<(), String> {
 
 #[test]
 fn cball_tightness_factors() -> Result<(), String> {
-    let n = gold_tight(&["add", "sub", "abs", "sqr"])?;
-    if n != 40 {
-        return Err(format!("want 40 add/sub/abs/sqr gold rows, got {}", n));
+    let n = gold_tight(&["add", "sub", "abs"])?;
+    if n != 30 {
+        return Err(format!("want 30 add/sub/abs gold rows, got {}", n));
     }
     Ok(())
 }
@@ -821,8 +821,11 @@ fn cball_golden_rows_contained_mul_div() -> Result<(), String> {
     gold_contained(&["mul", "div"]).map(|_| ())
 }
 
+// sqr is held here too: RREF is first-order (16.CB.10), so a part with mid near 0 and a wide radius (sqr row 1 at
+// prec 1: re = 0 ± 2, exact image [−ε, 4]) has 2·RREF far below the radius any sound enclosure needs. Needs a
+// ruling on the sqr/mul factor (second-order term in RREF), not a weaker gold.
 #[test]
-#[ignore = "red: not implemented: waits zf borrowing ops"]
-fn cball_tightness_factors_mul_div() -> Result<(), String> {
-    gold_tight(&["mul", "div"]).map(|_| ())
+#[ignore = "red: mul/div wait zf borrowing ops; sqr waits a ruling on first-order RREF (16.CB.10)"]
+fn cball_tightness_factors_mul_sqr_div() -> Result<(), String> {
+    gold_tight(&["mul", "sqr", "div"]).map(|_| ())
 }
