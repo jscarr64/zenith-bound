@@ -14,3 +14,6 @@ src/cball.rs:CBall::sub	1518-SUBIMADD	cball/1518-SUBIMADD.patch	harness
 src/cball.rs:Neg for CBall	1519-NEGIM	cball/1519-NEGIM.patch	harness
 src/cball.rs:CBall::from_real	1520-FROMREALIM	cball/1520-FROMREALIM.patch	harness
 src/cball.rs:CBall::identical	1521-IDENTIM	cball/1521-IDENTIM.patch	harness
+src/cball.rs:CBall::sqr	1522-SQRREWIDE	cball/1522-SQRREWIDE.patch	harness
+tests/harness/slice_cball.rs:sqr_ref	1523-SQRREFNOIM	cball/1523-SQRREFNOIM.patch	harness
+tests/harness/slice_cball.rs:sqr_ref	1524-SQRREFNOXY	cball/1524-SQRREFNOXY.patch	harness

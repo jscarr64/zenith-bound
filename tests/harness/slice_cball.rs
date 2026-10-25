@@ -688,8 +688,8 @@ fn gold_rows() -> Result<Vec<GoldRow>, String> {
             refs,
         });
     }
-    if rows.len() != 60 {
-        return Err(format!("want 60 gold rows, got {}", rows.len()));
+    if rows.len() != 62 {
+        return Err(format!("want 62 gold rows, got {}", rows.len()));
     }
     Ok(rows)
 }
@@ -803,8 +803,8 @@ fn gold_tight(ops: &[&str]) -> Result<usize, String> {
 #[test]
 fn cball_golden_rows_contained() -> Result<(), String> {
     let n = gold_contained(&["add", "sub", "abs", "sqr"])?;
-    if n != 40 {
-        return Err(format!("want 40 add/sub/abs/sqr gold rows, got {}", n));
+    if n != 42 {
+        return Err(format!("want 42 add/sub/abs/sqr gold rows, got {}", n));
     }
     Ok(())
 }
@@ -853,7 +853,7 @@ fn gold_four_product_sq(r: &GoldRow) -> Result<(Ball, Ball), String> {
 
 #[test]
 fn cball_sqr_gold_not_wider_than_four_product() -> Result<(), String> {
-    // 16.CB.5 on the 10 gold sqr rows: each part of sqr(a) is no wider than mul(a, a), in the four-product form until
+    // 16.CB.5 on the 12 gold sqr rows: each part of sqr(a) is no wider than mul(a, a), in the four-product form until
     // CBall::mul lands (cball_sqr_not_wider_than_mul keeps the direct comparison, ignored).
     let mut m = 0;
     for r in gold_rows()?.iter().filter(|r| r.op == "sqr") {
@@ -867,22 +867,52 @@ fn cball_sqr_gold_not_wider_than_four_product() -> Result<(), String> {
         }
         m += 1;
     }
-    if m != 10 {
-        return Err(format!("want 10 sqr gold rows, got {}", m));
+    if m != 12 {
+        return Err(format!("want 12 sqr gold rows, got {}", m));
     }
     Ok(())
 }
 
-// RREF is first-order (16.CB.10): a re part with mid near 0 and a wide radius has 2·RREF below the radius any sound
-// enclosure needs. Measured (pop-logs cassie/2026-10-25/0722-cb-sqrtight-diag): 3 of the 10 gold sqr rows exceed
-// 2·RREF in re (p=1 row 1, p=2 row 1, p=64 row 2); im passes on all 10. Needs a ruling on the sqr factor
-// (second-order term in RREF), not a weaker gold.
+/// 16.CB.10 sqr reference per part, exact: `[RREF_re + rad(re)² + rad(im)², RREF_im + 2·rad(re)·rad(im)]`. RREF is
+/// first-order, which cannot cover `re²` when `rad(re)` is not small; the second-order term comes from the gold row's
+/// input radii (`a[1]`, `a[3]`) in exact arithmetic (Spence ruling, 2026-10-25).
+fn sqr_ref(r: &GoldRow) -> [ExactNum; 2] {
+    let (rx, ry) = (&r.a[1], &r.a[3]);
+    let so_re = rx.mul_full_prec(rx).add_full_prec(&ry.mul_full_prec(ry));
+    let xy = rx.mul_full_prec(ry);
+    let so_im = xy.add_full_prec(&xy);
+    [
+        r.rref[0].add_full_prec(&so_re),
+        r.rref[1].add_full_prec(&so_im),
+    ]
+}
+
 #[test]
-#[ignore = "red: 3 of 10 sqr gold rows exceed 2·RREF in re; waits a ruling on first-order RREF (16.CB.10)"]
 fn cball_tightness_factors_sqr() -> Result<(), String> {
-    let n = gold_tight(&["sqr"])?;
-    if n != 10 {
-        return Err(format!("want 10 sqr gold rows, got {}", n));
+    // 16.CB.10: each part of sqr(a) within 2·(RREF + second-order term) on all 12 gold sqr rows.
+    let k = factor_log2("sqr")?;
+    let mut n = 0;
+    for r in gold_rows()?.iter().filter(|r| r.op == "sqr") {
+        let what = format!("sqr p={}", r.prec);
+        let s = ok("sqr", gold_box(&r.a, r.prec)?.sqr(r.prec))?;
+        let [bre, bim] = sqr_ref(r);
+        want_tight(&format!("{} re", what), s.re(), &bre, k)?;
+        want_tight(&format!("{} im", what), s.im(), &bim, k)?;
+        if std::env::var_os("CB10_MARGINS").is_some() {
+            eprintln!(
+                "CB10 {} row {} re rad {:?} bound {:?} im rad {:?} bound {:?}",
+                what,
+                n,
+                s.re().rad(),
+                Mag::from_exact_num(&bre.mul_full_prec(&pow2(k)?)),
+                s.im().rad(),
+                Mag::from_exact_num(&bim.mul_full_prec(&pow2(k)?))
+            );
+        }
+        n += 1;
+    }
+    if n != 12 {
+        return Err(format!("want 12 sqr gold rows, got {}", n));
     }
     Ok(())
 }
