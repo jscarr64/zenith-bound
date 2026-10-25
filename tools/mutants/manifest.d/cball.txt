@@ -1,6 +1,11 @@
 # range: 1500-1599
 # Slice CB (src/cball.rs) mutants, owned by CB alone. Rows as in ../manifest.txt (fn_path<TAB>mutant_id<TAB>patch<TAB>suite); S3 keeps the 400s.
-# Only rows whose patch exists are listed; the sqr/mul/div rows (1500-1504, 1506-1512, 1515, 1516) stay planned until those ops land.
+# Only rows whose patch exists are listed; the mul/div rows (1506-1512, 1515, 1516) stay planned until those ops land.
+src/cball.rs:CBall::sqr	1500-SQRREADD	cball/1500-SQRREADD.patch	harness
+src/cball.rs:CBall::sqr	1501-SQRIMNO2	cball/1501-SQRIMNO2.patch	harness
+src/cball.rs:CBall::sqr	1502-SQRRESWAP	cball/1502-SQRRESWAP.patch	harness
+src/cball.rs:CBall::sqr	1503-SQRIM4	cball/1503-SQRIM4.patch	harness
+src/cball.rs:CBall::sqr	1504-SQRREONLY	cball/1504-SQRREONLY.patch	harness
 src/cball.rs:CBall::abs	1505-ABSNOHYP	cball/1505-ABSNOHYP.patch	harness
 src/cball.rs:CBall::conj	1513-CONJRE	cball/1513-CONJRE.patch	harness
 src/cball.rs:CBall::new	1514-PRECCHK	cball/1514-PRECCHK.patch	harness
