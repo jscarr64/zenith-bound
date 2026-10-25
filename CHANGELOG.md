@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- S1 borrowing, option B (2026-10-24, Jeff): `Ball::sqr`, `inv`, `sqrt`, `hypot`, `powi` and `abs` take `&self` (API change; callers
+  no longer give up the ball). `sqr` uses `mul_full_prec` and its per-operation `inexact()` flag; `abs` rounds `|m|` as
+  `ExactNum::from(±1).mul(m)`. `add`, `sub`, `mul`, `mul_exact`, `div`, `mul_2exp`, `neg` stay by value until zenith-float has
+  borrowing correctly-rounded ops (Rusty). No `*_ref`, no new copy; rules_scan baselines unchanged. CONTRACT 15.1, O9, O14-W amended.
+  Test: harness `borrowed_ops_reuse_the_same_ball`.
+
 - Pop guard bypass closed (2026-10-24, Spence blocked 7881073: POPGUARD=/nonexistent turned the cap off silently): goldens_regen.sh
   and goldlib.py REFUSE (exit 2) when POPGUARD is missing/not executable on a host that has ~/pop-logs/bin/popguard.sh; a host with
   no popguard.sh runs with a loud stderr WARNING. popguard.sh (pop-logs 6d1fc93) now also requires the scope's memory.max to be a
