@@ -567,3 +567,18 @@ fn s6_k1_dot_is_s1_mul_plus_own_rounding() -> Result<(), String> {
     let tref = num(253).mul_full_prec(&pow2(-20)?).add_full_prec(&num(64515).mul_full_prec(&pow2(-7)?));
     within_twice("K=1 radius", d.rad(), &tref)
 }
+
+/// 16.S6.5: `from_mid_rad` keeps the midpoint ball's own radius `s_i` and adds `r_i` (`m_i ± (s_i + r_i + ε)`), so a non-exact
+/// midpoint is never shrunk to `± r_i`.
+#[test]
+fn s6_from_mid_rad_keeps_mid_radius() -> Result<(), String> {
+    let s = Mag::finite(TOP, -3).map_err(|e| format!("{e:?}"))?;
+    let r = Mag::finite(TOP, -5).map_err(|e| format!("{e:?}"))?;
+    let mids = ok("from_balls", BallArray::from_balls(Box::new([1]), vec![ball(5, s, 53)?]))?;
+    let rads = ok("from_mags", MagArray::from_mags(Box::new([1]), vec![r]))?;
+    let back = ok("from_mid_rad", BallArray::from_mid_rad(mids, &rads, 53))?;
+    let b0 = back.as_slice().first().ok_or("empty")?;
+    let reach = pow2(-4)?.add_full_prec(&pow2(-6)?);
+    want_contains("s + r lower", b0, &num(5).sub_full_prec(&reach))?;
+    want_contains("s + r upper", b0, &num(5).add_full_prec(&reach))
+}
