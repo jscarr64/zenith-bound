@@ -14,6 +14,7 @@
 # FAILS (exit 1, one line each) when:
 #   UNCOVERED  an item is in no COVERS line and not in the exemption list
 #   STALE      a COVERS name is not an item (renamed or removed)
+#   STALE-EXEMPT  an exemption-list entry is not an item (renamed or removed)
 #   NOTEST     the declaring file has no #[test] fn whose text mentions the name (word match on the last `::` segment,
 #              or on the Trait / Type of an `impl Trait for Type` name)
 # Parser limits (rustfmt layout assumed): an impl/mod/enum block opens with `{` and its members start on later lines; macro-generated items are not seen.
@@ -134,6 +135,11 @@ while IFS= read -r it; do
   grep -qxF -- "$it" "$tmp/exempt" && continue
   echo "FAIL UNCOVERED: $it is in no COVERS line"; fail=1
 done < "$tmp/items"
+# STALE-EXEMPT: an exempt entry that names no public item (renamed or removed) would otherwise be silently ignored
+while IFS= read -r ex; do
+  grep -qxF -- "$ex" "$tmp/items" && continue
+  echo "FAIL STALE-EXEMPT: $ex is in the exempt list but is not a public item"; fail=1
+done < "$tmp/exempt"
 # STALE and NOTEST
 while IFS="$(printf '\t')" read -r file name; do
   if ! grep -qxF -- "$name" "$tmp/items"; then
