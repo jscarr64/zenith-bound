@@ -824,11 +824,71 @@ fn cball_golden_rows_contained_mul_div() -> Result<(), String> {
     gold_contained(&["mul", "div"]).map(|_| ())
 }
 
-// sqr is held here too: RREF is first-order (16.CB.10), so a part with mid near 0 and a wide radius (sqr row 1 at
-// prec 1: re = 0 ± 2, exact image [−ε, 4]) has 2·RREF far below the radius any sound enclosure needs. Needs a
-// ruling on the sqr/mul factor (second-order term in RREF), not a weaker gold.
+/// One part of a gold box as a fresh real ball: `i` 0 is re (`p[0] ± p[1]`), 1 is im (`p[2] ± p[3]`).
+fn gold_part(p: &[ExactNum; 4], i: usize, prec: usize) -> Result<Ball, String> {
+    let (mid, rad) = if i == 0 {
+        (&p[0], &p[1])
+    } else {
+        (&p[2], &p[3])
+    };
+    ok(
+        "from_mid_rad",
+        Ball::from_mid_rad(mid.add_full_prec(&num(0)), Mag::from_exact_num(rad), prec),
+    )
+}
+
+/// `a·a` for a gold sqr row in the 16.CB.4 four-product form (`Ball::mul` products, `Ball::sub`/`add`): what
+/// `CBall::mul(a, a)` computes, while `CBall::mul` waits on zf borrowing ops. Every operand is built fresh (O9).
+fn gold_four_product_sq(r: &GoldRow) -> Result<(Ball, Ball), String> {
+    let part = |i: usize| gold_part(&r.a, i, r.prec);
+    let rr = ok("mul", part(0)?.mul(&part(0)?, r.prec))?;
+    let ii = ok("mul", part(1)?.mul(&part(1)?, r.prec))?;
+    let ri = ok("mul", part(0)?.mul(&part(1)?, r.prec))?;
+    let ir = ok("mul", part(1)?.mul(&part(0)?, r.prec))?;
+    Ok((
+        ok("sub", rr.sub(&ii, r.prec))?,
+        ok("add", ri.add(&ir, r.prec))?,
+    ))
+}
+
 #[test]
-#[ignore = "red: mul/div wait zf borrowing ops; sqr waits a ruling on first-order RREF (16.CB.10)"]
-fn cball_tightness_factors_mul_sqr_div() -> Result<(), String> {
-    gold_tight(&["mul", "sqr", "div"]).map(|_| ())
+fn cball_sqr_gold_not_wider_than_four_product() -> Result<(), String> {
+    // 16.CB.5 on the 10 gold sqr rows: each part of sqr(a) is no wider than mul(a, a), in the four-product form until
+    // CBall::mul lands (cball_sqr_not_wider_than_mul keeps the direct comparison, ignored).
+    let mut m = 0;
+    for r in gold_rows()?.iter().filter(|r| r.op == "sqr") {
+        let s = ok("sqr", gold_box(&r.a, r.prec)?.sqr(r.prec))?;
+        let (mre, mim) = gold_four_product_sq(r)?;
+        if s.re().rad() > mre.rad() || s.im().rad() > mim.rad() {
+            return Err(format!(
+                "sqr p={} wider than four-product a·a: {:?} vs {:?} {:?}",
+                r.prec, s, mre, mim
+            ));
+        }
+        m += 1;
+    }
+    if m != 10 {
+        return Err(format!("want 10 sqr gold rows, got {}", m));
+    }
+    Ok(())
+}
+
+// RREF is first-order (16.CB.10): a re part with mid near 0 and a wide radius has 2·RREF below the radius any sound
+// enclosure needs. Measured (pop-logs cassie/2026-10-25/0722-cb-sqrtight-diag): 3 of the 10 gold sqr rows exceed
+// 2·RREF in re (p=1 row 1, p=2 row 1, p=64 row 2); im passes on all 10. Needs a ruling on the sqr factor
+// (second-order term in RREF), not a weaker gold.
+#[test]
+#[ignore = "red: 3 of 10 sqr gold rows exceed 2·RREF in re; waits a ruling on first-order RREF (16.CB.10)"]
+fn cball_tightness_factors_sqr() -> Result<(), String> {
+    let n = gold_tight(&["sqr"])?;
+    if n != 10 {
+        return Err(format!("want 10 sqr gold rows, got {}", n));
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "red: not implemented: waits zf borrowing ops"]
+fn cball_tightness_factors_mul_div() -> Result<(), String> {
+    gold_tight(&["mul", "div"]).map(|_| ())
 }
