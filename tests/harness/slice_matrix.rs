@@ -3,7 +3,7 @@
 //! Golden file headers for this slice are declared here, not in tests/common/goldens.rs.
 //! CONTRACT 16.S6.0 to 16.S6.11. Oracle: exact Fraction golds from scripts/gen_matrix_goldens.py (gate file matrix_rows.txt; the heavy
 //! file matrix_rows_heavy.txt is replayed by the ignored heavy test when ZB_MATRIX_HEAVY points at it), plus hand rows below.
-//! COVERS: MagArray::from_mags, MagArray::get, BallArray::add, BallArray::sub, BallArray::mid_rad, BallArray::from_mid_rad, BallVec::dot, BallVec::norm_inf, BallVec::norm_1, BallVec::norm_2_up, BallMat::matvec, BallMat::matmul, BallMat::norm_inf, BallMat::norm_1, BallMat::norm_frob_up
+//! COVERS: MagArray::from_mags, MagArray::get, BallArray::add, BallArray::sub, BallArray::mid_rad, BallArray::from_mid_rad, BallVec::dot, BallVec::norm_inf, BallVec::norm_1, BallVec::norm_2_up, BallMat::matvec, BallMat::matmul, BallMat::norm_inf, BallMat::norm_1, BallMat::norm_frob_up, BallVec::add, BallVec::sub, BallMat::add, BallMat::sub
 
 use crate::common::goldens::golden_dir;
 use zenith_bound::array::{BallArray, BallMat, BallVec};
@@ -673,4 +673,146 @@ fn s6_from_mid_rad_keeps_mid_radius() -> Result<(), String> {
     let reach = pow2(-4)?.add_full_prec(&pow2(-6)?);
     want_contains("s + r lower", b0, &num(5).sub_full_prec(&reach))?;
     want_contains("s + r upper", b0, &num(5).add_full_prec(&reach))
+}
+
+// ---- elementwise add/sub on BallVec and BallMat (16.S6.4; pubfn coverage) ---------------------------------------------
+/// A hand entry `numer·2^k ± 2^rad_k` (`None`: radius 0). Every value is dyadic and exact at 53 bits, so the exact sums and
+/// differences below are hand values (Fraction-style), not golds.
+type Spec = (i64, i64, Option<i64>);
+
+const VA: [Spec; 3] = [(5, -2, Some(-4)), (-3, 0, None), (7, -3, Some(-2))];
+const VB: [Spec; 3] = [(1, -1, Some(-4)), (3, -2, Some(-2)), (-7, -3, None)];
+const MA: [Spec; 4] = [(5, -2, Some(-4)), (-3, 0, None), (7, -3, Some(-2)), (9, 0, Some(-1))];
+const MB: [Spec; 4] = [(1, -1, Some(-4)), (3, -2, Some(-2)), (-7, -3, None), (-1, -3, Some(-3))];
+
+fn spec_mid(s: &Spec) -> Result<ExactNum, String> {
+    Ok(num(s.0).mul_full_prec(&pow2(s.1)?))
+}
+
+fn spec_rad(s: &Spec) -> Result<ExactNum, String> {
+    match s.2 {
+        Some(k) => pow2(k),
+        None => Ok(num(0)),
+    }
+}
+
+fn spec_balls(specs: &[Spec]) -> Result<Vec<Ball>, String> {
+    let mut out = Vec::new();
+    for s in specs {
+        let r = match s.2 {
+            Some(k) => Mag::finite(TOP, k.checked_add(1).ok_or("rad exponent")?)
+                .map_err(|e| format!("{e:?}"))?,
+            None => Mag::zero(),
+        };
+        out.push(ok("from_mid_rad", Ball::from_mid_rad(spec_mid(s)?, r, 53))?);
+    }
+    Ok(out)
+}
+
+/// Entry `i` of `got` against `a_i + b_i` (`neg`: `a_i - b_i`): the exact midpoint, a radius no worse than the 16.S1.1 bound
+/// `r_a + r_b` (no rounding term: every midpoint sum is exact at 53 bits), and containment of all four corner values.
+fn check_elementwise(
+    what: &str,
+    got: &[Ball],
+    a: &[Spec],
+    b: &[Spec],
+    neg: bool,
+) -> Result<(), String> {
+    if got.len() != a.len() || a.len() != b.len() {
+        return Err(format!("{what}: {} entries, want {}", got.len(), a.len()));
+    }
+    let op = |x: &ExactNum, y: &ExactNum| {
+        if neg {
+            x.sub_full_prec(y)
+        } else {
+            x.add_full_prec(y)
+        }
+    };
+    for (i, ((g, x), y)) in got.iter().zip(a).zip(b).enumerate() {
+        let (mx, rx, my, ry) = (spec_mid(x)?, spec_rad(x)?, spec_mid(y)?, spec_rad(y)?);
+        let mid = op(&mx, &my);
+        if sign_of(g.mid(), &mid) != 0 {
+            return Err(format!("{what}[{i}]: midpoint {g:?}, want {mid:?}"));
+        }
+        let ge = g
+            .rad()
+            .to_exact_num()
+            .map_err(|e| format!("{what}[{i}]: radius not finite: {e:?}"))?;
+        let bound = rx.add_full_prec(&ry);
+        if sign_of(&ge, &bound) > 0 {
+            return Err(format!("{what}[{i}]: radius {ge:?} exceeds r_a + r_b = {bound:?}"));
+        }
+        let xs = [mx.sub_full_prec(&rx), mx.add_full_prec(&rx)];
+        let ys = [my.sub_full_prec(&ry), my.add_full_prec(&ry)];
+        for cx in &xs {
+            for cy in &ys {
+                want_contains(&format!("{what}[{i}] corner"), g, &op(cx, cy))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// An Infinity radius in entry 0 gives the all-reals entry there and nowhere else (elementwise).
+fn want_all_reals_first_only(what: &str, got: &[Ball]) -> Result<(), String> {
+    let mut it = got.iter();
+    let first = it.next().ok_or("empty result")?;
+    if !first.rad().is_infinity() {
+        return Err(format!("{what}: entry 0 {first:?} should be all-reals"));
+    }
+    for e in it {
+        if e.rad().is_infinity() {
+            return Err(format!("{what}: {e:?} should stay finite"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn s6_ballvec_add_sub_hand_rows() -> Result<(), String> {
+    let va = || Ok::<BallVec, String>(BallVec::from_balls(spec_balls(&VA)?));
+    let vb = BallVec::from_balls(spec_balls(&VB)?);
+    let s = ok("BallVec::add", va()?.add(&vb, 53))?;
+    check_elementwise("BallVec::add", s.as_array().as_slice(), &VA, &VB, false)?;
+    let d = ok("BallVec::sub", va()?.sub(&vb, 53))?;
+    check_elementwise("BallVec::sub", d.as_array().as_slice(), &VA, &VB, true)?;
+    want_dim_mismatch("BallVec::add 3 + 2", vec_of(&[1, 2, 3])?.add(&vec_of(&[1, 2])?, 53))?;
+    want_dim_mismatch("BallVec::sub 3 - 2", vec_of(&[1, 2, 3])?.sub(&vec_of(&[1, 2])?, 53))?;
+    let inf = || Ok::<BallVec, String>(BallVec::from_balls(vec![ball(1, Mag::infinity(), 53)?, pt(2)?]));
+    let w = vec_of(&[3, 4])?;
+    let s = ok("BallVec::add Infinity", inf()?.add(&w, 53))?;
+    want_all_reals_first_only("BallVec::add", s.as_array().as_slice())?;
+    let d = ok("BallVec::sub Infinity", inf()?.sub(&w, 53))?;
+    want_all_reals_first_only("BallVec::sub", d.as_array().as_slice())
+}
+
+#[test]
+fn s6_ballmat_add_sub_hand_rows() -> Result<(), String> {
+    let ma = || ok("BallMat::from_balls", BallMat::from_balls(2, 2, spec_balls(&MA)?));
+    let mb = ok("BallMat::from_balls", BallMat::from_balls(2, 2, spec_balls(&MB)?))?;
+    let s = ok("BallMat::add", ma()?.add(&mb, 53))?;
+    if s.nrows() != 2 || s.ncols() != 2 {
+        return Err(format!("BallMat::add shape {}x{}", s.nrows(), s.ncols()));
+    }
+    check_elementwise("BallMat::add", s.as_array().as_slice(), &MA, &MB, false)?;
+    let d = ok("BallMat::sub", ma()?.sub(&mb, 53))?;
+    if d.nrows() != 2 || d.ncols() != 2 {
+        return Err(format!("BallMat::sub shape {}x{}", d.nrows(), d.ncols()));
+    }
+    check_elementwise("BallMat::sub", d.as_array().as_slice(), &MA, &MB, true)?;
+    // equal length, different shape (2x3 vs 3x2), and different length (2x2 vs 2x3)
+    let six = [1, 2, 3, 4, 5, 6];
+    want_dim_mismatch("BallMat::add 2x3 + 3x2", mat(2, 3, &six)?.add(&mat(3, 2, &six)?, 53))?;
+    want_dim_mismatch("BallMat::sub 2x3 - 3x2", mat(2, 3, &six)?.sub(&mat(3, 2, &six)?, 53))?;
+    want_dim_mismatch("BallMat::add 2x2 + 2x3", mat(2, 2, &[1, 2, 3, 4])?.add(&mat(2, 3, &six)?, 53))?;
+    want_dim_mismatch("BallMat::sub 2x2 - 2x3", mat(2, 2, &[1, 2, 3, 4])?.sub(&mat(2, 3, &six)?, 53))?;
+    let inf = || {
+        let balls = vec![ball(1, Mag::infinity(), 53)?, pt(2)?];
+        ok("BallMat::from_balls", BallMat::from_balls(1, 2, balls))
+    };
+    let w = mat(1, 2, &[3, 4])?;
+    let s = ok("BallMat::add Infinity", inf()?.add(&w, 53))?;
+    want_all_reals_first_only("BallMat::add", s.as_array().as_slice())?;
+    let d = ok("BallMat::sub Infinity", inf()?.sub(&w, 53))?;
+    want_all_reals_first_only("BallMat::sub", d.as_array().as_slice())
 }
