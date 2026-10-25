@@ -189,8 +189,8 @@ Mapping of Rusty's list to PLAN levels (mine; Rusty to confirm, item D9): his "L
 | Round-up/down bracketing | `down(x) <= exact <= up(x)` and `up` is within one Mag-ulp of `down` for every op and sampled operand pair | model | C 14.1, 14.2 |
 | Exponent translation | W1 for `mul_up`, `div_up`, `sqrt_up` across the full `i64` range away from the overflow bands | W1 | section 5 |
 | `ulp_mag`, `half_ulp`, `smaller_than_half_ulp` | boundary sets at `mid_exp - prec - 1` for `prec` in the schedule and `mid_exp` near `i64::MIN/MAX`; zero true, `Infinity` false; threshold below `i64::MIN` never rounded up | model | C 1.4, 14.7 |
-| `from_exact_num` (+`_lower`), `to_exact_num` | `abs(x)` rounded up/down to 64 bits; carry at all-ones; exponent beyond zf `i32` returns error not wrap; round-trip contains original (P9) | model, mpmath | C 2.3 PLAN C6 |
-| `cmp_exact_num`, `cmp_exact_diff` | radius exponents outside `i32` compare correctly without building the radius; ties; zero radius; `Infinity` radius | model (M1 extension) | PLAN C6 |
+| `from_exact_num` (+`_lower`), `to_exact_num` | `abs(x)` rounded up/down to 64 bits; carry at all-ones; at the `829f112` pin (`i64` exponents, ±(2^62−1)) `from_exact_num`/`_lower` cannot overflow (infallible; NaN/Inf give `Infinity`/zero), and only `to_exact_num` returns `Representation` (`Infinity`, above `EXPONENT_MAX`, below the subnormal grid), never a wrap; round-trip contains original (P9) | model (Fraction-cross-checked rows) | C 16.S2.1-16.S2.4, C 2.3 PLAN C6 |
+| `cmp_exact_num`, `cmp_exact_diff` | radius exponents outside zf's range (±(2^62−1)) compare correctly without building the radius; ties; zero radius; `Infinity` radius | model (M1 extension) | PLAN C6 |
 
 ### 8.2 L0b: real balls (arithmetic, compare, precision, decimal, encode)
 
