@@ -1,0 +1,12 @@
+diff --git a/src/carlson.rs b/src/carlson.rs
+--- a/src/carlson.rs
++++ b/src/carlson.rs
+@@ -269,7 +269,7 @@
+             // An untested clamp at -1 is valid but may come from a loose low-precision `w` near the branch point:
+             // take it only once two working precisions agree on it.
+             let clamp = cmp(&c, &num(-1)) == Some(Ordering::Equal);
+-            if !clamp || clamped {
++            if !clamp || !clamped {
+                 return Ok(c);
+             }
+             clamped = true;

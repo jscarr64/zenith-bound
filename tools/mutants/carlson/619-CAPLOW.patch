@@ -1,0 +1,12 @@
+diff --git a/src/carlson.rs b/src/carlson.rs
+--- a/src/carlson.rs
++++ b/src/carlson.rs
+@@ -133,7 +133,7 @@
+ 
+ /// The working-precision cap `CAP_FACTOR * prec + CAP_EXTRA`.
+ fn wp_cap(prec: Precision) -> Precision {
+-    prec.saturating_mul(CAP_FACTOR).saturating_add(CAP_EXTRA)
++    prec
+ }
+ 
+ /// The first working precision `prec + GUARD_BITS`.

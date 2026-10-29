@@ -1,0 +1,12 @@
+diff --git a/src/carlson.rs b/src/carlson.rs
+--- a/src/carlson.rs
++++ b/src/carlson.rs
+@@ -261,7 +261,7 @@
+         let w = newton(&at, x, cc);
+         // Near the branch point `w*e^w` is flat, so `w` carries only about `wp - 2k` good bits when `|1 + w| ~ 2^-k`:
+         // a certified bound from it would be valid but loose. Raise `wp` first while the cap allows.
+-        if !flat_enough(&w, prec, wp) && wp.saturating_mul(2) <= cap {
++        if false && wp.saturating_mul(2) <= cap {
+             wp = wp.saturating_mul(2);
+             continue;
+         }

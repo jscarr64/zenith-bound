@@ -1,0 +1,11 @@
+diff --git a/src/carlson.rs b/src/carlson.rs
+--- a/src/carlson.rs
++++ b/src/carlson.rs
+@@ -142,7 +142,6 @@
+ }
+ 
+ fn lambert(op: &'static str, x: &Ball, prec: Precision, policy: &DomainPolicy, branch: &Branch) -> BoundResult<Ball> {
+-    check_prec(op, prec)?;
+     let strict = match policy {
+         DomainPolicy::Strict => true,
+         DomainPolicy::Clip => false,

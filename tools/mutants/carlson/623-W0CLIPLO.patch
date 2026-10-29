@@ -1,0 +1,12 @@
+diff --git a/src/carlson.rs b/src/carlson.rs
+--- a/src/carlson.rs
++++ b/src/carlson.rs
+@@ -180,7 +180,7 @@
+             } else if strict || !inside(hi, cap, &mut cc) {
+                 return Err(domain(op));
+             } else {
+-                (num(-1), w_bound(op, branch, hi, &Side::Above, prec, &mut cc)?)
++                (num(0), w_bound(op, branch, hi, &Side::Above, prec, &mut cc)?)
+             }
+         }
+         Branch::Lower => {
