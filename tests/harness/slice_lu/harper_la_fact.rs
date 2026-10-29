@@ -14,9 +14,12 @@ use zenith_bound::array::{BallMat, BallVec};
 use zenith_bound::ball::Ball;
 use zenith_bound::enclosure::Enclosure;
 use zenith_bound::error::BoundError;
+use zenith_bound::gls::gls;
+use zenith_bound::mag::Mag;
 use zenith_bound::tri::Tri;
 use zenith_float_num::{ExactNum, EXPONENT_MAX};
 
+use crate::common::generators::TOP;
 use crate::common::la_rows::{
     at, diag, dy, fuzzy, hadamard, i64_of, int, ldlt, mat, mat_with, mids, mul_exact, ok, pow2,
     pows, sum_i64, transpose, unit_lower, vat, vecb, want_all_reals, want_contains, want_encloses,
@@ -1084,4 +1087,189 @@ fn la_containment_low_precision() -> Result<(), String> {
     let b = mul_exact(N, N, 1, &mids(&a)?, &x)?;
     let got: BallVec = ok("solve at 53", ch.solve(&vecb(b)?, 53))?;
     want_vec("solve at 53", &got, &x)
+}
+
+// ---- 16.LA2.1, 16.LA2.2, 16.LA.1, 16.LA.6 ---------------------------------------------------------------------------
+
+#[test]
+#[ignore = "red: CONTRACT 16.LA2.1: exact pivot ties at steps 0 and 1 pick the lowest row index (perm [1, 0, 2])"]
+fn la2_pivot_tie_lowest_index() -> Result<(), String> {
+    // Column 0 ties rows 1 and 2 at |2|; after the swap, column 1 ties positions 1 and 2 at |1|.
+    let a = vec![
+        int(0),
+        int(1),
+        int(0),
+        int(2),
+        int(0),
+        int(1),
+        int(-2),
+        int(1),
+        int(1),
+    ];
+    let lu = ok("lu tie3", mat(3, 3, a)?.lu(P))?;
+    if lu.perm() != [1, 0, 2] || lu.perm_sign() != -1 {
+        return Err(format!("tie perm {:?} sign {}", lu.perm(), lu.perm_sign()));
+    }
+    let l = vec![
+        int(1),
+        int(0),
+        int(0),
+        int(0),
+        int(1),
+        int(0),
+        int(-1),
+        int(1),
+        int(1),
+    ];
+    let u = vec![
+        int(2),
+        int(0),
+        int(1),
+        int(0),
+        int(1),
+        int(0),
+        int(0),
+        int(0),
+        int(2),
+    ];
+    want_mat("tie L", lu.l(), 3, 3, &l)?;
+    want_mat("tie U", lu.u(), 3, 3, &u)?;
+    want_encloses("tie det", &ok("tie det", lu.det(P))?, &int(-4))
+}
+
+#[test]
+#[ignore = "red: CONTRACT 16.LA2.2: lu is square only: 2x3 and 3x2 inputs give DimensionMismatch"]
+fn la2_lu_square_only() -> Result<(), String> {
+    for (n, m) in [(2, 3), (3, 2)] {
+        let r = mat(n, m, [1, 2, 3, 4, 5, 6].into_iter().map(int).collect())?;
+        want_err(&format!("lu {n}x{m}"), r.lu(P), is_dm, "DimensionMismatch")?;
+    }
+    Ok(())
+}
+
+fn is_npd_any(e: &BoundError) -> bool {
+    matches!(e, BoundError::NotPositiveDefinite { .. })
+}
+fn is_sing_any(e: &BoundError) -> bool {
+    matches!(e, BoundError::Singular { .. })
+}
+
+/// One 16.LA.1 refusal kind: the call's outcome, the variant, the op and (where the CONTRACT names it) the detail.
+struct Refusal {
+    kind: &'static str,
+    got: Result<(), BoundError>,
+    variant: fn(&BoundError) -> bool,
+    op: &'static str,
+    detail: Option<&'static str>,
+}
+
+fn la_refusal_rows() -> Result<Vec<Refusal>, String> {
+    let neg = mat(1, 1, vec![int(-1)])?;
+    let nonsym = mat(2, 2, vec![int(1), int(1), int(0), int(1)])?;
+    let zero = mat(2, 2, vec![int(0), int(0), int(0), int(0)])?;
+    let col0 = mat(2, 2, vec![int(1), int(0), int(1), int(0)])?;
+    let wide = mat(1, 2, vec![int(1), int(1)])?;
+    let x = mat(2, 1, vec![int(1), int(1)])?;
+    let c = mat(2, 2, vec![int(-1), int(0), int(0), int(1)])?;
+    let b = vecb(vec![int(1), int(1)])?;
+    Ok(vec![
+        Refusal {
+            kind: "not_spd",
+            got: neg.cholesky(P).map(drop),
+            variant: is_npd_any,
+            op: "BallMat::cholesky",
+            detail: Some("a"),
+        },
+        Refusal {
+            kind: "sigma_not_spd",
+            got: gls(&x, &c, &b, P).map(drop),
+            variant: is_npd_any,
+            op: "gls",
+            detail: Some("sigma"),
+        },
+        Refusal {
+            kind: "singular",
+            got: zero.solve(&b, P).map(drop),
+            variant: is_sing_any,
+            op: "BallMat::solve",
+            detail: Some("singular"),
+        },
+        Refusal {
+            kind: "rank_deficient",
+            got: col0.lstsq(&b, P).map(drop),
+            variant: is_sing_any,
+            op: "BallMat::lstsq",
+            detail: Some("rank_deficient"),
+        },
+        Refusal {
+            kind: "wide",
+            got: wide.qr(P).map(drop),
+            variant: is_dm,
+            op: "BallMat::qr",
+            detail: Some("wide"),
+        },
+        Refusal {
+            kind: "not_symmetric",
+            got: nonsym.cholesky(P).map(drop),
+            variant: is_nonsym,
+            op: "BallMat::cholesky",
+            detail: None,
+        },
+    ])
+}
+
+#[test]
+#[ignore = "red: CONTRACT 16.LA.1: refusal table not_spd, sigma_not_spd, singular, rank_deficient, wide, not_symmetric"]
+fn la_refusal_mapping_table() -> Result<(), String> {
+    for r in la_refusal_rows()? {
+        let e = match r.got {
+            Ok(()) => return Err(format!("{}: want a refusal, got Ok", r.kind)),
+            Err(e) => e,
+        };
+        let detail_ok = r.detail.is_none_or(|d| e.detail() == d);
+        if !(r.variant)(&e) || e.op() != r.op || !detail_ok {
+            return Err(format!(
+                "{}: want {} {:?}, got {e:?}",
+                r.kind, r.op, r.detail
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// `A = [[3, 1], [1, s]]` with `s = (2^40 − 1)/3·2^-40`, so `det = 3s − 1 = −2^-40` and `b = (1, 0)` gives
+/// `x = (−(2^40 − 1)/3, 2^40)`. `l_21 = 1/3` is inexact and `u_22 = s − 1/3` cancels 42 bits, so `x_2` carries a relative
+/// error of about `2^(42 − w)`: the bound `rad ≤ 2^(42 − p)` (= `2^(2 − p)·‖x‖_∞`) holds only when `w ≥ p + 42` or so, and
+/// 16.LA.6's `w = p + 64 + 2·⌈log2 3⌉ = p + 68` meets it with room to spare.
+fn la6_system() -> Result<(BallMat, BallVec), String> {
+    let a = mat(
+        2,
+        2,
+        vec![int(3), int(1), int(1), dy(366_503_875_925, -40)?],
+    )?;
+    Ok((a, vecb(vec![int(1), int(0)])?))
+}
+
+#[test]
+#[ignore = "red: CONTRACT 16.LA.6: solve at p in 64..512 is deterministic, at prec p, holds 2^40, rad <= 2^(42-p)"]
+fn la_working_precision_visible() -> Result<(), String> {
+    let (a, b) = la6_system()?;
+    let x1 = pow2(40)?;
+    for prec in [64, 128, 256, 512] {
+        let got = ok("solve", a.solve(&b, prec))?;
+        let again = ok("solve again", a.solve(&b, prec))?;
+        if format!("{got:?}") != format!("{again:?}") {
+            return Err(format!("prec {prec}: two calls differ"));
+        }
+        want_encloses(&format!("x[1] at {prec}"), vat(&got, 1)?, &x1)?;
+        let k = 43_i64.checked_sub(i64_of(prec)?).ok_or("k")?;
+        let bound = Mag::finite(TOP, k).map_err(|e| format!("Mag::finite(2^{k}): {e:?}"))?;
+        for i in 0..2 {
+            let xi = vat(&got, i)?;
+            if xi.prec() != prec || xi.rad() > &bound {
+                return Err(format!("prec {prec}: x[{i}] = {xi:?} exceeds 2^({k} - 1)"));
+            }
+        }
+    }
+    Ok(())
 }
