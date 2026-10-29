@@ -686,7 +686,12 @@ def gen_qr():
          ("nearsing.2", [[F(1), F(1)], [F(1), 1 + EPS]])]
     C += [("hilbert.%02d" % n, hilbert(n)) for n in range(5, 13)]
     C += [("scale_huge.1x1", [[H6]]), ("scale_mixed.diag2", [[H6, F(0)], [F(0), T6]]), ("scale_tiny.3", [[a * T3 for a in r] for r in rmat(3, 3)]),
-          ("scale_huge.2", [[B4 + 1, B4], [B4, B4 - 3]])]
+          ("scale_huge.undecided_rank", [[B4 + 1, B4], [B4, B4 - 3]])]
+    # Rusty 2026-10-29 (mutant 1200): the step-2 pivot x_1 ~ 2^-60/(7*sqrt 2) is a ball straddling 0 at 53 bits (A[1][1] rounds,
+    # rad ~2^-55). straddle_pivot: sigma straddles too, Resource undecided_rank at 53 (pinned); straddle_pivot_sigma: sigma ~ 2^-40/3 is
+    # decided, so the sign choice on the straddling midpoint is exercised and the row factors.
+    C += [("straddle_pivot.3x2", [[F(1), F(1, 3)], [F(1), F(1, 3) + F(1, 7 * 2 ** 60)], [F(0), F(1, 3 * 2 ** 60)]]),
+          ("straddle_pivot_sigma.3x2", [[F(1), F(1, 3)], [F(1), F(1, 3) + F(1, 7 * 2 ** 60)], [F(0), F(1, 3 * 2 ** 40)]])]
     for n in (3, 4, 6): C.append(("random_q.%02d" % n, rmat(n, n)))
     for n in (8, 12, 16): C.append(("random_z.%02d" % n, rmat(n, n, rational=False)))
     C += [("refuse.zero2", zero(2)), ("refuse.onebyone_zero", [[F(0)]]), ("refuse.rankdef3", [[F(1), F(2), F(3)], [F(4), F(5), F(6)], [F(7), F(8), F(9)]]),

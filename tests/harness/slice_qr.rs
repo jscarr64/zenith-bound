@@ -20,7 +20,12 @@ const PRECS: [usize; 3] = [53, 113, 192];
 /// 16.LA.4: qr rows certified with exact arithmetic; they must return the named error, never `Resource "undecided_*"`.
 const QR_EXACT_CERTIFIED: [&str; 2] = ["qr.refuse.zero2", "qr.refuse.onebyone_zero"];
 /// lstsq rows whose refusal is certified exactly (an exact `0 ± 0` column, 16.LA3.3). Not yet in the 16.LA.4 list (asked of Spence).
-const LSTSQ_EXACT_CERTIFIED: [&str; 1] = ["lstsq.refuse.zero_col_3x2"];
+const LSTSQ_EXACT_CERTIFIED: [&str; 4] = [
+    "lstsq.refuse.zero_col_3x2",
+    "lstsq.refuse.blen_3x2_b2",
+    "lstsq.refuse.blen_3x2_b4",
+    "lstsq.refuse.blen_3x0_b2",
+];
 /// Trailing format-2 cond columns of an lstsq value row with `n >= 1` (16.LA.5): `cond_row k_row scale_row containment_only reason
 /// rref`. `m x 0` rows (empty x) and refusal rows have none.
 const LSTSQ_COND_COLS: usize = 6;
@@ -35,8 +40,9 @@ const LSTSQ_REASONS: [(&str, &str); 3] = [
 /// (16.LA3.3, measured 2026-10-29; matched on the id after the `qr.`/`lstsq.` prefix). A pin that starts returning a value fails
 /// as stale. `nearsing.2`: the input balls at `prec <= 192` already contain singular matrices (perturbation `2^-200`).
 /// `hilbert.09..12` @53: naive ball Householder wraps the trailing radius by about 3 bits per step (`2^-54` to `2^-30` over
-/// 8 steps for n = 9) while `σ_n` falls to about `2^-35`. `scale_huge.2`: `R22/R11 ≈ 2^-10000`, beyond every working precision.
-const UNDECIDED_PINS: [(&str, usize); 10] = [
+/// 8 steps for n = 9) while `σ_n` falls to about `2^-35`. `scale_huge.undecided_rank`: `R22/R11 ≈ 2^-10000`, beyond every working precision.
+/// `straddle_pivot.3x2` @53 (mutant 1200): the step-2 pivot ball straddles 0 and so does `σ`.
+const UNDECIDED_PINS: [(&str, usize); 11] = [
     ("nearsing.2", 53),
     ("nearsing.2", 113),
     ("nearsing.2", 192),
@@ -44,9 +50,10 @@ const UNDECIDED_PINS: [(&str, usize); 10] = [
     ("hilbert.10", 53),
     ("hilbert.11", 53),
     ("hilbert.12", 53),
-    ("scale_huge.2", 53),
-    ("scale_huge.2", 113),
-    ("scale_huge.2", 192),
+    ("scale_huge.undecided_rank", 53),
+    ("scale_huge.undecided_rank", 113),
+    ("scale_huge.undecided_rank", 192),
+    ("straddle_pivot.3x2", 53),
 ];
 
 /// The Hilbert rows measured at 256 bits (task d): all factor; each ball must at least overlap the gold `[lo256, hi256]`.
@@ -645,7 +652,7 @@ fn stops_before_solve(toks: &[&str], prec: usize) -> bool {
 
 /// Every lstsq row: red until 16.S6.12 `solve_upper` (LA0) is implemented.
 #[test]
-#[ignore = "red: not implemented: lstsq value rows reach BallMat::solve_upper, Resource not_implemented (CONTRACT 16.S6.12, LA0)"]
+#[ignore = "red: CONTRACT 16.S6.12: lstsq value rows reach BallMat::solve_upper (LA0), Resource not_implemented"]
 fn la3_lstsq_gate_rows_replay_through_zb() -> Result<(), String> {
     replay_all(&gold_text("la_lstsq.txt")?, replay_lstsq).map(|_| ())
 }
@@ -665,5 +672,132 @@ fn la3_qr_hilbert_rows_factor_at_256_bits() -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("{n} hilbert rows, want {HILBERT_256_ROWS}"))
+    }
+}
+
+/// Item 8 (Spence, 2026-10-29, P0): Hilbert n = 5..=12 at 256 bits must CONTAIN the exact Q, R. Each ball that only overlaps
+/// `[lo256, hi256]` is re-decided against the heavy enc4096 block, then enc16384; disjoint at any tier fails. `(row, tier)` is the
+/// highest tier a row's entries needed (256, 4096, 16384), measured 2026-10-29; a drift fails, naming the row.
+const HILBERT_TIERS: [(&str, usize); 8] = [
+    ("hilbert.05", 4096),
+    ("hilbert.06", 4096),
+    ("hilbert.07", 4096),
+    ("hilbert.08", 4096),
+    ("hilbert.09", 4096),
+    ("hilbert.10", 4096),
+    ("hilbert.11", 4096),
+    ("hilbert.12", 4096),
+];
+/// Rows still only overlapping at enc16384: `containment_only` with a recorded reason (none: every row resolved at enc4096, 2026-10-29).
+const HILBERT_CONTAINMENT_ONLY: [(&str, &str); 0] = [];
+
+fn heavy_rows(dir: &str, name: &str) -> Result<Option<String>, String> {
+    let path = std::path::Path::new(dir).join(name);
+    if path.exists() {
+        std::fs::read_to_string(&path)
+            .map(Some)
+            .map_err(|e| format!("cannot read {}: {e}", path.display()))
+    } else {
+        Ok(None)
+    }
+}
+
+/// The lo/hi pairs of row `id` in a heavy enc file: `case_id dims A[m*n] Q_lohi[2mn] R_lohi[2nn]`.
+fn enc_pairs<'a>(text: &'a str, id: &str, mn: usize) -> Result<Vec<&'a str>, String> {
+    let toks = data_rows(text)
+        .find(|t| t.first() == Some(&id))
+        .ok_or_else(|| format!("{id}: no row in the heavy enc file"))?;
+    toks.get(add(2, mn)?..)
+        .map(<[&str]>::to_vec)
+        .ok_or_else(|| format!("{id}: short heavy row"))
+}
+
+fn pair_at<'a>(p: &[&'a str], k: usize) -> Result<(ExactNum, ExactNum), String> {
+    let i = mul(k, 2)?;
+    match (p.get(i), p.get(add(i, 1)?)) {
+        (Some(lo), Some(hi)) => Ok((dyadic(lo)?, dyadic(hi)?)),
+        _ => Err(format!("entry {k}: missing lo/hi pair")),
+    }
+}
+
+#[test]
+#[ignore = "heavy tier (16.LA.5): set ZB_QR_HEAVY_DIR to the dir with la_qr_enc4096_heavy.txt (scripts/gen_la_goldens.py --heavy DIR; sha256 in HEAVY.SHA256) and optionally la_qr_enc16384_heavy.txt"]
+fn la3_qr_hilbert_256_contains_by_heavy_tier() -> Result<(), String> {
+    let dir = std::env::var("ZB_QR_HEAVY_DIR").map_err(|e| format!("ZB_QR_HEAVY_DIR: {e}"))?;
+    let e4 = heavy_rows(&dir, "la_qr_enc4096_heavy.txt")?.ok_or("no la_qr_enc4096_heavy.txt")?;
+    let e16 = heavy_rows(&dir, "la_qr_enc16384_heavy.txt")?;
+    let text = gold_text("la_qr.txt")?;
+    let mut got: Vec<(String, usize)> = Vec::new();
+    for toks in data_rows(&text) {
+        let Some(id) = toks.first().filter(|id| id.starts_with("qr.hilbert.")) else {
+            continue;
+        };
+        let (m, n) = dims(toks.get(1).ok_or("no dims")?)?;
+        let mn = mul(m, n)?;
+        let mut it = toks.iter().skip(2);
+        let f = input_mat(&mut it, m, n, 256)?
+            .qr(256)
+            .map_err(|e| format!("{id} @256: {e:?}"))?;
+        let skip = add(add(add(2, mn)?, add(mn, mul(n, n)?)?)?, n)?;
+        let g256 = toks.get(skip..).ok_or("short row (enclosures)")?;
+        let p4 = enc_pairs(&e4, id, mn)?;
+        let p16 = match &e16 {
+            Some(t) => Some(enc_pairs(t, id, mn)?),
+            None => None,
+        };
+        let short = id.strip_prefix("qr.").unwrap_or(id);
+        let mut tier = 256_usize;
+        let total = add(mn, mul(n, n)?)?;
+        for k in 0..total {
+            let b = if k < mn {
+                f.q().get(k / n, k % n)
+            } else {
+                let r = k.checked_sub(mn).ok_or("index")?;
+                f.r().get(r / n, r % n)
+            }
+            .ok_or_else(|| format!("{id}: missing entry {k}"))?;
+            let (lo, hi) = pair_at(g256, k)?;
+            if covers(b, &lo, &hi)? {
+                continue;
+            }
+            if !overlaps(b, &lo, &hi)? {
+                return Err(format!("{id} entry {k}: disjoint from [lo256, hi256]"));
+            }
+            let (lo, hi) = pair_at(&p4, k)?;
+            if covers(b, &lo, &hi)? {
+                tier = tier.max(4096);
+                continue;
+            }
+            if !overlaps(b, &lo, &hi)? {
+                return Err(format!("{id} entry {k}: disjoint from [lo4096, hi4096]"));
+            }
+            let Some(p16) = &p16 else {
+                return Err(format!(
+                    "{id} entry {k}: overlaps enc4096; needs la_qr_enc16384_heavy.txt"
+                ));
+            };
+            let (lo, hi) = pair_at(p16, k)?;
+            if covers(b, &lo, &hi)? {
+                tier = tier.max(16384);
+            } else if !overlaps(b, &lo, &hi)? {
+                return Err(format!("{id} entry {k}: disjoint from [lo16384, hi16384]"));
+            } else if HILBERT_CONTAINMENT_ONLY.iter().any(|(c, _)| *c == short) {
+                tier = tier.max(16385);
+            } else {
+                return Err(format!(
+                    "{id} entry {k}: still only overlaps at enc16384 and is not containment_only"
+                ));
+            }
+        }
+        got.push((short.to_string(), tier));
+    }
+    let want: Vec<(String, usize)> = HILBERT_TIERS
+        .iter()
+        .map(|(i, t)| ((*i).to_string(), *t))
+        .collect();
+    if got == want {
+        Ok(())
+    } else {
+        Err(format!("hilbert tiers measured {got:?}, recorded {want:?}"))
     }
 }
