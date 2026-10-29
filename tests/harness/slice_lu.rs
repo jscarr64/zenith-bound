@@ -39,7 +39,7 @@ fn num(v: i64) -> ExactNum {
     ExactNum::from(v)
 }
 
-fn dup(x: &ExactNum) -> Result<ExactNum, String> {
+fn plus_zero(x: &ExactNum) -> Result<ExactNum, String> {
     Ok(x.add_full_prec(&num(0)))
 }
 
@@ -101,11 +101,11 @@ fn dyadic(tok: &str) -> Result<ExactNum, String> {
 
 /// The input ball of an exact rational at `prec`: exact for integers, else S1 `p / q`.
 fn input_ball(r: &Rat, prec: usize) -> Result<Ball, String> {
-    let p = ok("exact p", Ball::exact(dup(&r.p)?, prec))?;
+    let p = ok("exact p", Ball::exact(plus_zero(&r.p)?, prec))?;
     if r.q == num(1) {
         return Ok(p);
     }
-    let q = ok("exact q", Ball::exact(dup(&r.q)?, prec))?;
+    let q = ok("exact q", Ball::exact(plus_zero(&r.q)?, prec))?;
     ok("p / q", p.div(&q, prec))
 }
 
@@ -426,7 +426,7 @@ fn la2_logdet_refusals_and_needs_ln_on_every_gold_row() -> Result<(), String> {
                 None => want_refusal(&what, got, false, "undecided_det")?,
                 Some((sign, d, _, _)) => match (lu_sign(&lu)?, got) {
                     (None, got) => want_err_detail(&what, got, "Resource", "undecided_det")?,
-                    (Some(_), Err(BoundError::Resource { detail, .. })) if detail == "needs_ln" => {}
+                    (Some(_), Err(BoundError::Resource { detail: "needs_ln", .. })) => {}
                     (Some(_), Ok(v)) => {
                         if v.sign() != *sign {
                             return Err(format!("{what}: sign {}, gold {sign}", v.sign()));
@@ -472,7 +472,7 @@ fn vs_interval(b: &Ball, lo: &ExactNum, hi: &ExactNum) -> Result<(bool, bool), S
     let d_lo = m.sub_full_prec(lo);
     let d_hi = hi.sub_full_prec(m);
     let covers = d_lo <= r && d_hi <= r;
-    let neg_r = -dup(&r)?;
+    let neg_r = -plus_zero(&r)?;
     let overlaps = d_lo >= neg_r && d_hi >= neg_r;
     Ok((covers, overlaps))
 }
@@ -494,7 +494,7 @@ fn la2_logdet_gate_rows_replay_through_zb() -> Result<(), String> {
             };
             let v = match got {
                 Ok(v) => v,
-                Err(BoundError::Resource { detail, .. }) if detail == "undecided_det" => continue,
+                Err(BoundError::Resource { detail: "undecided_det", .. }) => continue,
                 Err(e) => return Err(format!("{what}: {e:?}")),
             };
             if v.sign() != *sign {
@@ -706,7 +706,7 @@ fn la2_lu_pivot_choice_ties_and_perm() -> Result<(), String> {
     // [[4,3],[2,1]]: no swap, L = [[1,0],[1/2,1]] exact, U = [[4,3],[0,-1/2]] exact.
     let l2 = ok("lu", int_mat(2, 2, &[4, 3, 2, 1])?.lu(53))?;
     let half = pow2(-1)?;
-    let mhalf = -dup(&half)?;
+    let mhalf = -plus_zero(&half)?;
     let checks = [
         (entry(l2.l(), 0, 0)?, num(1)),
         (entry(l2.l(), 0, 1)?, num(0)),
@@ -780,7 +780,7 @@ fn la2_straddling_pivot_is_undecided_not_singular() -> Result<(), String> {
 #[test]
 fn la2_det_overflow_is_all_reals_ok() -> Result<(), String> {
     let big = ExactNum::from_mag_parts(TOP, EXPONENT_MAX, 64).map_err(|e| format!("{e:?}"))?;
-    let b0 = ok("big", Ball::exact(dup(&big)?, 64))?;
+    let b0 = ok("big", Ball::exact(plus_zero(&big)?, 64))?;
     let b1 = ok("big", Ball::exact(big, 64))?;
     let a = ok("from_balls", BallMat::from_balls(2, 2, vec![b0, pt(0)?, pt(0)?, b1]))?;
     let lu = ok("lu", a.lu(53))?;
@@ -790,7 +790,7 @@ fn la2_det_overflow_is_all_reals_ok() -> Result<(), String> {
     }
     match a.logdet(53) {
         Ok(v) if v.ln_abs_det().is_informative() && v.sign() == 1 => Ok(()),
-        Err(BoundError::Resource { detail, .. }) if detail == "needs_ln" => Ok(()),
+        Err(BoundError::Resource { detail: "needs_ln", .. }) => Ok(()),
         other => Err(format!("overflow logdet: {other:?}")),
     }
 }
