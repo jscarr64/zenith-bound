@@ -1022,3 +1022,6 @@ mod harper_s2_diff_overflow;
 
 /// Harper S2 rows above 1028 bits at the zf edges.
 mod harper_s2_wide;
+
+// Harper S2 (2026-10-29): every row of bridge_wide.txt (2048 to 100_000 bits, cosmology binades) asserted exactly.
+mod harper_s2_wide_goldens;

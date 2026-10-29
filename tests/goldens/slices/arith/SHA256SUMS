@@ -1,2 +1,3 @@
 # Slice S1 golden checksums (sha256sum format), checked by tools/goldens_regen.sh. Every *.txt in this directory must be listed.
 1a77d1f62b301cee040067d50ae7d4307dde05d7f46cfcebf7cea0cc5731ed84  arith_oracle_rows.txt
+2a92d1e1122ece3cce4cdc597fa3f0ee3f19ab21e4596d5664162a85e0d2b1e2  arith_wide_rows.txt
