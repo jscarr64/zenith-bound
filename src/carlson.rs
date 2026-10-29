@@ -255,7 +255,6 @@ fn w_bound(
     let log_form = *branch == Branch::Lower || cmp(x, &num(4)) == Some(Ordering::Greater);
     let cap = wp_cap(prec);
     let mut wp = wp_start(prec);
-    let mut clamped = false;
     while wp <= cap {
         let at = At { branch, log_form, prec, wp };
         let w = newton(&at, x, cc);
@@ -266,20 +265,9 @@ fn w_bound(
             continue;
         }
         if let Some(c) = candidate(&at, &w, x, side, cc) {
-            // An untested clamp at -1 is valid but may come from a loose low-precision `w` near the branch point:
-            // take it only once two working precisions agree on it.
-            let clamp = cmp(&c, &num(-1)) == Some(Ordering::Equal);
-            if !clamp || clamped {
-                return Ok(c);
-            }
-            clamped = true;
-        } else {
-            clamped = false;
+            return Ok(c);
         }
         wp = wp.saturating_mul(2);
-    }
-    if clamped {
-        return Ok(num(-1));
     }
     Err(resource(op, "Lambert W bound not certified within the precision cap"))
 }

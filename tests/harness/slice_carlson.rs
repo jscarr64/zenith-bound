@@ -14,7 +14,7 @@ use zenith_bound::mag::Mag;
 use zenith_bound::policy::DomainPolicy;
 use zenith_bound::tri::Tri;
 use zenith_bound::MAX_PRECISION;
-use zenith_float_num::{ExactNum, RoundingMode, EXPONENT_MAX, EXPONENT_MIN};
+use zenith_float_num::{Consts, ExactNum, RoundingMode, EXPONENT_MAX, EXPONENT_MIN};
 
 const TOP: u64 = 0x8000_0000_0000_0000;
 const GOLD_ROWS: usize = 680;
@@ -296,6 +296,23 @@ fn lambertw_call_order_determinism() -> Result<(), String> {
     for ((a, b), r) in fwd.iter().zip(rev.iter()).zip(rows.iter()) {
         if a != b {
             return Err(format!("line {}: forward {:?} reverse {:?}", r.line, a, b));
+        }
+    }
+    Ok(())
+}
+
+/// LW.1: an input still undecided against `-1/e` at the working-precision cap counts as outside. `x` is `-1/e` rounded
+/// towards zero at 20000 bits (truly inside, but `|x + 1/e| < 2^-19990` is far below the `prec = 53` cap of 4520 bits).
+#[test]
+fn lambertw_undecided_counts_outside() -> Result<(), String> {
+    let mut cc = Consts::new().map_err(|e| format!("Consts::new: {:?}", e))?;
+    let e_hi = cc.e(20_100, RoundingMode::Up);
+    let x = num(-1).div(&e_hi, 20_000, RoundingMode::Up);
+    let b = ball(x, Mag::zero(), 53)?;
+    for pol in [DomainPolicy::Strict, DomainPolicy::Clip] {
+        match (b.lambert_w0(53, &pol), b.lambert_wm1(53, &pol)) {
+            (Err(BoundError::Domain { .. }), Err(BoundError::Domain { .. })) => {}
+            got => return Err(format!("{:?}: {:?}", pol, got)),
         }
     }
     Ok(())
