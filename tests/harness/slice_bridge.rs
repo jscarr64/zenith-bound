@@ -1019,3 +1019,6 @@ mod harper_s2_goldens;
 
 // Harper S2 red (2026-10-29): cmp_exact_diff None when |a - b| leaves zf range (16.S2.2).
 mod harper_s2_diff_overflow;
+
+// Spence: cmp_exact_diff overflow case at EXPONENT_MAX, radii at exponents E, E+1, E+2 (CONTRACT 16.S2.2).
+mod spence_s2_diff_overflow_edge;
