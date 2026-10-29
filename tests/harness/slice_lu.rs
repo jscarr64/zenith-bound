@@ -84,7 +84,9 @@ struct Rat {
 }
 
 fn rat(tok: &str) -> Result<Rat, String> {
-    let (p, q) = tok.split_once('/').ok_or_else(|| format!("not p/q: {tok:?}"))?;
+    let (p, q) = tok
+        .split_once('/')
+        .ok_or_else(|| format!("not p/q: {tok:?}"))?;
     let q = big_int(q)?;
     if q <= num(0) {
         return Err(format!("non-positive denominator in {tok:?}"));
@@ -94,7 +96,9 @@ fn rat(tok: &str) -> Result<Rat, String> {
 
 /// A dyadic `m*2^e` gold token, exactly.
 fn dyadic(tok: &str) -> Result<ExactNum, String> {
-    let (m, e) = tok.split_once("*2^").ok_or_else(|| format!("not m*2^e: {tok:?}"))?;
+    let (m, e) = tok
+        .split_once("*2^")
+        .ok_or_else(|| format!("not m*2^e: {tok:?}"))?;
     let e: i64 = e.parse().map_err(|x| format!("{tok:?}: {x}"))?;
     Ok(big_int(m)?.mul_full_prec(&pow2(e)?))
 }
@@ -124,7 +128,10 @@ fn want_holds(what: &str, b: &Ball, r: &Rat) -> Result<(), String> {
     if holds(b, r)? {
         Ok(())
     } else {
-        Err(format!("{what}: {b:?} does not contain {:?}/{:?}", r.p, r.q))
+        Err(format!(
+            "{what}: {b:?} does not contain {:?}/{:?}",
+            r.p, r.q
+        ))
     }
 }
 
@@ -245,7 +252,9 @@ fn mul_dims(m: usize, n: usize) -> Result<usize, String> {
 }
 
 fn idx(i: usize, n: usize, j: usize) -> Result<usize, String> {
-    mul_dims(i, n)?.checked_add(j).ok_or_else(|| "index overflow".to_string())
+    mul_dims(i, n)?
+        .checked_add(j)
+        .ok_or_else(|| "index overflow".to_string())
 }
 
 /// The error must be `variant` with `detail` (an empty `detail` accepts any).
@@ -282,7 +291,11 @@ fn want_refusal<T: core::fmt::Debug>(
         Err(BoundError::Resource { detail, .. }) if !certified && *detail == undecided => Ok(()),
         Err(_) | Ok(_) => Err(format!(
             "{what}: want Singular \"singular\"{}, got {r:?}",
-            if certified { " (certified row, 16.LA.4)" } else { " or undecided" }
+            if certified {
+                " (certified row, 16.LA.4)"
+            } else {
+                " or undecided"
+            }
         )),
     }
 }
@@ -302,7 +315,11 @@ fn replay_lu_row(toks: &[&str], prec: usize) -> Result<(), String> {
     }
     let mut perm = Vec::new();
     for _ in 0..n {
-        perm.push(c.tok()?.parse::<usize>().map_err(|e| format!("{id}: perm {e}"))?);
+        perm.push(
+            c.tok()?
+                .parse::<usize>()
+                .map_err(|e| format!("{id}: perm {e}"))?,
+        );
     }
     let l_r = c.rats(mul_dims(n, n)?)?;
     let u_r = c.rats(mul_dims(n, n)?)?;
@@ -322,13 +339,20 @@ fn replay_lu_row(toks: &[&str], prec: usize) -> Result<(), String> {
         return Ok(());
     }
     // 16.LA2.6: a different tie break; P_zb·A (exact) must lie in the ball product L·U.
-    eprintln!("{id}@{prec}: perm {:?} differs from gold {perm:?}; checking P·A in L·U", lu.perm());
+    eprintln!(
+        "{id}@{prec}: perm {:?} differs from gold {perm:?}; checking P·A in L·U",
+        lu.perm()
+    );
     let prod = ok("matmul", lu.l().matmul(lu.u(), prec))?;
     for i in 0..n {
         let src = *lu.perm().get(i).ok_or("perm")?;
         for j in 0..n {
             let k = idx(src, n, j)?;
-            want_holds(&format!("{id}@{prec} (LU)[{i},{j}]"), entry(&prod, i, j)?, a_r.get(k).ok_or("A")?)?;
+            want_holds(
+                &format!("{id}@{prec} (LU)[{i},{j}]"),
+                entry(&prod, i, j)?,
+                a_r.get(k).ok_or("A")?,
+            )?;
         }
     }
     Ok(())
@@ -360,13 +384,23 @@ fn logdet_row<'a>(toks: &'a [&'a str]) -> Result<LogdetRow<'a>, String> {
     let (n, _) = parse_dims(c.tok()?)?;
     let a = c.rats(mul_dims(n, n)?)?;
     if c.rest_is(&["ERR", "Singular", "singular"]) {
-        return Ok(LogdetRow { id, a, n, gold: None });
+        return Ok(LogdetRow {
+            id,
+            a,
+            n,
+            gold: None,
+        });
     }
     let sign: i8 = c.tok()?.parse().map_err(|e| format!("{id}: sign {e}"))?;
     let det = rat(c.tok()?)?;
     let lo = dyadic(c.tok()?)?;
     let hi = dyadic(c.tok()?)?;
-    Ok(LogdetRow { id, a, n, gold: Some((sign, det, lo, hi)) })
+    Ok(LogdetRow {
+        id,
+        a,
+        n,
+        gold: Some((sign, det, lo, hi)),
+    })
 }
 
 /// lu → det encloses the exact det; the sign `perm_sign · Π sign(u_kk)` is exact whenever every `u_kk` excludes 0
@@ -426,7 +460,12 @@ fn la2_logdet_refusals_and_needs_ln_on_every_gold_row() -> Result<(), String> {
                 None => want_refusal(&what, got, false, "undecided_det")?,
                 Some((sign, d, _, _)) => match (lu_sign(&lu)?, got) {
                     (None, got) => want_err_detail(&what, got, "Resource", "undecided_det")?,
-                    (Some(_), Err(BoundError::Resource { detail: "needs_ln", .. })) => {}
+                    (
+                        Some(_),
+                        Err(BoundError::Resource {
+                            detail: "needs_ln", ..
+                        }),
+                    ) => {}
                     (Some(_), Ok(v)) => {
                         if v.sign() != *sign {
                             return Err(format!("{what}: sign {}, gold {sign}", v.sign()));
@@ -494,7 +533,10 @@ fn la2_logdet_gate_rows_replay_through_zb() -> Result<(), String> {
             };
             let v = match got {
                 Ok(v) => v,
-                Err(BoundError::Resource { detail: "undecided_det", .. }) => continue,
+                Err(BoundError::Resource {
+                    detail: "undecided_det",
+                    ..
+                }) => continue,
                 Err(e) => return Err(format!("{what}: {e:?}")),
             };
             if v.sign() != *sign {
@@ -502,14 +544,19 @@ fn la2_logdet_gate_rows_replay_through_zb() -> Result<(), String> {
             }
             want_holds(&what, v.det(), d)?;
             if !v.ln_abs_det().is_informative() {
-                return Err(format!("{what}: ln_abs_det is all-reals (must stay finite, 16.LA1.7)"));
+                return Err(format!(
+                    "{what}: ln_abs_det is all-reals (must stay finite, 16.LA1.7)"
+                ));
             }
             let (covers, overlaps) = vs_interval(v.ln_abs_det(), lo, hi)?;
             if covers {
                 continue;
             }
             if !overlaps {
-                return Err(format!("{what}: ln_abs_det {:?} disjoint from [lo256, hi256]", v.ln_abs_det()));
+                return Err(format!(
+                    "{what}: ln_abs_det {:?} disjoint from [lo256, hi256]",
+                    v.ln_abs_det()
+                ));
             }
             let mut decided = false;
             for bits in [4096_u32, 16384] {
@@ -549,13 +596,17 @@ struct CondCols {
 
 /// Parses the six cond columns at `toks[at..]` and cross-checks `containment_only` against `k_row + 8 >= max(PRECS)`.
 fn cond_cols(id: &str, toks: &[&str], at: usize) -> Result<CondCols, String> {
-    let rest = toks.get(at..).ok_or_else(|| format!("{id}: row too short for cond columns"))?;
+    let rest = toks
+        .get(at..)
+        .ok_or_else(|| format!("{id}: row too short for cond columns"))?;
     let [cond_row, k_row, scale_row, flag, reason, rref] = rest else {
         return Err(format!("{id}: want 6 cond columns, got {}", rest.len()));
     };
     rat(cond_row)?;
     rat(rref)?;
-    let k_row: usize = k_row.parse().map_err(|e| format!("{id}: k_row {k_row:?}: {e}"))?;
+    let k_row: usize = k_row
+        .parse()
+        .map_err(|e| format!("{id}: k_row {k_row:?}: {e}"))?;
     let containment_only = match (*flag, *reason) {
         ("0", "tight") => false,
         ("1", "k_row_too_large") => true,
@@ -563,7 +614,9 @@ fn cond_cols(id: &str, toks: &[&str], at: usize) -> Result<CondCols, String> {
     };
     let top = PRECS.iter().max().ok_or("PRECS")?;
     if containment_only != (k_row.checked_add(8).ok_or("k_row overflows")? >= *top) {
-        return Err(format!("{id}: containment_only {flag} disagrees with k_row {k_row}"));
+        return Err(format!(
+            "{id}: containment_only {flag} disagrees with k_row {k_row}"
+        ));
     }
     Ok(CondCols {
         k_row,
@@ -594,11 +647,19 @@ fn want_tight(what: &str, b: &Ball, c: &CondCols, prec: usize) -> Result<bool, S
         s = -s;
     }
     let big = if m >= s { m } else { s };
-    let lhs = b.rad().to_exact_num().map_err(|e| format!("{e:?}"))?.mul_full_prec(q);
+    let lhs = b
+        .rad()
+        .to_exact_num()
+        .map_err(|e| format!("{e:?}"))?
+        .mul_full_prec(q);
     if lhs <= factor.mul_full_prec(&big) {
         Ok(true)
     } else {
-        Err(format!("{what}: rad {:?} over the k_row {} bound at prec {prec}", b.rad(), c.k_row))
+        Err(format!(
+            "{what}: rad {:?} over the k_row {} bound at prec {prec}",
+            b.rad(),
+            c.k_row
+        ))
     }
 }
 
@@ -611,7 +672,10 @@ fn la2_tightness_k_row_bound_on_logdet_and_solve_rows() -> Result<(), String> {
     let sv = read_gold("lu", "la_solve.txt")?;
     for (name, text) in [("la_logdet.txt", &ld), ("la_solve.txt", &sv)] {
         if gold_format(text)? != 2 {
-            return Err(format!("{name} is format {}: no cond columns (16.LA.5)", gold_format(text)?));
+            return Err(format!(
+                "{name} is format {}: no cond columns (16.LA.5)",
+                gold_format(text)?
+            ));
         }
     }
     let mut enforced = 0_usize;
@@ -630,7 +694,10 @@ fn la2_tightness_k_row_bound_on_logdet_and_solve_rows() -> Result<(), String> {
             let a = ball_mat(r.n, r.n, &r.a, prec)?;
             let v = match a.logdet(prec) {
                 Ok(v) => v,
-                Err(BoundError::Resource { detail: "undecided_det", .. }) => continue,
+                Err(BoundError::Resource {
+                    detail: "undecided_det",
+                    ..
+                }) => continue,
                 Err(e) => return Err(format!("{what}: {e:?}")),
             };
             if want_tight(&what, v.ln_abs_det(), &c, prec)? {
@@ -651,7 +718,9 @@ fn la2_tightness_k_row_bound_on_logdet_and_solve_rows() -> Result<(), String> {
             let a = ball_mat(r.n, r.n, &r.a, prec)?;
             let x = match a.solve(&ball_vec(&r.b, prec)?, prec) {
                 Ok(x) => x,
-                Err(BoundError::Resource { detail, .. }) if detail.starts_with("undecided") => continue,
+                Err(BoundError::Resource { detail, .. }) if detail.starts_with("undecided") => {
+                    continue
+                }
                 Err(e) => return Err(format!("{what}: {e:?}")),
             };
             for i in 0..r.n {
@@ -683,10 +752,22 @@ fn solve_row<'a>(toks: &'a [&'a str]) -> Result<SolveRow<'a>, String> {
     let a = c.rats(mul_dims(n, n)?)?;
     let b = c.rats(n)?;
     if c.rest_is(&["ERR", "Singular", "singular"]) {
-        return Ok(SolveRow { id, n, a, b, x: None });
+        return Ok(SolveRow {
+            id,
+            n,
+            a,
+            b,
+            x: None,
+        });
     }
     let x = c.rats(n)?;
-    Ok(SolveRow { id, n, a, b, x: Some(x) })
+    Ok(SolveRow {
+        id,
+        n,
+        a,
+        b,
+        x: Some(x),
+    })
 }
 
 /// Singular solve rows refuse before any triangular solve (16.LA2.4): certified rows give `Singular "singular"`, others
@@ -712,13 +793,25 @@ fn la2_solve_refusal_rows_replay_through_zb() -> Result<(), String> {
             let b = ball_vec(&r.b, prec)?;
             want_refusal(&what, a.solve(&b, prec), cert, "undecided_pivot")?;
             let lu = ok(r.id, a.lu(prec))?;
-            want_refusal(&format!("{what} (BallLu)"), lu.solve(&b, prec), cert, "undecided_pivot")?;
+            want_refusal(
+                &format!("{what} (BallLu)"),
+                lu.solve(&b, prec),
+                cert,
+                "undecided_pivot",
+            )?;
             let bm = ball_mat(r.n, 1, &r.b, prec)?;
-            want_refusal(&format!("{what} (mat)"), a.solve_mat(&bm, prec), cert, "undecided_pivot")?;
+            want_refusal(
+                &format!("{what} (mat)"),
+                a.solve_mat(&bm, prec),
+                cert,
+                "undecided_pivot",
+            )?;
         }
     }
     if seen == 0 || cert_seen == 0 {
-        return Err(format!("refusal rows {seen}, certified {cert_seen}: gold ids changed?"));
+        return Err(format!(
+            "refusal rows {seen}, certified {cert_seen}: gold ids changed?"
+        ));
     }
     Ok(())
 }
@@ -736,7 +829,9 @@ fn la2_solve_gate_value_rows_replay_through_zb() -> Result<(), String> {
             let b = ball_vec(&r.b, prec)?;
             let got = match a.solve(&b, prec) {
                 Ok(v) => v,
-                Err(BoundError::Resource { detail, .. }) if detail.starts_with("undecided") => continue,
+                Err(BoundError::Resource { detail, .. }) if detail.starts_with("undecided") => {
+                    continue
+                }
                 Err(e) => return Err(format!("{what}: {e:?}")),
             };
             let bm = ball_mat(r.n, 1, &r.b, prec)?;
@@ -773,7 +868,10 @@ fn int_vec(vals: &[i64]) -> Result<BallVec, String> {
 
 /// `1 ± 2` (straddles 0, nonzero midpoint).
 fn straddle() -> Result<Ball, String> {
-    ok("straddle", Ball::from_mid_rad(num(1), ok("mag", Mag::finite(TOP, 2))?, 64))
+    ok(
+        "straddle",
+        Ball::from_mid_rad(num(1), ok("mag", Mag::finite(TOP, 2))?, 64),
+    )
 }
 
 #[test]
@@ -781,8 +879,18 @@ fn la2_rectangular_input_is_dimension_mismatch_everywhere() -> Result<(), String
     let a = int_mat(2, 3, &[1, 2, 3, 4, 5, 6])?;
     want_err_detail("lu", a.lu(53), "DimensionMismatch", "rectangular")?;
     want_err_detail("logdet", a.logdet(53), "DimensionMismatch", "rectangular")?;
-    want_err_detail("solve", a.solve(&int_vec(&[1, 2])?, 53), "DimensionMismatch", "")?;
-    want_err_detail("solve_mat", a.solve_mat(&int_mat(2, 1, &[1, 2])?, 53), "DimensionMismatch", "")
+    want_err_detail(
+        "solve",
+        a.solve(&int_vec(&[1, 2])?, 53),
+        "DimensionMismatch",
+        "",
+    )?;
+    want_err_detail(
+        "solve_mat",
+        a.solve_mat(&int_mat(2, 1, &[1, 2])?, 53),
+        "DimensionMismatch",
+        "",
+    )
 }
 
 /// 16.LA.3: prec is checked first, before shape.
@@ -792,20 +900,45 @@ fn la2_bad_prec_is_invalid_argument_before_shape() -> Result<(), String> {
     want_err_detail("lu", a.lu(0), "InvalidArgument", "")?;
     want_err_detail("logdet", a.logdet(0), "InvalidArgument", "")?;
     want_err_detail("solve", a.solve(&int_vec(&[1])?, 0), "InvalidArgument", "")?;
-    want_err_detail("solve_mat", a.solve_mat(&int_mat(1, 1, &[1])?, 0), "InvalidArgument", "")?;
+    want_err_detail(
+        "solve_mat",
+        a.solve_mat(&int_mat(1, 1, &[1])?, 0),
+        "InvalidArgument",
+        "",
+    )?;
     let sq = ok("lu", int_mat(1, 1, &[2])?.lu(53))?;
     want_err_detail("BallLu::det", sq.det(0), "InvalidArgument", "")?;
-    want_err_detail("BallLu::solve", sq.solve(&int_vec(&[1, 2])?, 0), "InvalidArgument", "")
+    want_err_detail(
+        "BallLu::solve",
+        sq.solve(&int_vec(&[1, 2])?, 0),
+        "InvalidArgument",
+        "",
+    )
 }
 
 /// 16.LA.3: a right-hand side of the wrong length is `DimensionMismatch "b_len"`.
 #[test]
 fn la2_solve_b_len_mismatch() -> Result<(), String> {
     let a = int_mat(2, 2, &[2, 1, 1, 3])?;
-    want_err_detail("solve", a.solve(&int_vec(&[1, 2, 3])?, 53), "DimensionMismatch", "b_len")?;
-    want_err_detail("solve_mat", a.solve_mat(&int_mat(3, 1, &[1, 2, 3])?, 53), "DimensionMismatch", "b_len")?;
+    want_err_detail(
+        "solve",
+        a.solve(&int_vec(&[1, 2, 3])?, 53),
+        "DimensionMismatch",
+        "b_len",
+    )?;
+    want_err_detail(
+        "solve_mat",
+        a.solve_mat(&int_mat(3, 1, &[1, 2, 3])?, 53),
+        "DimensionMismatch",
+        "b_len",
+    )?;
     let lu = ok("lu", a.lu(53))?;
-    want_err_detail("BallLu::solve", lu.solve(&int_vec(&[1])?, 53), "DimensionMismatch", "b_len")
+    want_err_detail(
+        "BallLu::solve",
+        lu.solve(&int_vec(&[1])?, 53),
+        "DimensionMismatch",
+        "b_len",
+    )
 }
 
 /// 16.LA2.3: pivot on the largest |mid|; 16.LA2.1 ties go to the lowest row index; perm records the source rows.
@@ -824,12 +957,19 @@ fn la2_lu_pivot_choice_ties_and_perm() -> Result<(), String> {
     // cyclic rows (0,1,0) (0,0,1) (1,0,0): P·A = I with perm = [2, 0, 1], an even permutation.
     let lc = ok("lu", int_mat(3, 3, &[0, 1, 0, 0, 0, 1, 1, 0, 0])?.lu(53))?;
     if lc.perm() != [2, 0, 1] || lc.perm_sign() != 1 {
-        return Err(format!("cyclic: perm {:?} sign {}", lc.perm(), lc.perm_sign()));
+        return Err(format!(
+            "cyclic: perm {:?} sign {}",
+            lc.perm(),
+            lc.perm_sign()
+        ));
     }
     // one swap: sign -1 and det = -1 exactly.
     let ls = ok("lu", int_mat(2, 2, &[0, 1, 1, 0])?.lu(53))?;
     let d = ok("det", ls.det(53))?;
-    if ls.perm_sign() != -1 || d.contains(&num(-1)) != Tri::True || d.contains(&num(1)) != Tri::False {
+    if ls.perm_sign() != -1
+        || d.contains(&num(-1)) != Tri::True
+        || d.contains(&num(1)) != Tri::False
+    {
         return Err(format!("swap2: sign {} det {d:?}", ls.perm_sign()));
     }
     // [[4,3],[2,1]]: no swap, L = [[1,0],[1/2,1]] exact, U = [[4,3],[0,-1/2]] exact.
@@ -875,11 +1015,23 @@ fn la2_zero_column_is_skipped_and_certified_singular() -> Result<(), String> {
     }
     let d = ok("det", lu.det(53))?;
     if !is_exact_zero(&d) {
-        return Err(format!("det of a skipped column must be exactly 0, got {d:?}"));
+        return Err(format!(
+            "det of a skipped column must be exactly 0, got {d:?}"
+        ));
     }
     want_err_detail("logdet", a.logdet(53), "Singular", "singular")?;
-    want_err_detail("solve", a.solve(&int_vec(&[1, 1, 1])?, 53), "Singular", "singular")?;
-    want_err_detail("BallLu::solve", lu.solve(&int_vec(&[1, 1, 1])?, 53), "Singular", "singular")
+    want_err_detail(
+        "solve",
+        a.solve(&int_vec(&[1, 1, 1])?, 53),
+        "Singular",
+        "singular",
+    )?;
+    want_err_detail(
+        "BallLu::solve",
+        lu.solve(&int_vec(&[1, 1, 1])?, 53),
+        "Singular",
+        "singular",
+    )
 }
 
 /// A pivot ball straddling 0 (not exactly 0): `lu` is `Ok`, `det` contains 0 but is not exactly 0, `logdet` is
@@ -893,10 +1045,23 @@ fn la2_straddling_pivot_is_undecided_not_singular() -> Result<(), String> {
         return Err(format!("straddle det {d:?}"));
     }
     want_err_detail("logdet", a.logdet(53), "Resource", "undecided_det")?;
-    want_err_detail("solve", a.solve(&int_vec(&[1])?, 53), "Resource", "undecided_pivot")?;
-    want_err_detail("BallLu::solve", lu.solve(&int_vec(&[1])?, 53), "Resource", "undecided_pivot")?;
+    want_err_detail(
+        "solve",
+        a.solve(&int_vec(&[1])?, 53),
+        "Resource",
+        "undecided_pivot",
+    )?;
+    want_err_detail(
+        "BallLu::solve",
+        lu.solve(&int_vec(&[1])?, 53),
+        "Resource",
+        "undecided_pivot",
+    )?;
     // 2x2 with a straddling first pivot: the multiplier 0/(1±2) still encloses 0 and lu is Ok.
-    let b = ok("from_balls", BallMat::from_balls(2, 2, vec![straddle()?, pt(1)?, pt(0)?, pt(1)?]))?;
+    let b = ok(
+        "from_balls",
+        BallMat::from_balls(2, 2, vec![straddle()?, pt(1)?, pt(0)?, pt(1)?]),
+    )?;
     let lb = ok("lu", b.lu(53))?;
     let l10 = entry(lb.l(), 1, 0)?;
     if !has_zero(l10) {
@@ -911,10 +1076,25 @@ fn la2_det_uses_guarded_work_prec() -> Result<(), String> {
     let e = |v: i64| ok("exact", Ball::exact(num(v), 53));
     let a = ok(
         "from_balls",
-        BallMat::from_balls(2, 2, vec![e(1_099_511_627_777)?, e(1_099_511_627_776)?, e(1_099_511_627_776)?, e(1_099_511_627_775)?]),
+        BallMat::from_balls(
+            2,
+            2,
+            vec![
+                e(1_099_511_627_777)?,
+                e(1_099_511_627_776)?,
+                e(1_099_511_627_776)?,
+                e(1_099_511_627_775)?,
+            ],
+        ),
     )?;
     let d = ok("det", ok("lu", a.lu(53))?.det(53))?;
-    if !holds(&d, &Rat { p: num(-1), q: num(1) })? {
+    if !holds(
+        &d,
+        &Rat {
+            p: num(-1),
+            q: num(1),
+        },
+    )? {
         return Err(format!("det must contain -1, got {d:?}"));
     }
     let rad = d.rad().to_exact_num().map_err(|e| format!("{e:?}"))?;
@@ -924,14 +1104,16 @@ fn la2_det_uses_guarded_work_prec() -> Result<(), String> {
     Ok(())
 }
 
-
 /// 16.LA1.4: an overflowing det product gives an all-reals `det` as `Ok`, never an error.
 #[test]
 fn la2_det_overflow_is_all_reals_ok() -> Result<(), String> {
     let big = ExactNum::from_mag_parts(TOP, EXPONENT_MAX, 64).map_err(|e| format!("{e:?}"))?;
     let b0 = ok("big", Ball::exact(plus_zero(&big)?, 64))?;
     let b1 = ok("big", Ball::exact(big, 64))?;
-    let a = ok("from_balls", BallMat::from_balls(2, 2, vec![b0, pt(0)?, pt(0)?, b1]))?;
+    let a = ok(
+        "from_balls",
+        BallMat::from_balls(2, 2, vec![b0, pt(0)?, pt(0)?, b1]),
+    )?;
     let lu = ok("lu", a.lu(53))?;
     let d = ok("det", lu.det(53))?;
     if d.is_informative() {
@@ -939,7 +1121,9 @@ fn la2_det_overflow_is_all_reals_ok() -> Result<(), String> {
     }
     match a.logdet(53) {
         Ok(v) if v.ln_abs_det().is_informative() && v.sign() == 1 => Ok(()),
-        Err(BoundError::Resource { detail: "needs_ln", .. }) => Ok(()),
+        Err(BoundError::Resource {
+            detail: "needs_ln", ..
+        }) => Ok(()),
         other => Err(format!("overflow logdet: {other:?}")),
     }
 }
@@ -958,7 +1142,11 @@ fn la2_results_carry_prec_and_exact_rows_stay_exact() -> Result<(), String> {
             for j in 0..2 {
                 let (l, u) = (entry(lu.l(), i, j)?, entry(lu.u(), i, j)?);
                 if l.prec() != prec || u.prec() != prec {
-                    return Err(format!("@{prec}: L/U[{i},{j}] prec {} {}", l.prec(), u.prec()));
+                    return Err(format!(
+                        "@{prec}: L/U[{i},{j}] prec {} {}",
+                        l.prec(),
+                        u.prec()
+                    ));
                 }
             }
         }

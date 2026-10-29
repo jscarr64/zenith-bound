@@ -88,11 +88,13 @@ fn entry<'v>(op: &'static str, v: &'v [Ball], k: usize) -> BoundResult<&'v Ball>
 }
 
 fn slot<'v>(op: &'static str, v: &'v mut [Ball], k: usize) -> BoundResult<&'v mut Ball> {
-    v.get_mut(k).ok_or_else(|| resource(op, "index out of range"))
+    v.get_mut(k)
+        .ok_or_else(|| resource(op, "index out of range"))
 }
 
 fn diag<'m>(op: &'static str, m: &'m BallMat, k: usize) -> BoundResult<&'m Ball> {
-    m.get(k, k).ok_or_else(|| resource(op, "index out of range"))
+    m.get(k, k)
+        .ok_or_else(|| resource(op, "index out of range"))
 }
 
 /// Whether candidate `c` beats the current pivot `best`: a strictly larger `|mid|` (so ties keep the lowest index,
@@ -144,7 +146,9 @@ impl BallMat {
             return Err(mismatch(OP, "rectangular"));
         }
         let w = work_prec(prec, n);
-        let nn = n.checked_mul(n).ok_or_else(|| resource(OP, "index overflow"))?;
+        let nn = n
+            .checked_mul(n)
+            .ok_or_else(|| resource(OP, "index overflow"))?;
         let mut a: Vec<Ball> = reserve(OP, nn)?;
         for x in self.as_array().as_slice() {
             a.push(widen(x, w)?);
@@ -158,7 +162,10 @@ impl BallMat {
         for k in 0..n {
             let mut p = k;
             for i in (k..n).skip(1) {
-                if beats(entry(OP, &a, at(OP, i, n, k)?)?, entry(OP, &a, at(OP, p, n, k)?)?) {
+                if beats(
+                    entry(OP, &a, at(OP, i, n, k)?)?,
+                    entry(OP, &a, at(OP, p, n, k)?)?,
+                ) {
                     p = i;
                 }
             }
@@ -191,7 +198,11 @@ impl BallMat {
         }
         let mut lo: Vec<Ball> = reserve(OP, nn)?;
         for (idx, x) in l.into_iter().enumerate() {
-            if idx.checked_rem(n.checked_add(1).ok_or_else(|| resource(OP, "index overflow"))?) == Some(0) {
+            if idx.checked_rem(
+                n.checked_add(1)
+                    .ok_or_else(|| resource(OP, "index overflow"))?,
+            ) == Some(0)
+            {
                 lo.push(Ball::exact(ExactNum::from(1i64), prec)?);
             } else {
                 lo.push(round(x, prec)?);
@@ -267,16 +278,23 @@ impl BallMat {
             return Err(mismatch(OP, "b_len"));
         }
         let m = b.ncols();
-        let total = n.checked_mul(m).ok_or_else(|| resource(OP, "index overflow"))?;
+        let total = n
+            .checked_mul(m)
+            .ok_or_else(|| resource(OP, "index overflow"))?;
         let mut cols: Vec<Ball> = reserve(OP, total)?;
         let lu = self.lu(prec)?;
         for j in 0..m {
             let mut col: Vec<Ball> = reserve(OP, n)?;
             for i in 0..n {
-                let x = b.get(i, j).ok_or_else(|| resource(OP, "index out of range"))?;
+                let x = b
+                    .get(i, j)
+                    .ok_or_else(|| resource(OP, "index out of range"))?;
                 col.push(widen(x, work_prec(prec, n))?);
             }
-            let (_shape, xs) = lu.solve(&BallVec::from_balls(col), prec)?.into_array().into_parts();
+            let (_shape, xs) = lu
+                .solve(&BallVec::from_balls(col), prec)?
+                .into_array()
+                .into_parts();
             cols.extend(xs);
         }
         let mut out: Vec<Ball> = reserve(OP, total)?;
@@ -364,7 +382,9 @@ impl BallLu {
         let w = work_prec(prec, n);
         let mut pb: Vec<Ball> = reserve(OP, n)?;
         for src in self.perm.iter() {
-            let x = b.get(*src).ok_or_else(|| resource(OP, "index out of range"))?;
+            let x = b
+                .get(*src)
+                .ok_or_else(|| resource(OP, "index out of range"))?;
             pb.push(widen(x, w)?);
         }
         let y = self.l.solve_lower(&BallVec::from_balls(pb), true, w)?;
@@ -403,7 +423,14 @@ mod slice_lu_work_prec {
     /// 16.LA.6: `w = prec + 64 + 2·⌈log2(n + 1)⌉`, capped.
     #[test]
     fn slice_lu_work_prec_formula_and_cap() -> Result<(), String> {
-        for (prec, n, want) in [(53, 0, 117), (53, 1, 119), (53, 3, 121), (53, 4, 123), (113, 7, 183), (192, 8, 264)] {
+        for (prec, n, want) in [
+            (53, 0, 117),
+            (53, 1, 119),
+            (53, 3, 121),
+            (53, 4, 123),
+            (113, 7, 183),
+            (192, 8, 264),
+        ] {
             let got = work_prec(prec, n);
             if got != want {
                 return Err(format!("work_prec({prec}, {n}) = {got}, want {want}"));
