@@ -24,6 +24,43 @@ const LSTSQ_EXACT_CERTIFIED: [&str; 1] = ["lstsq.refuse.zero_col_3x2"];
 /// Trailing tightness columns of an lstsq value row (Harper's helper replaces the TODO fields).
 const LSTSQ_COND_COLS: usize = 5;
 
+/// Value rows whose computed `σ` ball reaches 0 at a replay precision, pinned to the measured `Resource "undecided_rank"`
+/// (16.LA3.3, measured 2026-10-29; matched on the id after the `qr.`/`lstsq.` prefix). A pin that starts returning a value fails
+/// as stale. `nearsing.2`: the input balls at `prec <= 192` already contain singular matrices (perturbation `2^-200`).
+/// `hilbert.09..12` @53: naive ball Householder wraps the trailing radius by about 3 bits per step (`2^-54` to `2^-30` over
+/// 8 steps for n = 9) while `σ_n` falls to about `2^-35`. `scale_huge.2`: `R22/R11 ≈ 2^-10000`, beyond every working precision.
+const UNDECIDED_PINS: [(&str, usize); 10] = [
+    ("nearsing.2", 53),
+    ("nearsing.2", 113),
+    ("nearsing.2", 192),
+    ("hilbert.09", 53),
+    ("hilbert.10", 53),
+    ("hilbert.11", 53),
+    ("hilbert.12", 53),
+    ("scale_huge.2", 53),
+    ("scale_huge.2", 113),
+    ("scale_huge.2", 192),
+];
+
+/// The Hilbert rows measured at 256 bits (task d): all factor; each ball must at least overlap the gold `[lo256, hi256]`.
+const HILBERT_256_ROWS: usize = 8;
+
+fn is_pinned(id: &str, prec: usize) -> bool {
+    let key = id.split_once('.').map_or(id, |(_, s)| s);
+    UNDECIDED_PINS.iter().any(|&(k, p)| k == key && p == prec)
+}
+
+/// The pinned outcome: `Resource "undecided_rank"`; anything else fails.
+fn check_pin(id: &str, prec: usize, e: Option<&BoundError>) -> Result<(), String> {
+    match e {
+        Some(BoundError::Resource { detail, .. }) if *detail == "undecided_rank" => Ok(()),
+        Some(e) => Err(format!("{id} @{prec}: pinned undecided_rank, got {e:?}")),
+        None => Err(format!(
+            "{id} @{prec}: pinned undecided_rank, got a value (stale pin)"
+        )),
+    }
+}
+
 fn gold_text(name: &str) -> Result<String, String> {
     let path = golden_dir().join("slices").join("qr").join(name);
     std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))
@@ -137,6 +174,36 @@ fn covers(b: &Ball, lo: &ExactNum, hi: &ExactNum) -> Result<bool, String> {
     Ok(!low_gap.is_negative() && !high_gap.is_negative())
 }
 
+/// `true` when `b` meets `[lo, hi]`: `mid - rad <= hi` and `lo <= mid + rad`.
+fn overlaps(b: &Ball, lo: &ExactNum, hi: &ExactNum) -> Result<bool, String> {
+    if b.rad().is_infinity() {
+        return Ok(true);
+    }
+    let r = b.rad().to_exact_num().map_err(|e| format!("{e:?}"))?;
+    let below = hi.sub_full_prec(b.mid()).add_full_prec(&r);
+    let above = b.mid().add_full_prec(&r).sub_full_prec(lo);
+    if below.is_nan() || above.is_nan() {
+        return Err("overlap arithmetic failed".to_string());
+    }
+    Ok(!below.is_negative() && !above.is_negative())
+}
+
+/// 256-bit check: the gate tier cannot re-decide a partial overlap (no enc4096), so only disjointness fails.
+fn check_overlap(what: &str, b: Option<&Ball>, pair: &[&str]) -> Result<(), String> {
+    let b = b.ok_or_else(|| format!("{what}: missing entry"))?;
+    let (lo, hi) = match pair {
+        [lo, hi] => (dyadic(lo)?, dyadic(hi)?),
+        _ => return Err(format!("{what}: bad lo/hi pair")),
+    };
+    if overlaps(b, &lo, &hi)? {
+        Ok(())
+    } else {
+        Err(format!("{what}: ball is disjoint from gold [lo256, hi256]"))
+    }
+}
+
+type Check = fn(&str, Option<&Ball>, &[&str]) -> Result<(), String>;
+
 fn check_cover(what: &str, b: Option<&Ball>, pair: &[&str]) -> Result<(), String> {
     let b = b.ok_or_else(|| format!("{what}: missing entry"))?;
     let (lo, hi) = match pair {
@@ -158,8 +225,7 @@ fn variant(e: &BoundError) -> String {
     format!("{e:?}")
         .split(|c: char| !c.is_alphanumeric())
         .next()
-        .unwrap_or_default()
-        .to_string()
+        .map_or_else(String::new, str::to_string)
 }
 
 /// 16.LA.4: a refusal row passes on the named error, or on `Resource "undecided_*"` unless the row is exact-certified.
@@ -202,19 +268,26 @@ fn input_mat<'a>(
 
 /// One qr row at `prec`: `case_id mxn A[m*n] (Qt[m*n] Rt[n*n] d[n] Q_lohi[2mn] R_lohi[2nn] | ERR v d)`.
 fn replay_qr(toks: &[&str], prec: usize) -> Result<(), String> {
+    replay_qr_with(toks, prec, check_cover)
+}
+
+fn replay_qr_with(toks: &[&str], prec: usize, check: Check) -> Result<(), String> {
     let id = toks.first().ok_or("empty row")?;
     let (m, n) = dims(toks.get(1).ok_or("no dims")?)?;
     let mut it = toks.iter().skip(2);
     let a = input_mat(&mut it, m, n, prec)?;
     let rest = toks.get(add(2, mul(m, n)?)?..).ok_or("short row")?;
     let got = a.qr(prec);
+    if is_pinned(id, prec) {
+        return check_pin(id, prec, got.as_ref().err());
+    }
     if rest.first() == Some(&"ERR") {
         return match got {
             Ok(_) => Err(format!("{id} @{prec}: value where the gold refuses")),
             Err(e) => check_refusal(
                 id,
                 &e,
-                rest.get(1..).unwrap_or_default(),
+                rest.get(1..).ok_or("short ERR row")?,
                 &QR_EXACT_CERTIFIED,
             ),
         };
@@ -239,7 +312,7 @@ fn replay_qr(toks: &[&str], prec: usize) -> Result<(), String> {
         .iter();
     for i in 0..m {
         for j in 0..n {
-            check_cover(
+            check(
                 &format!("{id} @{prec} Q[{i}][{j}]"),
                 q.get(i, j),
                 &pairs.next().ok_or("short Q")?[..],
@@ -248,7 +321,7 @@ fn replay_qr(toks: &[&str], prec: usize) -> Result<(), String> {
     }
     for i in 0..n {
         for j in 0..n {
-            check_cover(
+            check(
                 &format!("{id} @{prec} R[{i}][{j}]"),
                 r.get(i, j),
                 &pairs.next().ok_or("short R")?[..],
@@ -277,13 +350,16 @@ fn replay_lstsq(toks: &[&str], prec: usize) -> Result<(), String> {
         .get(add(add(3, mul(m, n)?)?, blen)?..)
         .ok_or("short row")?;
     let got = a.lstsq(&BallVec::from_balls(b), prec);
+    if is_pinned(id, prec) {
+        return check_pin(id, prec, got.as_ref().err());
+    }
     if rest.first() == Some(&"ERR") {
         return match got {
             Ok(_) => Err(format!("{id} @{prec}: value where the gold refuses")),
             Err(e) => check_refusal(
                 id,
                 &e,
-                rest.get(1..).unwrap_or_default(),
+                rest.get(1..).ok_or("short ERR row")?,
                 &LSTSQ_EXACT_CERTIFIED,
             ),
         };
@@ -309,11 +385,21 @@ fn replay_lstsq(toks: &[&str], prec: usize) -> Result<(), String> {
 }
 
 /// Replays every row at every `PRECS`, collecting failures so one run names them all.
-fn replay_all(text: &str, f: fn(&[&str], usize) -> Result<(), String>) -> Result<usize, String> {
+fn replay_all(text: &str, f: Replay) -> Result<usize, String> {
+    replay_some(text, f, |_, _| true)
+}
+
+type Replay = fn(&[&str], usize) -> Result<(), String>;
+
+/// As `replay_all`, for the `(row, prec)` pairs `keep` selects.
+fn replay_some(text: &str, f: Replay, keep: fn(&[&str], usize) -> bool) -> Result<usize, String> {
     let mut fails = Vec::new();
     let mut n = 0_usize;
     for toks in data_rows(text) {
         for prec in PRECS {
+            if !keep(&toks, prec) {
+                continue;
+            }
             n = add(n, 1)?;
             if let Err(e) = f(&toks, prec) {
                 fails.push(e);
@@ -398,7 +484,7 @@ fn la3_lstsq_cond_columns_are_todo_until_harpers_helper() -> Result<(), String> 
             .len()
             .checked_sub(LSTSQ_COND_COLS)
             .and_then(|k| toks.get(k..))
-            .unwrap_or_default();
+            .ok_or("short row (cond columns)")?;
         if tail.len() != LSTSQ_COND_COLS || tail.iter().any(|t| *t != "TODO") {
             return Err(format!(
                 "{:?}: cond columns {tail:?} (tightness is a follow-up commit)",
@@ -452,16 +538,50 @@ fn la3_harness_parses_and_covers() -> Result<(), String> {
     Ok(())
 }
 
-/// Red until the LA3 bodies land (mutants 1200..=1212). Fails on the stub's `Resource "not_implemented"`.
+/// Every qr row at every `PRECS` (green with the LA3 bodies; pins in `UNDECIDED_PINS`).
 #[test]
-#[ignore = "red: not implemented: BallMat::qr returns Resource not_implemented (CONTRACT 16.LA3); un-ignore with the bodies commit"]
 fn la3_qr_gate_rows_replay_through_zb() -> Result<(), String> {
     replay_all(&gold_text("la_qr.txt")?, replay_qr).map(|_| ())
 }
 
-/// Red until the LA3 bodies land and 16.S6.12 `solve_upper` (LA0) is implemented.
+/// lstsq rows that stop before 16.S6.12 `solve_upper`: refusals, `m×0` systems, and the pinned undecided rows (green now).
 #[test]
-#[ignore = "red: not implemented: BallMat::lstsq returns Resource not_implemented (CONTRACT 16.LA3; needs 16.S6.12 solve_upper)"]
+fn la3_lstsq_refusal_empty_and_pinned_rows_replay_through_zb() -> Result<(), String> {
+    replay_some(
+        &gold_text("la_lstsq.txt")?,
+        replay_lstsq,
+        stops_before_solve,
+    )
+    .map(|_| ())
+}
+
+fn stops_before_solve(toks: &[&str], prec: usize) -> bool {
+    toks.contains(&"ERR")
+        || toks.get(1).is_some_and(|d| d.ends_with("x0"))
+        || toks.first().is_some_and(|id| is_pinned(id, prec))
+}
+
+/// Every lstsq row: red until 16.S6.12 `solve_upper` (LA0) is implemented.
+#[test]
+#[ignore = "red: not implemented: lstsq value rows reach BallMat::solve_upper, Resource not_implemented (CONTRACT 16.S6.12, LA0)"]
 fn la3_lstsq_gate_rows_replay_through_zb() -> Result<(), String> {
     replay_all(&gold_text("la_lstsq.txt")?, replay_lstsq).map(|_| ())
+}
+
+/// Task (d): Hilbert n = 5..=12 through `qr` at 256 bits. Every row factors (no `Resource`), and every ball overlaps the gold.
+#[test]
+fn la3_qr_hilbert_rows_factor_at_256_bits() -> Result<(), String> {
+    let text = gold_text("la_qr.txt")?;
+    let mut n = 0_usize;
+    for toks in data_rows(&text) {
+        if toks.first().is_some_and(|id| id.starts_with("qr.hilbert.")) {
+            replay_qr_with(&toks, 256, check_overlap)?;
+            n = add(n, 1)?;
+        }
+    }
+    if n == HILBERT_256_ROWS {
+        Ok(())
+    } else {
+        Err(format!("{n} hilbert rows, want {HILBERT_256_ROWS}"))
+    }
 }
