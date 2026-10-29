@@ -525,3 +525,62 @@ fn result(op: &'static str, l: &ExactNum, h: &ExactNum, prec: Precision) -> Boun
     let rad = Mag::from_exact_num(&above).max(Mag::from_exact_num(&below));
     Ball::from_mid_rad(mid, rad, prec)
 }
+
+/// In-module checks of private helpers (mutate.sh runs only integration suites, so these back the harness, they do not
+/// replace it). Mutant-killers: they pass on the code at 41df22b.
+#[cfg(test)]
+mod slice_carlson_unit {
+    use super::{log_test, num, product_test, result, Consts, RoundingMode, Side};
+    use crate::enclosure::Enclosure;
+    use crate::tri::Tri;
+
+    /// 614-PRODBELOWGT: `1·e^1 > 1`, so `Below` refuses `w = 1` at `x = 1`; `0·e^0 <= 1` is accepted.
+    #[test]
+    fn product_test_below_refuses_greater() -> Result<(), String> {
+        let mut cc = Consts::new().map_err(|e| format!("Consts::new: {:?}", e))?;
+        if product_test(&num(1), &num(1), &Side::Below, 128, &mut cc) {
+            return Err("product_test(1, 1, Below) accepted 1·e > 1".into());
+        }
+        if !product_test(&num(0), &num(1), &Side::Below, 128, &mut cc) {
+            return Err("product_test(0, 1, Below) refused 0 <= 1".into());
+        }
+        Ok(())
+    }
+
+    /// 615-LOGABOVELT: `ln 1 + 1 = 1 < ln 100`, so `Above` refuses `w = 1` at `x = 100`; at `x = 1` (`1 >= 0`) it accepts.
+    #[test]
+    fn log_test_above_refuses_less() -> Result<(), String> {
+        let mut cc = Consts::new().map_err(|e| format!("Consts::new: {:?}", e))?;
+        if log_test(&num(1), &num(100), &Side::Above, 128, &mut cc) {
+            return Err("log_test(1, 100, Above) accepted 1 >= ln 100".into());
+        }
+        if !log_test(&num(1), &num(1), &Side::Above, 128, &mut cc) {
+            return Err("log_test(1, 1, Above) refused 1 >= 0".into());
+        }
+        Ok(())
+    }
+
+    /// 626-RADBELOW64: the ball from `result` contains its certified `[l, h]`, here `l = -1`, `h = -1 + k/7` at 400 bits,
+    /// where `mid - l` needs more than 64 bits.
+    #[test]
+    fn result_contains_endpoints() -> Result<(), String> {
+        let mut bad = Vec::new();
+        for prec in [100, 200, 300] {
+            for k in 1..17 {
+                let l = num(-1);
+                let h = num(k)
+                    .div(&num(7), 400, RoundingMode::Down)
+                    .sub_full_prec(&num(1));
+                match result("lambert_w0", &l, &h, prec) {
+                    Ok(b) if b.contains(&l) == Tri::True && b.contains(&h) == Tri::True => {}
+                    got => bad.push(format!("prec {} k {}: {:?}", prec, k, got)),
+                }
+            }
+        }
+        if bad.is_empty() {
+            Ok(())
+        } else {
+            Err(format!("{} of 48 lose an endpoint:\n{}", bad.len(), bad.join("\n")))
+        }
+    }
+}

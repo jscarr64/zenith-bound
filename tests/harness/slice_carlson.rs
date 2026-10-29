@@ -195,12 +195,18 @@ fn gold_rows() -> Result<Vec<Row>, String> {
     Ok(rows)
 }
 
-fn check_row(r: &Row) -> Result<(), String> {
+/// `Err((message, fatal))`; `fatal` when the call hit `Resource`, which no gold row expects.
+fn check_row(r: &Row) -> Result<(), (String, bool)> {
+    let got = call(&r.branch, &r.x, r.prec, &r.policy);
+    let fatal = matches!(got, Err(BoundError::Resource { .. }));
+    check_got(r, got).map_err(|e| (e, fatal))
+}
+
+fn check_got(r: &Row, got: Result<Ball, BoundError>) -> Result<(), String> {
     let what = format!(
         "line {} {:?} {:?} prec {}",
         r.line, r.branch, r.policy, r.prec
     );
-    let got = call(&r.branch, &r.x, r.prec, &r.policy);
     match (&r.want, got) {
         (Want::Domain, Err(BoundError::Domain { .. })) => Ok(()),
         (Want::AllReals, Ok(b)) if !b.is_informative() && b.prec() == r.prec => Ok(()),
@@ -228,13 +234,21 @@ fn check_row(r: &Row) -> Result<(), String> {
 }
 
 /// LW.3: every gold row (outcome, `prec`, LLO and HHI contained, rad <= TB).
+/// Stops at the first `Resource` error: each costs a run to the precision cap, and one is already a failure.
 #[test]
 fn lambertw_gold_rows() -> Result<(), String> {
     let rows = gold_rows()?;
     let mut bad = Vec::new();
     for r in &rows {
-        if let Err(e) = check_row(r) {
+        if let Err((e, fatal)) = check_row(r) {
             bad.push(e);
+            if fatal {
+                bad.push(format!(
+                    "stopped at line {}: Resource is never a gold outcome",
+                    r.line
+                ));
+                break;
+            }
         }
     }
     if bad.is_empty() {
@@ -329,15 +343,20 @@ fn lambertw_out_of_range_radius() -> Result<(), String> {
 }
 
 /// LW.1: results are a function of the inputs only: identical in forward and reverse call order.
+/// No gold row may give `Resource` (it fails at once rather than running every row to the cap).
 #[test]
 fn lambertw_call_order_determinism() -> Result<(), String> {
     let rows: Vec<Row> = gold_rows()?.into_iter().filter(|r| r.prec <= 256).collect();
-    let run = |r: &Row| {
-        call(&r.branch, &r.x, r.prec, &r.policy)
+    let run = |r: &Row| match call(&r.branch, &r.x, r.prec, &r.policy) {
+        Err(e @ BoundError::Resource { .. }) => Err(format!("line {}: {:?}", r.line, e)),
+        got => Ok(got
             .map(|b| format!("{:?}", b))
-            .map_err(|e| format!("{:?}", e))
+            .map_err(|e| format!("{:?}", e))),
     };
-    let fwd: Vec<Result<String, String>> = rows.iter().map(run).collect();
+    let mut fwd = Vec::new();
+    for r in &rows {
+        fwd.push(run(r)?);
+    }
     if !fwd.iter().any(|r| r.is_ok()) {
         return Err(format!(
             "no row of {} gave a ball: {:?}",
@@ -345,7 +364,10 @@ fn lambertw_call_order_determinism() -> Result<(), String> {
             fwd.first()
         ));
     }
-    let mut rev: Vec<Result<String, String>> = rows.iter().rev().map(run).collect();
+    let mut rev = Vec::new();
+    for r in rows.iter().rev() {
+        rev.push(run(r)?);
+    }
     rev.reverse();
     for ((a, b), r) in fwd.iter().zip(rev.iter()).zip(rows.iter()) {
         if a != b {
@@ -370,4 +392,27 @@ fn lambertw_undecided_counts_outside() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// LW.2: `W0` under `Clip` on a ball straddling `-1/e` has lower end `W0(-1/e) = -1`, so the result must contain `-1`,
+/// also when `mid + 1` needs more than 64 bits (prec 100 to 300). Mutant-killer for 626-RADBELOW64: it passes on
+/// the code at 41df22b.
+#[test]
+fn lambertw_w0_clip_contains_minus_one() -> Result<(), String> {
+    let mut bad = Vec::new();
+    for prec in [100, 200, 300] {
+        for j in 0..8 {
+            let r = Mag::from_exact_num(&ratio(1, 100, RoundingMode::Up));
+            let x = ball(ratio(-360 - j, 1000, RoundingMode::Down), r, prec)?;
+            match x.lambert_w0(prec, &DomainPolicy::Clip) {
+                Ok(b) if b.contains(&num(-1)) == Tri::True => {}
+                got => bad.push(format!("prec {} m -0.{}: {:?}", prec, 360 + j, got)),
+            }
+        }
+    }
+    if bad.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("{} of 24 miss -1:\n{}", bad.len(), bad.join("\n")))
+    }
 }
