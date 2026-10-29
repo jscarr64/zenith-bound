@@ -1,12 +1,12 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -208,7 +208,7 @@
+@@ -229,7 +229,7 @@
      };
      let close = m.is_zero() || gap.is_some_and(|g| g <= EXACT_GAP);
      if close {
--        (Some(m.sub_full_prec(&rn)), Some(m.add_full_prec(&rn)))
-+        (Some(m.add_full_prec(&rn)), Some(m.add_full_prec(&rn)))
+-        Ok((Some(m.sub_full_prec(&rn)), Some(m.add_full_prec(&rn))))
++        Ok((Some(m.add_full_prec(&rn)), Some(m.add_full_prec(&rn))))
      } else {
-         let p = prec.saturating_add(GUARD_BITS.saturating_mul(2));
-         let neg = num(0).sub(&rn, p, RoundingMode::Up);
+         let p = GUARD_BITS
+             .checked_mul(2)

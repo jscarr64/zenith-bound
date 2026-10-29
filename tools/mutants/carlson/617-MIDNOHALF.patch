@@ -1,8 +1,8 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -513,7 +513,7 @@
-     let wide = prec.saturating_add(2);
+@@ -535,7 +535,7 @@
+         .ok_or_else(|| resource(op, "midpoint precision"))?;
      let mid = round(l, wide, MID_RM)
          .add(h, wide, MID_RM)
 -        .ldexp(-1, prec, MID_RM);

@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -331,7 +331,7 @@
+@@ -351,7 +351,7 @@
          // W0 >= -1 and W-1 <= -1 always: these clamps need no test.
          (Branch::Principal, Side::Below, Ordering::Less)
          | (Branch::Lower, Side::Above, Ordering::Greater | Ordering::Equal) => {

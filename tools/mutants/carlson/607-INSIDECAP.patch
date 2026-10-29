@@ -1,9 +1,9 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -237,7 +237,7 @@
+@@ -267,7 +267,7 @@
+             None => return false,
          }
-         wp = wp.saturating_mul(2);
      }
 -    false
 +    true

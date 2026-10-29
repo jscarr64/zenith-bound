@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -150,7 +150,7 @@
+@@ -153,7 +153,7 @@
  ) -> BoundResult<Ball> {
      check_prec(op, prec)?;
      let strict = match policy {

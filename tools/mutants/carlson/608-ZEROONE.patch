@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -250,7 +250,7 @@
+@@ -280,7 +280,7 @@
      cc: &mut Consts,
  ) -> BoundResult<ExactNum> {
      if x.is_zero() && *branch == Branch::Principal {
@@ -9,4 +9,4 @@ diff --git a/src/carlson.rs b/src/carlson.rs
 +        return Ok(num(1));
      }
      let log_form = *branch == Branch::Lower || cmp(x, &num(4)) == Some(Ordering::Greater);
-     let cap = wp_cap(prec);
+     let cap = wp_cap(op, prec)?;

@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -188,8 +188,8 @@
+@@ -201,8 +201,8 @@
                  return unbounded(op, prec, strict);
              }
              if lo_in {

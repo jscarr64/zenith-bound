@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -150,9 +150,6 @@
+@@ -159,9 +159,6 @@
      let mut cc = Consts::new().map_err(|_| resource(op, "zf constants cache"))?;
      let m = x.mid();
      let r = x.rad();
