@@ -20,7 +20,7 @@ const MID_RM: RoundingMode = RoundingMode::ToEven;
 const GUARD_EXTRA: Precision = 2;
 
 /// `prec` outside `MIN_PRECISION..=MAX_PRECISION` is `InvalidArgument` (16.S6.3), checked first in every op.
-fn check_prec(op: &'static str, prec: Precision) -> BoundResult<()> {
+pub(crate) fn check_prec(op: &'static str, prec: Precision) -> BoundResult<()> {
     if (MIN_PRECISION..=MAX_PRECISION).contains(&prec) {
         Ok(())
     } else {
@@ -31,16 +31,16 @@ fn check_prec(op: &'static str, prec: Precision) -> BoundResult<()> {
     }
 }
 
-fn mismatch(op: &'static str, detail: &'static str) -> BoundError {
+pub(crate) fn mismatch(op: &'static str, detail: &'static str) -> BoundError {
     BoundError::DimensionMismatch { op, detail }
 }
 
-fn resource(op: &'static str, detail: &'static str) -> BoundError {
+pub(crate) fn resource(op: &'static str, detail: &'static str) -> BoundError {
     BoundError::Resource { op, detail }
 }
 
 /// An empty vector with room for `n` elements, or `Resource` (16.S6.3, clause 15.5).
-fn reserve<T>(op: &'static str, n: usize) -> BoundResult<Vec<T>> {
+pub(crate) fn reserve<T>(op: &'static str, n: usize) -> BoundResult<Vec<T>> {
     let mut v = Vec::new();
     v.try_reserve_exact(n)
         .map_err(|_e| resource(op, "result storage cannot be reserved"))?;
