@@ -121,28 +121,28 @@ struct Row {
 
 fn parse_row(line: usize, text: &str) -> Result<Row, String> {
     let f: Vec<&str> = text.split_whitespace().collect();
-    let branch = match f.first().copied() {
-        Some("w0") => Branch::W0,
-        Some("wm1") => Branch::Wm1,
+    let branch = match f.first() {
+        Some(&"w0") => Branch::W0,
+        Some(&"wm1") => Branch::Wm1,
         other => return Err(format!("line {}: branch {:?}", line, other)),
     };
-    let policy = match f.get(1).copied() {
-        Some("strict") => DomainPolicy::Strict,
-        Some("clip") => DomainPolicy::Clip,
+    let policy = match f.get(1) {
+        Some(&"strict") => DomainPolicy::Strict,
+        Some(&"clip") => DomainPolicy::Clip,
         other => return Err(format!("line {}: policy {:?}", line, other)),
     };
     let prec: usize = f.get(2).ok_or("short row")?.parse().map_err(|_| format!("line {}: prec", line))?;
     let mut i = 3;
     let xm = take_val(&f, &mut i)?;
-    let x = if f.get(i).copied() == Some("inf") {
+    let x = if f.get(i) == Some(&"inf") {
         i += 1;
         Ball::all_reals(prec).map_err(|e| format!("line {}: all reals {:?}", line, e))?
     } else {
         let xr = take_val(&f, &mut i)?;
         ball(xm, Mag::from_exact_num(&xr), prec)?
     };
-    let want = match f.get(i).copied() {
-        Some("ok") => {
+    let want = match f.get(i) {
+        Some(&"ok") => {
             i += 1;
             let llo = take_val(&f, &mut i)?;
             take_val(&f, &mut i)?; // LHI
@@ -151,8 +151,8 @@ fn parse_row(line: usize, text: &str) -> Result<Row, String> {
             let tb = take_val(&f, &mut i)?;
             Want::Ok { llo, hhi, tb }
         }
-        Some("domain") => Want::Domain,
-        Some("allreals") => Want::AllReals,
+        Some(&"domain") => Want::Domain,
+        Some(&"allreals") => Want::AllReals,
         other => return Err(format!("line {}: outcome {:?}", line, other)),
     };
     Ok(Row { line, branch, policy, prec, x, want })
@@ -200,7 +200,6 @@ fn check_row(r: &Row) -> Result<(), String> {
 
 /// LW.3: every gold row (outcome, `prec`, LLO and HHI contained, rad <= TB).
 #[test]
-#[ignore = "red: not implemented: CONTRACT LW.3 (16.S4b.3 gold rows)"]
 fn lambertw_gold_rows() -> Result<(), String> {
     let rows = gold_rows()?;
     let mut bad = Vec::new();
@@ -218,7 +217,6 @@ fn lambertw_gold_rows() -> Result<(), String> {
 
 /// LW.1: `InvalidArgument` for `prec` 0 and `MAX_PRECISION + 1`, both branches and policies, before any domain check.
 #[test]
-#[ignore = "red: not implemented: CONTRACT LW.1 (16.S4b.1 bad prec)"]
 fn lambertw_bad_prec() -> Result<(), String> {
     let x = ball(num(-5), Mag::zero(), 53)?;
     for prec in [0, MAX_PRECISION + 1] {
@@ -231,7 +229,11 @@ fn lambertw_bad_prec() -> Result<(), String> {
             }
         }
     }
-    Ok(())
+    // The public methods themselves, not only through `call`.
+    match (x.lambert_w0(0, &DomainPolicy::Strict), x.lambert_wm1(0, &DomainPolicy::Clip)) {
+        (Err(BoundError::InvalidArgument { .. }), Err(BoundError::InvalidArgument { .. })) => Ok(()),
+        got => Err(format!("direct prec 0: {:?}", got)),
+    }
 }
 
 /// `n / d` rounded with `rm` at 128 bits.
@@ -242,7 +244,6 @@ fn ratio(n: i64, d: i64, rm: RoundingMode) -> ExactNum {
 /// LW.2: a radius above zf's range is `Domain` (Strict) or all reals (Clip); one below it still gives a ball that sits
 /// inside a 10-digit bracket of the point value.
 #[test]
-#[ignore = "red: not implemented: CONTRACT LW.2 (16.S4b.2 radii out of zf range)"]
 fn lambertw_out_of_range_radius() -> Result<(), String> {
     for br in [Branch::W0, Branch::Wm1] {
         let x = ball(num(0), mag(TOP, EXPONENT_MAX + 100)?, 53)?;
@@ -279,7 +280,6 @@ fn lambertw_out_of_range_radius() -> Result<(), String> {
 
 /// LW.1: results are a function of the inputs only: identical in forward and reverse call order.
 #[test]
-#[ignore = "red: not implemented: CONTRACT LW.1 (16.S4b.1 determinism)"]
 fn lambertw_call_order_determinism() -> Result<(), String> {
     let rows: Vec<Row> = gold_rows()?.into_iter().filter(|r| r.prec <= 256).collect();
     let run = |r: &Row| {
