@@ -106,8 +106,8 @@ one() {
   oth=$(awk '{ printf "the --only %s run printed a result for %s; ", $1, $2 }' "$w/$s.oth")
   [ -z "$tmo" ] || { echo "mutate_slice: FAIL TIMEOUT (per-mutant ${mto}s): $(words "$(printf '%s\n' $tmo)") (slice $s)"; bad=1
     miss=$(printf '%s\n' "$miss" | grep -vxF -f <(printf '%s\n' $tmo) || true); }
-  [ -z "$nov" ] || { echo "mutate_slice: FAIL NO-VERDICT: $(words "$(printf '%s\n' $nov)") (slice $s)"; bad=1
-    miss=$(printf '%s\n' "$miss" | grep -vxF -f <(printf '%s\n' $nov) || true); }
+  # a NO-VERDICT id stays in the INCOMPLETE missing list below: it has no result, and full_gate_selftest (mcase missing, dcase forged) pins that line
+  [ -z "$nov" ] || { echo "mutate_slice: FAIL NO-VERDICT: $(words "$(printf '%s\n' $nov)") (slice $s)"; bad=1; }
   [ -z "$oom" ] || { echo "mutate_slice: FAIL KILLED-OOM (SIGKILL before the limit): $(words "$(printf '%s\n' $oom)") (slice $s)"; bad=1
     miss=$(printf '%s\n' "$miss" | grep -vxF -f <(printf '%s\n' $oom) || true); }
   if [ "$partial" = 1 ]; then
