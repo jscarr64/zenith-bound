@@ -58,7 +58,7 @@ clear_outs() { local lb d
 }
 # one SLICE: run and check one slice; its result ids go to $w/SLICE.got
 one() {
-  local s=$1 re=${2-} partial=0 ids n fl id left lim t0 t1 el irc tmo="" oom="" cut=""  fk fke to rc=0 out=$w/$1.out res got nres miss dup oth inv sur nk ne bad=0 tmax
+  local s=$1 re=${2-} partial=0 ids n fl id left lim t0 t1 el irc tmo="" oom="" cut="" nov="" why  fk fke to rc=0 out=$w/$1.out res got nres miss dup oth inv sur nk ne bad=0 tmax
   ids=$(slice_ids "$s") || return 1; ids=$(printf '%s\n' "$ids" | awk 'NF')
   if [ $# -ge 2 ]; then
     partial=1
@@ -89,6 +89,12 @@ one() {
       if [ "$irc" = 124 ] || { [ "$irc" = 137 ] && [ "$el" -ge "$lim" ]; }; then
         if [ "$lim" = "$mto" ]; then echo "TIMEOUT $id: ran past the ${mto}s per-mutant limit"; tmo+=" $id"; else cut+=" $id"; fi
       elif [ "$irc" = 137 ]; then echo "KILLED-OOM $id: the runner was SIGKILLed (exit 137) after ${el}s, under its ${lim}s limit (OOM killer?)"; oom+=" $id"
+      # NO-VERDICT (Harper, 2026-10-29): the --only run ended without a result line for its id (e.g. a manifest check failed first);
+      # name the id, its exit code and its own FAIL line here, so INCOMPLETE is never the only trace
+      elif ! awk -v want="$id" '$2 == want { f = 1 } END { exit !f }' "$w/$s.res"; then
+        why=$(grep -m1 '^mutate: FAIL' "$out.1" || awk 'NF && !/^runlog: / { l = $0 } END { print l }' "$out.1")
+        echo "NO-VERDICT $id: mutate.sh --only $id exited $irc before a verdict: ${why:-no output}"; nov+=" $id"
+        if [ "$irc" != 0 ] && [ "$rc" = 0 ]; then rc=$irc; fi
       elif [ "$irc" != 0 ] && [ "$rc" = 0 ]; then rc=$irc; fi
     done
   else : > "$out"; fi
@@ -100,6 +106,8 @@ one() {
   oth=$(awk '{ printf "the --only %s run printed a result for %s; ", $1, $2 }' "$w/$s.oth")
   [ -z "$tmo" ] || { echo "mutate_slice: FAIL TIMEOUT (per-mutant ${mto}s): $(words "$(printf '%s\n' $tmo)") (slice $s)"; bad=1
     miss=$(printf '%s\n' "$miss" | grep -vxF -f <(printf '%s\n' $tmo) || true); }
+  [ -z "$nov" ] || { echo "mutate_slice: FAIL NO-VERDICT: $(words "$(printf '%s\n' $nov)") (slice $s)"; bad=1
+    miss=$(printf '%s\n' "$miss" | grep -vxF -f <(printf '%s\n' $nov) || true); }
   [ -z "$oom" ] || { echo "mutate_slice: FAIL KILLED-OOM (SIGKILL before the limit): $(words "$(printf '%s\n' $oom)") (slice $s)"; bad=1
     miss=$(printf '%s\n' "$miss" | grep -vxF -f <(printf '%s\n' $oom) || true); }
   if [ "$partial" = 1 ]; then

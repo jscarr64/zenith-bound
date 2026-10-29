@@ -138,7 +138,8 @@ for e in "${equivs[@]}"; do
     case "$eline" in ''|'#'*|[[:space:]]*) continue ;; esac
     eid=${eline%%$'\t'*}; ereason=${eline#*$'\t'}
     { [ "$eid" != "$eline" ] && [ -n "${ereason//[[:space:]]/}" ]; } || { echo "mutate: FAIL $e: entry '$eline' needs ID<TAB>REASON"; exit 1; }
-    printf '%s\n' "$ids" | grep -qxF -- "$eid" || { echo "mutate: FAIL $e: equivalent id $eid is not in the manifest"; exit 1; }
+    # here-string, not `printf | grep -q`: under pipefail grep -q exiting at its match SIGPIPEs printf (rc 141), a false miss (Harper, 2026-10-29)
+    grep -qxF -- "$eid" <<< "$ids" || { echo "mutate: FAIL $e: equivalent id $eid is not in the manifest"; exit 1; }
     if [ -n "$eslice" ]; then
       enum=${eid%%-*}; erange=$(inrange "$((10#$enum))"); irc=$?
       [ "$irc" -eq 0 ] || { echo "mutate: FAIL inrange $eid: rc $irc"; exit 1; }
