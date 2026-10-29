@@ -233,10 +233,15 @@ fi
 lock="$repo/Cargo.lock"; [ -f "$lock" ] || { echo "mutate: FAIL FETCH: cargo fetch left no Cargo.lock in $repo"; exit 2; }
 # Per-ID test output (Harper, 2026-10-29): each mutant's `cargo test` output is kept as $logdir/<slice>/<id>.out (it used to be one
 # run.log the next mutant overwrote), and a KILLED result is followed by ONE indented line naming the failing tests (cargo's
-# `---- NAME stdout ----` blocks, capped at 5 plus `+N more`). The result line and the summary line are unchanged; mutate_slice.sh counts
+# `---- NAME stdout ----` blocks, capped at 5 plus `+N more`; `(timed out)` for a timeout kill, so EVERY KILLED line has one). The result line and the summary line are unchanged; mutate_slice.sh counts
 # only unindented result lines, so the extra line is ignored by every caller. env MUTATE_LOGDIR (default MUTATE_TMP/mutate-out, or MUTATE_PERSIST/mutate-out with MUTATE_TARGET).
 lbase=$base; [ -z "$persist" ] || lbase=$pbase   # persistent mode never writes under MUTATE_TMP (it may be unwritable)
 logdir=${MUTATE_LOGDIR:-$lbase/mutate-out}/${slice:-all}; mkdir -p "$logdir" || { echo "mutate: cannot create log dir $logdir"; exit 2; }
+# stale outputs (Spence review, 2026-10-29): a full run first removes every *.out in THIS slice's logdir (only regular files directly in it;
+# other files, subdirs and other slices are left alone), so an .out from an earlier HEAD cannot pass for a current one. An --only run
+# removes just its own <id>.out, since mutate_slice.sh runs a slice as one --only run per id and must keep the earlier ids' files.
+if [ -n "$only" ]; then [[ $only =~ ^[A-Za-z0-9._-]+$ && $only != *..* ]] || { echo "mutate: bad --only id $only"; exit 2; }; rm -f -- "$logdir/$only.out" || { echo "mutate: cannot clear $logdir/$only.out"; exit 2; }
+else find "$logdir" -mindepth 1 -maxdepth 1 -type f -name '*.out' -delete || { echo "mutate: cannot clear stale .out files in $logdir"; exit 2; }; fi
 # failnames FILE: the failing test names in a cargo test log, at most 5, then `+N more`
 failnames() { awk '/^---- .* stdout ----$/ { n++; if (n <= 5) s = s (s == "" ? "" : " ") $2 } END { if (n > 5) s = s " +" (n - 5) " more"; print (n ? s : "(none parsed)") }' "$1"; }
 nk=0; ns=0; ne=0; ni=0; total=0
@@ -267,6 +272,7 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
         echo "SURVIVED $id ($fnpath, suite $suite): the suite passed on the mutant"; ns=$((ns + 1))
       fi
     elif [ "$rc" = 124 ]; then echo "KILLED $id ($fnpath, suite $suite): timed out after $ttl"; nk=$((nk + 1))
+      echo "    failing tests: (timed out) (output: $logdir/$id.out)"   # every KILLED line is followed by one failing-tests line
     # a kill is a test binary that ran and failed: cargo then prints "error: test failed, to rerun pass". Anything else (resolve,
     # network, lock, I/O error) proves nothing about the mutant.
     elif grep -q '^error: test failed, to rerun pass' "$tgt/run.log"; then echo "KILLED $id ($fnpath, suite $suite): suite failed (rc $rc)"; nk=$((nk + 1))
