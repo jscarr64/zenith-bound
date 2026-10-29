@@ -6,8 +6,8 @@
 //! Replay (CONTRACT 16.LA.4, 16.LA.5, 16.LA3.3): every row at each of `PRECS`. A value passes when every returned ball contains
 //! the exact value; here, when it covers the gold `[lo256, hi256]` (sufficient, 16.LA.5). A ball that only overlaps it would be
 //! re-decided against the heavy enc4096 block, which the gate tier does not carry, so it is reported as a failure naming the entry.
-//! lstsq rows are containment-only until Harper's `cond_row k_row scale_row containment_only containment_reason` columns land
-//! (the 5 trailing `TODO` fields); the `k_row` tightness bound is a follow-up commit.
+//! lstsq value rows carry the format-2 cond columns (16.LA.5, scripts/la_cond_cols.py la_cond_cols_lstsq); the replay is
+//! containment-only for now (the `k_row` tightness bound is a follow-up commit), the columns themselves are checked below.
 
 use crate::common::goldens::golden_dir;
 use zenith_bound::array::{BallMat, BallVec};
@@ -21,8 +21,15 @@ const PRECS: [usize; 3] = [53, 113, 192];
 const QR_EXACT_CERTIFIED: [&str; 2] = ["qr.refuse.zero2", "qr.refuse.onebyone_zero"];
 /// lstsq rows whose refusal is certified exactly (an exact `0 ± 0` column, 16.LA3.3). Not yet in the 16.LA.4 list (asked of Spence).
 const LSTSQ_EXACT_CERTIFIED: [&str; 1] = ["lstsq.refuse.zero_col_3x2"];
-/// Trailing tightness columns of an lstsq value row (Harper's helper replaces the TODO fields).
-const LSTSQ_COND_COLS: usize = 5;
+/// Trailing format-2 cond columns of an lstsq value row with `n >= 1` (16.LA.5): `cond_row k_row scale_row containment_only reason
+/// rref`. `m x 0` rows (empty x) and refusal rows have none.
+const LSTSQ_COND_COLS: usize = 6;
+/// 16.LA.5 lstsq `reason` tokens, keyed by `containment_only`.
+const LSTSQ_REASONS: [(&str, &str); 3] = [
+    ("0", "tight"),
+    ("1", "k_row_too_large"),
+    ("1", "lstsq_x_zero"),
+];
 
 /// Value rows whose computed `σ` ball reaches 0 at a replay precision, pinned to the measured `Resource "undecided_rank"`
 /// (16.LA3.3, measured 2026-10-29; matched on the id after the `qr.`/`lstsq.` prefix). A pin that starts returning a value fails
@@ -331,7 +338,7 @@ fn replay_qr_with(toks: &[&str], prec: usize, check: Check) -> Result<(), String
     Ok(())
 }
 
-/// One lstsq row at `prec`: `case_id mxn blen A[m*n] b[blen] (x[n] x_lohi[2n] COND_COLS[5] | ERR v d)`.
+/// One lstsq row at `prec`: `case_id mxn blen A[m*n] b[blen] (x[n] x_lohi[2n] COND_COLS[6] | ERR v d)`.
 fn replay_lstsq(toks: &[&str], prec: usize) -> Result<(), String> {
     let id = toks.first().ok_or("empty row")?;
     let (m, n) = dims(toks.get(1).ok_or("no dims")?)?;
@@ -432,6 +439,8 @@ fn qr_width(m: usize, n: usize, refusal: bool) -> Result<usize, String> {
 fn lstsq_width(m: usize, n: usize, blen: usize, refusal: bool) -> Result<usize, String> {
     let tail = if refusal {
         3
+    } else if n == 0 {
+        0
     } else {
         add(mul(3, n)?, LSTSQ_COND_COLS)?
     };
@@ -476,20 +485,93 @@ fn la3_lstsq_gate_rows_match_header_count_and_field_widths() -> Result<(), Strin
     check_widths(&gold_text("la_lstsq.txt")?, true).map(|_| ())
 }
 
+/// The cond columns of every lstsq value row with `n >= 1` (16.LA.5).
+fn lstsq_cond_tail<'a>(toks: &'a [&'a str]) -> Result<&'a [&'a str], String> {
+    toks.len()
+        .checked_sub(LSTSQ_COND_COLS)
+        .and_then(|k| toks.get(k..))
+        .ok_or_else(|| format!("{:?}: short row (cond columns)", toks.first()))
+}
+
 #[test]
-fn la3_lstsq_cond_columns_are_todo_until_harpers_helper() -> Result<(), String> {
+fn la3_lstsq_cond_columns_are_format_2_16_la_5() -> Result<(), String> {
     let text = gold_text("la_lstsq.txt")?;
+    let mut seen = 0_usize;
     for toks in data_rows(&text).filter(|t| !t.contains(&"ERR")) {
-        let tail = toks
-            .len()
-            .checked_sub(LSTSQ_COND_COLS)
-            .and_then(|k| toks.get(k..))
-            .ok_or("short row (cond columns)")?;
-        if tail.len() != LSTSQ_COND_COLS || tail.iter().any(|t| *t != "TODO") {
+        if dims(toks.get(1).ok_or("no dims")?)?.1 == 0 {
+            continue;
+        }
+        let id = toks.first().ok_or("empty row")?;
+        let t = lstsq_cond_tail(&toks)?;
+        let [cond, k_row, scale, co, reason, rref] = t else {
+            return Err(format!("{id}: cond columns {t:?}"));
+        };
+        for (name, v) in [("cond_row", cond), ("scale_row", scale), ("rref", rref)] {
+            let (p, q) = v
+                .split_once('/')
+                .ok_or_else(|| format!("{id}: {name} {v} not p/q"))?;
+            let ok = !p.is_empty()
+                && p.bytes().all(|c| c.is_ascii_digit())
+                && !q.is_empty()
+                && q.bytes().all(|c| c.is_ascii_digit())
+                && !q.starts_with('0');
+            if !ok {
+                return Err(format!(
+                    "{id}: {name} {v} is not a nonnegative p/q with q > 0"
+                ));
+            }
+        }
+        let k = k_row
+            .parse::<i64>()
+            .map_err(|e| format!("{id}: k_row {e}"))?;
+        if !LSTSQ_REASONS.contains(&(*co, *reason)) {
             return Err(format!(
-                "{:?}: cond columns {tail:?} (tightness is a follow-up commit)",
-                toks.first()
+                "{id}: containment_only {co} reason {reason} (16.LA.5)"
             ));
+        }
+        let max_prec = PRECS.iter().max().ok_or("no PRECS")?;
+        let big = i64::try_from(*max_prec).map_err(|e| e.to_string())?;
+        let too_large = k.checked_add(8).ok_or("k_row overflow")? >= big;
+        if *reason != "lstsq_x_zero" && too_large != (*co == "1") {
+            return Err(format!(
+                "{id}: k_row {k} vs containment_only {co} (k_row + 8 >= {big})"
+            ));
+        }
+        if (*reason == "lstsq_x_zero") != (*scale == "0/1") {
+            return Err(format!(
+                "{id}: reason {reason} with scale_row {scale} (x = 0 iff lstsq_x_zero)"
+            ));
+        }
+        seen = add(seen, 1)?;
+    }
+    if seen == 0 {
+        return Err("no lstsq value rows".to_string());
+    }
+    Ok(())
+}
+
+/// 16.LA.5: an exact-fit row (r = 0) reduces cond_row to the first term `|| |A^+||A| ||_inf`. `exact_fit.3x2`:
+/// A = [[1,0],[0,1],[1,1]], b = [1,2,3], x = [1,2], |A^+| = [[2,1,1],[1,2,1]]/3, |A^+||A| = [[1,2/3],[2/3,1]]: cond 5/3,
+/// k_row = 4 + ceil(log2 3) + ceil(log2 5/3) = 7, scale 2, rref = 3 * max(1 + 4/3, 2/3 + 2) = 8. `x_zero.3x2`: x = 0, r = b != 0 (A^T r = 0, so rref is 0).
+#[test]
+fn la3_lstsq_exact_fit_and_x_zero_cond_rows_16_la_5() -> Result<(), String> {
+    let text = gold_text("la_lstsq.txt")?;
+    for (id, want) in [
+        (
+            "lstsq.exact_fit.3x2",
+            ["5/3", "7", "2/1", "0", "tight", "8/1"],
+        ),
+        (
+            "lstsq.x_zero.3x2",
+            ["1/1", "6", "0/1", "1", "lstsq_x_zero", "0/1"],
+        ),
+    ] {
+        let toks = data_rows(&text)
+            .find(|t| t.first() == Some(&id))
+            .ok_or_else(|| format!("{id}: row missing"))?;
+        let t = lstsq_cond_tail(&toks)?;
+        if t != want {
+            return Err(format!("{id}: cond columns {t:?}, want {want:?}"));
         }
     }
     Ok(())

@@ -91,3 +91,54 @@ def la_cond_cols(A, perm, L, U, scale_row, rref_kind, x=None):
 
 def cond_tokens(c):
     return [_q(c.cond_row), str(c.k_row), _q(c.scale_row), str(c.containment_only), c.reason, _q(c.rref)]
+
+# ---- LA3 lstsq (Rusty 2026-10-29; Spence's definition, CONTRACT 16.LA.5). Separate from la_cond_cols (square LU) above. ----
+LSTSQ_FORMAT_LINES = [
+    "lstsq cond (16.LA.5): with A m x n full column rank, A^+ = (A^T A)^-1 A^T, x = A^+ b, r = b - A x (all exact):",
+    "  cond_row = ( || |A^+||A| ||_inf * ||x||_inf + || |(A^T A)^-1| |A^T| |r| ||_inf ) / ||x||_inf  (exact-fit r = 0: first term only; residual term not capped)",
+    "  k_row = 4 + ceil(log2 m) + ceil(log2 cond_row) (m = row count); scale_row = ||x||_inf",
+    "  rref (diagnostic, never a gate) = m * || |A^+||A||x| + |(A^T A)^-1||A^T||r| ||_inf",
+    f"  containment_only reason: 0 tight | 1 k_row_too_large (k_row + 8 >= {max(PRECS)}) | 1 lstsq_x_zero (x = 0: cond_row and k_row from the first term || |A^+||A| ||_inf only)",
+]
+
+def _inv_exact(N):
+    """Exact inverse of a nonsingular square rational matrix (Gauss-Jordan, nonzero pivot)."""
+    n = len(N); M = [[F(v) for v in r] + [F(int(i == j)) for j in range(n)] for i, r in enumerate(N)]
+    for c in range(n):
+        p = next(i for i in range(c, n) if M[i][c] != 0); M[c], M[p] = M[p], M[c]
+        pv = M[c][c]; M[c] = [v / pv for v in M[c]]
+        for i in range(n):
+            if i != c and M[i][c] != 0:
+                f = M[i][c]; M[i] = [a - f * b for a, b in zip(M[i], M[c])]
+    return [r[n:] for r in M]
+
+def _mm(X, Y):
+    return [[sum((X[i][k] * Y[k][j] for k in range(len(Y))), F(0)) for j in range(len(Y[0]))] for i in range(len(X))]
+
+def _mv(X, v):
+    return [sum((a * b for a, b in zip(r, v)), F(0)) for r in X]
+
+def _abs(X):
+    return [[abs(v) for v in r] for r in X]
+
+def la_cond_cols_lstsq(A, b, x):
+    """CondCols for an lstsq value row (16.LA.5). A m x n, m >= n >= 1, full column rank; x the exact solution."""
+    A = [[F(v) for v in r] for r in A]; b = [F(v) for v in b]; x = [F(v) for v in x]
+    m, n = len(A), len(A[0]); assert m >= n >= 1 and len(b) == m and len(x) == n
+    At = [[A[i][j] for i in range(m)] for j in range(n)]
+    Ni = _inv_exact(_mm(At, A)); Ap = _mm(Ni, At)
+    r = [bi - ai for bi, ai in zip(b, _mv(A, x))]
+    assert all(v == 0 for v in _mv(At, r)), "la_cond_cols_lstsq: x is not the least-squares solution"
+    T1 = _mm(_abs(Ap), _abs(A)); T2 = _mm(_abs(Ni), _abs(At))
+    t1 = max(sum(row, F(0)) for row in T1)
+    t2v = _mv(T2, [abs(v) for v in r]); t2 = max(t2v)
+    xn = scale_row_lstsq(x)
+    rref = F(m) * max(u + w for u, w in zip(_mv(T1, [abs(v) for v in x]), t2v))
+    if xn == 0:
+        cond = t1; reason = "lstsq_x_zero"
+    else:
+        cond = (t1 * xn + t2) / xn; reason = None
+    assert cond >= 1
+    k_row = 4 + (m - 1).bit_length() + ceil_log2(cond)
+    if reason is None: reason = "k_row_too_large" if k_row + 8 >= max(PRECS) else "tight"
+    return CondCols(F(cond), k_row, F(xn), int(reason != "tight"), reason, rref)

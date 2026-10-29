@@ -10,7 +10,7 @@ Reuses scripts/gen_la_goldens.py (popguard, oracle pins, exact mpq, Rows spool-t
 header_bytes, enclose_rational, err, gram_schmidt, rmat, hilbert). NOTE: gen_la_goldens.py rewrites slices/qr/SHA256SUMS from its own file set; until gen_lstsq() is folded into it, re-add the la_lstsq.txt line by running this script after it.
 x = argmin ||A x - b||_2 = (A^T A)^-1 A^T b is RATIONAL, so x is computed exactly (mpq) and enclosed at 256 bits by
 enclose_rational (lo == hi iff exact); mpmath at 1200 bits re-checks every enclosure (mp.lu_solve on the normal equations).
-TODO(Harper): cond_row k_row scale_row columns: placeholder field 'TODO' until her gen_la_goldens.py format lands.
+Cond columns (format 2, 16.LA.5): scripts/la_cond_cols.py la_cond_cols_lstsq, via the merged harper/zb-la-golds.
 Spence 2026-10-29: b.len() != m -> ERR DimensionMismatch b_len (checked before n = 0); n = 0 (m x 0, 0 x 0) -> Ok(empty x).
 """
 import os, sys
@@ -24,12 +24,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 G.SPOOL_DIR = os.path.join(os.environ.get("TMPDIR", os.path.join(REPO, "target")), "la-lstsq-spool")
 G.SLICE_OF["lstsq"] = "qr"; G.OP = "lstsq"
 G.rng = __import__("random").Random(f"{G.SEED}:lstsq")
-# HOOK(Harper, harper/zb-la-golds): replace cond_cols() with her importable helper (la_cond_cols or similar). Shape fixed here:
-# 5 trailing fields, in order: cond_row (exact componentwise Skeel cond) k_row (= 4+ceil(log2 n)+ceil(log2 cond_row))
-# scale_row (= ||x||_inf) containment_only (flag) containment_reason. Until then every field is the literal TODO.
-COND_COLS = ("cond_row", "k_row", "scale_row", "containment_only", "containment_reason")
+from la_cond_cols import la_cond_cols_lstsq, cond_tokens, FORMAT_LINES as COND_FORMAT, LSTSQ_FORMAT_LINES  # 16.LA.5 (merged harper/zb-la-golds)
 def cond_cols(A, b, x):
-    return ["TODO"] * len(COND_COLS)
+    return cond_tokens(la_cond_cols_lstsq(A, b, x))
 
 # HOOK(Harper): pinned python-flint arb cross-check of every x enclosure goes here (runs after mp_check). Not implemented.
 def arb_check(A, b, x, encl):
@@ -59,6 +56,8 @@ def corpus(small):
          ("refuse.dupcol_4x2", [[F(i), F(i)] for i in range(1, 5)], [F(1)] * 4),
          ("refuse.wide2x3", [[F(1), F(0), F(0)], [F(0), F(1), F(0)]], [F(1), F(1)]),
          ("refuse.blen_3x2_b2", [[F(1), F(1)], [F(1), F(2)], [F(1), F(3)]], [F(1), F(1)]),
+         ("refuse.blen_3x2_b4", [[F(1), F(1)], [F(1), F(2)], [F(1), F(3)]], [F(1)] * 4),
+         ("x_zero.3x2", [[F(1), F(0)], [F(0), F(1)], [F(0), F(0)]], [F(0), F(0), F(1)]),
          ("empty.3x0", [[], [], []], [F(1)] * 3), ("empty.0x0", [], []),
          ("refuse.blen_3x0_b2", [[], [], []], [F(1)] * 2)]
     if not small:
@@ -69,7 +68,7 @@ def corpus(small):
              for n in [int(c.split("x")[-1]) if c.startswith("hilbert_tall") else 0]]
     return C
 
-EXACT_CERTIFIED = ["lstsq.refuse.zero_col_3x2", "lstsq.refuse.wide2x3", "lstsq.refuse.blen_3x2_b2", "lstsq.refuse.blen_3x0_b2",
+EXACT_CERTIFIED = ["lstsq.refuse.zero_col_3x2", "lstsq.refuse.wide2x3", "lstsq.refuse.blen_3x2_b2", "lstsq.refuse.blen_3x2_b4", "lstsq.refuse.blen_3x0_b2",
                    "lstsq.empty.3x0", "lstsq.empty.0x0"]
 
 def gen(small):
@@ -80,7 +79,7 @@ def gen(small):
         dims = f"{m}x{n}"; head = ["lstsq." + cid, dims, str(len(b))] + [G.q(v) for v in G.flat(A)] + [G.q(v) for v in b]
         if m < n: outs = G.err("DimensionMismatch", "wide")
         elif len(b) != m: outs = G.err("DimensionMismatch", "b_len")
-        elif n == 0: outs = cond_cols(A, b, [])                   # Ok(empty x): zero x fields, zero lohi fields (Spence)
+        elif n == 0: outs = []  # Ok(empty x): zero x fields, zero lohi fields (Spence)
         else:
             x = lstsq_exact(A, b)
             if x is None: outs = G.err("Singular", "rank_deficient")
@@ -95,7 +94,7 @@ HDR = ["op: lstsq",
        "refusals (16.LA.4 format): 'ERR Singular rank_deficient' if rank A < n; 'ERR DimensionMismatch wide' if m < n; 'ERR DimensionMismatch b_len' if len(b) != m (checked before n = 0). n = 0 (m x 0 or 0 x 0): Ok, x empty.",
        "exact-certified (must return the named error, not Resource): " + " ".join(EXACT_CERTIFIED),
        "enclosure: x[n] as lo hi pairs at b = 256, grid 2^e with e = floor(log2|x|) - b + 1 (enclose_rational); re-checked against mpmath (1200 bits, normal equations); python-flint arb hook pending (Harper).",
-       "columns (gate): case_id dims(mxn) blen A[m*n] b[blen] (x[n] x_lohi256[2*n] cond_row k_row scale_row containment_only containment_reason | ERR variant detail)  [last 5 = TODO until Harper's la_cond_cols helper]"]
+       "columns (gate): case_id dims(mxn) blen A[m*n] b[blen] (x[n] x_lohi256[2*n] cond_row k_row scale_row containment_only reason rref | ERR variant detail); m x 0 rows have no x, lohi or cond fields"] + COND_FORMAT + LSTSQ_FORMAT_LINES
 
 def write(path, rows):
     hs = hashlib.sha256()

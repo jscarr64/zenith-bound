@@ -57,5 +57,18 @@ try:
 except AssertionError:
     sys.exit(0)
 sys.exit(9)")" = 0 ] || fail "singular accepted: $(tail -3 "$t/out")"
-st_done gen_la_cond 9   # WANT: cases this script runs (tools/selftest_cases.sh)
+# 10. lstsq (16.LA.5, Rusty): A = [[1],[1]]. Residual b = [1,3]: x = 2, r = [-1,1], |A^+||A| = 1, |(A^TA)^-1||A^T||r| = 1,
+#     cond = (1*2 + 1)/2 = 3/2, k_row = 4 + 1 + 1 = 6, rref = 2*(2 + 1) = 6. Exact fit b = [2,2] (r = 0) reduces to the first term:
+#     cond 1, k_row 5, rref 2*2 = 4. x = 0 (A = [[1],[-1]], b = [1,1], r = b != 0): lstsq_x_zero, cond from the first term (1).
+ck; [ "$(pyc "from la_cond_cols import *; from gmpy2 import mpq as F
+A = [[F(1)], [F(1)]]
+t = cond_tokens(la_cond_cols_lstsq(A, [F(1), F(3)], [F(2)])); assert t == ['3/2', '6', '2/1', '0', 'tight', '6/1'], t
+t = cond_tokens(la_cond_cols_lstsq(A, [F(2), F(2)], [F(2)])); assert t == ['1/1', '5', '2/1', '0', 'tight', '4/1'], t
+t = cond_tokens(la_cond_cols_lstsq([[F(1)], [F(-1)]], [F(1), F(1)], [F(0)])); assert t == ['1/1', '5', '0/1', '1', 'lstsq_x_zero', '2/1'], t
+try:
+    la_cond_cols_lstsq(A, [F(1), F(3)], [F(1)])
+except AssertionError:
+    sys.exit(0)
+sys.exit(9)")" = 0 ] || fail "lstsq cond: $(tail -3 "$t/out")"
+st_done gen_la_cond 10   # WANT: cases this script runs (tools/selftest_cases.sh)
 echo "gen_la_cond selftest: ok"
