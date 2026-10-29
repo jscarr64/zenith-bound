@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exact linear-algebra reference goldens for zenith-bound (zenith-float 2.0).
 
-Pinned oracle: sympy 1.14.0, mpmath 1.3.0. Run it with ~/.local/oracle-venv/bin/python
+Pinned oracle: sympy 1.14.0, mpmath 1.3.0, gmpy2 2.3.2, python-flint 0.9.0 (Arb cross-check of every ln enclosure). Run it with ~/.local/oracle-venv/bin/python
 (the env python3 in the shebang is only a fallback; the version check below rejects other pins).
 Usage:
     gen_la_goldens.py                 write the gate files tests/goldens/slices/<slice>/la_<op>.txt, each slice's
@@ -64,6 +64,19 @@ if sympy.__version__ != SYMPY_PIN or mpmath.__version__ != MPMATH_PIN:
     raise SystemExit(f"gen_la_goldens.py: oracle pin mismatch: sympy {sympy.__version__} (need {SYMPY_PIN}), "
                      f"mpmath {mpmath.__version__} (need {MPMATH_PIN}); run with ~/.local/oracle-venv/bin/python")
 sys.set_int_max_str_digits(0)
+# arb cross-check oracle (Spence spec from Cassie review, 2026-10-29): python-flint (Arb) pinned like sympy/mpmath; gmpy2 pinned too.
+GMPY2_PIN = "2.3.2"
+FLINT_PIN = "0.9.0"
+import gmpy2
+try:
+    import flint
+except ImportError as e:
+    raise SystemExit(f"gen_la_goldens.py: python-flint missing ({e}); run with ~/.local/oracle-venv/bin/python")
+if gmpy2.version() != GMPY2_PIN or flint.__version__ != FLINT_PIN:
+    raise SystemExit(f"gen_la_goldens.py: oracle pin mismatch: gmpy2 {gmpy2.version()} (need {GMPY2_PIN}), "
+                     f"python-flint {flint.__version__} (need {FLINT_PIN}); run with ~/.local/oracle-venv/bin/python")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from la_cond_cols import la_cond_cols, cond_tokens, scale_row_ln, scale_row_solve, FORMAT_LINES as COND_FORMAT
 
 GEN = "scripts/gen_la_goldens.py"
 SEED = 20261024
@@ -274,6 +287,36 @@ def iv_log_abs(x, bits):
     finally:
         iv.prec = old
 
+class ArbMismatch(Exception):
+    pass
+
+def _arf_q(a):
+    m, e = a.man_exp()
+    return F(int(m)) * (F(2) ** int(e))
+
+def arb_log_abs(x, bits):
+    """[lo, hi] rigorous rational bracket of ln|x| from Arb (python-flint), independent of mpmath, at working precision bits."""
+    x = abs(F(x)); old = flint.ctx.prec
+    try:
+        flint.ctx.prec = bits
+        r = flint.arb(flint.fmpq(int(x.numerator), int(x.denominator))).log()
+        assert r.is_finite()
+        lo, hi = _arf_q(r.lower()), _arf_q(r.upper())
+    finally:
+        flint.ctx.prec = old
+    if _os.environ.get("GEN_LA_ARB_FAULT") == "shift":       # selftest hook only (tools/gen_la_arb_selftest.sh): a wrong Arb bracket must fail
+        lo, hi = lo + 1, hi + 1
+    return lo, hi
+
+def arb_cross_check(lo, hi, a2, b2, x, bits):
+    """The emitted [lo, hi] must contain the Arb bracket at 2*bits+64, and the mpmath.iv enclosure [a2, b2] at the same
+    width must intersect it (both are rigorous, so disjoint means one oracle is wrong). Any disagreement fails the run."""
+    A, B = arb_log_abs(x, 2 * bits + 64)
+    if not (lo <= A <= B <= hi):
+        raise ArbMismatch(f"arb bracket not inside the emitted enclosure: case={CASE} bits={bits}")
+    if max(A, a2) > min(B, b2):
+        raise ArbMismatch(f"arb and mpmath.iv enclosures disjoint: case={CASE} bits={bits}")
+
 def enclose_log(x, bits):
     a, b = iv_log_abs(x, bits)
     if a == 0 and b == 0: return (0, 0), (0, 0)
@@ -283,6 +326,7 @@ def enclose_log(x, bits):
     # containment check: independent higher-precision enclosure must lie inside
     a2, b2 = iv_log_abs(x, 2 * bits + 64)
     assert dyval(*lo) <= a2 <= b2 <= dyval(*hi)
+    arb_cross_check(dyval(*lo), dyval(*hi), a2, b2, x, bits)
     if x == 1 or x == -1: assert dyval(*lo) <= 0 <= dyval(*hi)
     return lo, hi
 
@@ -557,12 +601,19 @@ def gen_solve():
         n = len(A); b = [F(1)] * n if cid.startswith("hilbert") else [F(i + 1, 2) - 1 for i in range(n)]
         x = solve(A, b)
         outs = err("Singular", "singular") if x is None else [q(v) for v in x]
+        if x is not None:
+            perm, L, U = lu_pp(A); outs += cond_tokens(la_cond_cols(A, perm, L, U, scale_row_solve(x), "solve", x))
         rows.append((" ".join(["solve." + cid, str(n)] + [q(v) for v in flat(A)] + [q(v) for v in b] + outs), is_heavy(A, b)))
     hdr = ["op: solve",
            "canonical: unique x with A x = b, exact rationals. b = ones for Hilbert cases, b[i] = (i+1)/2 - 1 otherwise. Any singular A (det = 0) -> refusal 'ERR Singular singular'.",
-           "columns: case_id dims(n) A[n*n] b[n] (x[n] | ERR Singular singular)"]
-    expect = lambda m, n: (n * n + n, {n})
+           "columns: case_id dims(n) A[n*n] b[n] (x[n] cond_row k_row scale_row containment_only reason rref | ERR Singular singular)"] + COND_FORMAT
+    expect = lambda m, n: (n * n + n, {n + 6})
     return hdr, rows, expect
+
+def logdet_cond(A):
+    """format-2 cond columns of a nonsingular logdet row (scale_row = 1: ln output)."""
+    perm, L, U = lu_pp(A)
+    return cond_tokens(la_cond_cols(A, perm, L, U, scale_row_ln(), "logdet"))
 
 def gen_logdet():
     rows = Rows(); ext = {b: Rows() for b in LOGDET_EXT_BITS}
@@ -570,7 +621,7 @@ def gen_logdet():
         begin("logdet." + cid)
         d = det(A); heavy = is_heavy(A)
         if d == 0: outs = err("Singular", "singular")
-        else: outs = [str(1 if d > 0 else -1), q(d), pair(*enclose_log(d, BITS))]
+        else: outs = [str(1 if d > 0 else -1), q(d), pair(*enclose_log(d, BITS))] + logdet_cond(A)
         rows.append(row("logdet." + cid, dims_sq(A), A, outs, heavy))
         if not heavy:
             for b in LOGDET_EXT_BITS:
@@ -583,7 +634,7 @@ def gen_logdet():
             d = det(A); assert dk is None or d == dk, cid   # gate: identity re-checked against the LU determinant
         else: d = dk                                       # heavy: exact identity (prod D, Sylvester, block product, KMS closed form)
         if d == 0: outs = err("Singular", "singular")
-        else: outs = [str(1 if d > 0 else -1), q(d), pair(*enclose_log(d, BITS))]
+        else: outs = [str(1 if d > 0 else -1), q(d), pair(*enclose_log(d, BITS))] + logdet_cond(A)
         rows.append(row("logdet." + cid, dims_sq(A), A, outs, heavy))
         for b in LOGDET_EXT_BITS:
             ext[b].append(row("logdet." + cid, dims_sq(A), A, outs if d == 0 else [pair(*enclose_log(d, b))], True)[0])
@@ -592,9 +643,10 @@ def gen_logdet():
            "exact form: ln(det) with det the exact rational in the row (sympy: log(Rational(det))).",
            "enclosure: lo hi pair enclosing ln|det|; at bits b the grid is 2^e with e = floor(log2 max(|lo_raw|,|hi_raw|)) - b + 1; computed with mpmath.iv.log at b+64 and checked to contain an independent mpmath.iv enclosure at 2*b+64. Gate and heavy files: b = 256 for every row. Extra widths " + str(LOGDET_EXT_BITS) + " for the gate-tier cases and every cosmo_* case (same case_ids) are heavy-tier files la_logdet_enc<b>_heavy.txt.",
            "cosmo_* rows (cosmology scales): SPD covariances with eigenvalue-scale spread 10^+-300 and 2^+-(10^3..10^6) in one matrix, near-singular SPD with cond ~10^50..10^200, Toeplitz (KMS rho^|i-j|, tridiagonal), block-diagonal, diag + low-rank, Fisher J^T C^-1 J. Heavy rows (n = 32/64, 2^+-10^5..10^6) take det from an exact identity (prod D of L D L^T, Sylvester det(D + U U^T) = det D det(I + U^T D^-1 U), block product, KMS (1-rho^2)^(n-1)); gate rows re-check it against the LU determinant.",
-           "columns (gate): case_id dims(n) A[n*n] (sign det lo256 hi256 | ERR Singular singular)",
-           "columns (heavy): case_id dims(n) A[n*n] (sign det lo256 hi256 | ERR Singular singular)"]
-    expect = lambda m, n: (n * n, {4})
+           "columns (gate): case_id dims(n) A[n*n] (sign det lo256 hi256 cond_row k_row scale_row containment_only reason rref | ERR Singular singular)",
+           "columns (heavy): case_id dims(n) A[n*n] (sign det lo256 hi256 cond_row k_row scale_row containment_only reason rref | ERR Singular singular)",
+           f"arb cross-check: every ln|det| enclosure must contain a python-flint {FLINT_PIN} (Arb) bracket at 2*b+64 that intersects the mpmath.iv one (gmpy2 {GMPY2_PIN}); any disagreement fails the generator (exit 6)."] + COND_FORMAT
+    expect = lambda m, n: (n * n, {10})
     exts = {f"enc{b}": (hdr[:3] + [f"enc{b}: the b = {b} ln|det| enclosure of every gate-tier logdet case and every cosmo_* case (same case_ids, same order as la_logdet.txt then la_logdet_heavy.txt); sign, det and the 256-bit pair are in those files.",
                                f"columns (heavy): case_id dims(n) A[n*n] (lo{b} hi{b} | ERR Singular singular)"],
                         ext[b], lambda m, n: (n * n, {2})) for b in LOGDET_EXT_BITS}
@@ -959,6 +1011,9 @@ def main():
         print(f"gen_la_goldens: CASE BUDGET exceeded ({a.case_budget:g} s): op={OP} case={CASE} "
               f"elapsed_s={time.monotonic() - T0:.3f}; no row finished within the budget. Not a pass.", file=sys.stderr, flush=True)
         sys.exit(5)
+    except ArbMismatch as e:
+        print(f"gen_la_goldens: ARB CROSS-CHECK FAILED: {e}. Not a pass.", file=sys.stderr, flush=True)
+        sys.exit(6)
 
 def run(a):
     if a.check is not None:
