@@ -1010,3 +1010,6 @@ fn from_to_exact_num_sets_and_p9() -> Result<(), String> {
 
 // Harper S2 gate edges (2026-10-25): signed zero, i64 exponent ends, huge precision, cancellation, round trips.
 mod harper_s2_edges;
+
+// Harper S2 (2026-10-29): cmp_exact_diff wide gap with the radius above zf EXPONENT_MAX.
+mod harper_s2_diff_edge;
