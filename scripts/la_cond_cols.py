@@ -3,20 +3,26 @@
 Importable helper, shared by scripts/gen_la_goldens.py (la_logdet, la_solve) and reusable for the LA3 lstsq golds (Rusty).
 Pure exact arithmetic on gmpy2.mpq (no floats, no sympy). Inputs are exact rationals (anything gmpy2.mpq accepts).
 
-    la_cond_cols(A, perm, L, U, scale_row, rref_kind, x=None) -> CondCols
+    la_cond_cols(A, perm, L, U, scale_row, rref_kind, x=None) -> CondCols   (square: logdet, solve)
         A          n x n exact matrix (list of rows), nonsingular
         perm, L, U exact partial-pivoting factors with P A = L U (perm[i] = row of A placed at row i of P A)
         scale_row  exact rational >= 0: scale_row_ln() for ln outputs (logdet), scale_row_solve(x) for solve,
                    scale_row_lstsq(x) for lstsq (both ||x||_inf)
         rref_kind  "logdet" (trace form) or "solve" (forward-error form; needs x)
+    make_cond_cols(cond_row, dim, scale_row, rref) -> CondCols
+        the shared tail: k_row from (cond_row, dim), containment_only and reason from k_row. Every op builds its CondCols
+        here, so cond_tokens and FORMAT_LINES hold for all of them. LA3 (Rusty) adds la_cond_cols_lstsq next to la_cond_cols,
+        with Spence's cond_row = (|| |A^+||A| ||*||x|| + || |(A^TA)^-1||A^T||r| ||)/||x|| and dim = m (k_row uses ceil(log2 m)),
+        and returns make_cond_cols(cond_row, m, scale_row_lstsq(x), rref).
     cond_tokens(c) -> the six row tokens, in COLUMNS order, formatted as in FORMAT_LINES.
 
 Definitions (G = P^T |L| |U|, so |A| <= G entrywise; |.| entrywise; gamma_n ~ n * 2^-prec, first order):
     cond_row = || |A^-1| G ||_inf                        exact rational >= 1 (componentwise Skeel condition with LU growth)
-    k_row    = 4 + ceil(log2 n) + ceil(log2 cond_row)    exact integer
+    k_row    = 4 + ceil(log2 dim) + ceil(log2 cond_row)  exact integer; dim = n (square ops), m rows (lstsq)
     scale_row: 1 (ln outputs), ||x||_inf (solve, lstsq)
     containment_only, reason: 1 k_row_too_large when prec > k_row + 8 holds for no replay prec in PRECS
-                              (k_row + 8 >= max(PRECS)); else 0 tight
+                              (k_row + 8 >= max(PRECS)); else 0 tight. Prec-independent: 1 = containment only at every
+                              replay prec; 0 = the bound applies at each prec with prec > k_row + 8 (the harness decides per prec).
     rref (diagnostic only, never a gate): the coefficient c with first-order bound c * 2^-prec from |dA| <= gamma_n G:
         logdet: c = n * tr(|A^-1| G)          (d ln|det A| = tr(A^-1 dA))
         solve : c = n * || |A^-1| G |x| ||_inf (dx = -A^-1 dA x)
@@ -34,7 +40,7 @@ FORMAT_LINES = [
     "cond_row: exact rational p/q = || |A^-1| P^T|L||U| ||_inf (componentwise Skeel condition with growth from the exact L, U of la_lu's pivoting)",
     "k_row: decimal integer = 4 + ceil(log2 n) + ceil(log2 cond_row), exact",
     "scale_row: exact rational p/q; 1/1 for ln outputs (logdet), ||x||_inf for solve",
-    f"containment_only reason: 0 tight | 1 k_row_too_large (k_row + 8 >= {max(PRECS)}: no replay prec in {{{', '.join(map(str, PRECS))}}} has prec > k_row + 8)",
+    f"containment_only reason: 0 tight | 1 k_row_too_large (k_row + 8 >= {max(PRECS)}: no replay prec in {{{', '.join(map(str, PRECS))}}} has prec > k_row + 8). The flag does not depend on prec: 1 means containment only at EVERY replay prec; 0 does not mean tight at every prec, the replay still applies prec > k_row + 8 per prec",
     "rref: exact rational p/q, diagnostic only (never a gate): c with first-order bound c*2^-prec from |dA| <= gamma_n P^T|L||U|, gamma_n ~ n*2^-prec; logdet c = n*tr(|A^-1| P^T|L||U|), solve c = n*|| |A^-1| P^T|L||U| |x| ||_inf",
     "tightness (replay): rad <= 2^(k_row - prec) * max(|v|, scale_row) when prec > k_row + 8, containment only otherwise",
 ]
@@ -79,15 +85,20 @@ def la_cond_cols(A, perm, L, U, scale_row, rref_kind, x=None):
         for j in range(n): assert abs(F(A[i][j])) <= G[i][j]
     Ai = [[abs(v) for v in r] for r in _inverse(perm, L, U)]
     M = [[sum((Ai[i][k] * G[k][j] for k in range(n)), F(0)) for j in range(n)] for i in range(n)]
-    cond = max(sum(r, F(0)) for r in M); assert cond >= 1
-    k_row = 4 + (n - 1).bit_length() + ceil_log2(cond)
-    co = int(k_row + 8 >= max(PRECS))
+    cond = max(sum(r, F(0)) for r in M)
     if rref_kind == "logdet": rref = F(n) * sum((M[i][i] for i in range(n)), F(0))
     elif rref_kind == "solve":
         assert x is not None
         rref = F(n) * max(sum((M[i][j] * abs(F(x[j])) for j in range(n)), F(0)) for i in range(n))
     else: raise ValueError(f"la_cond_cols: rref_kind {rref_kind!r}")
-    return CondCols(F(cond), k_row, F(scale_row), co, "k_row_too_large" if co else "tight", rref)
+    return make_cond_cols(cond, n, scale_row, rref)
+
+def make_cond_cols(cond_row, dim, scale_row, rref):
+    """CondCols from an exact cond_row >= 1 and the op dimension dim >= 1 (n for square ops, m for lstsq); see the module doc."""
+    cond_row = F(cond_row); assert cond_row >= 1 and dim >= 1
+    k_row = 4 + (dim - 1).bit_length() + ceil_log2(cond_row)
+    co = int(k_row + 8 >= max(PRECS))
+    return CondCols(cond_row, k_row, F(scale_row), co, "k_row_too_large" if co else "tight", F(rref))
 
 def cond_tokens(c):
     return [_q(c.cond_row), str(c.k_row), _q(c.scale_row), str(c.containment_only), c.reason, _q(c.rref)]

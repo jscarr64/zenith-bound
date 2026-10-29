@@ -201,11 +201,15 @@ fn logdet_rows(text: &str) -> Result<Vec<LogdetRow>, String> {
 }
 
 /// The red replay body for one prec: plans every row's rule (refusal, enforced bound, containment) and stops at the missing API.
-fn replay_red(prec: u32) -> Result<(), String> {
-    let rows = logdet_rows(&logdet_gate_text()?)?;
+fn replay_red(prec: u32, prefix: &str) -> Result<(), String> {
+    let all = logdet_rows(&logdet_gate_text()?)?;
+    let rows: Vec<&LogdetRow> = all.iter().filter(|r| r.id.starts_with(prefix)).collect();
+    if rows.is_empty() {
+        return Err(format!("no la_logdet rows match {prefix:?}"));
+    }
     let (mut refusals, mut bound, mut contain) = (0_usize, 0_usize, 0_usize);
     let mut widest = None;
-    for r in &rows {
+    for r in rows.iter() {
         if r.refusal {
             refusals = refusals.checked_add(1).ok_or("count overflow")?;
             continue;
@@ -221,7 +225,7 @@ fn replay_red(prec: u32) -> Result<(), String> {
         }
     }
     Err(format!(
-        "not implemented: BallMat::logdet (CONTRACT 16.LA1.4, LA2 src/lu.rs) is not on main; prec {prec}: {} rows planned \
+        "not implemented: BallMat::logdet (CONTRACT 16.LA1.4, LA2 src/lu.rs) is not on main; prec {prec}: {} {prefix}* rows planned \
          ({refusals} refusal, {bound} k_row bound, {contain} containment only; last bound row {widest:?})",
         rows.len()
     ))
@@ -326,21 +330,32 @@ fn la1_tightness_rule_is_enforced_only_above_k_row_plus_8() -> Result<(), String
 #[test]
 #[ignore = "red: CONTRACT 16.LA1.4: BallMat::logdet (LA2, src/lu.rs) not implemented; 16.LA1.7 replay of all la_logdet rows at prec 53"]
 fn la1_logdet_rows_replay_through_zb_prec53() -> Result<(), String> {
-    replay_red(53)
+    replay_red(53, "logdet.")
 }
 
 /// As above at prec 113.
 #[test]
 #[ignore = "red: CONTRACT 16.LA1.4: BallMat::logdet (LA2, src/lu.rs) not implemented; 16.LA1.7 replay of all la_logdet rows at prec 113"]
 fn la1_logdet_rows_replay_through_zb_prec113() -> Result<(), String> {
-    replay_red(113)
+    replay_red(113, "logdet.")
 }
 
 /// As above at prec 192.
 #[test]
 #[ignore = "red: CONTRACT 16.LA1.4: BallMat::logdet (LA2, src/lu.rs) not implemented; 16.LA1.7 replay of all la_logdet rows at prec 192"]
 fn la1_logdet_rows_replay_through_zb_prec192() -> Result<(), String> {
-    replay_red(192)
+    replay_red(192, "logdet.")
+}
+
+/// Red until slice LA1/LA2 lands zb logdet (the LA4 cosmo rows are tracked under mutants 1300..=1399): the `cosmo_*` rows at every
+/// replay prec, kept as their own CONTRACT LA4.2 marker so tools/la4_red_markers.sh keeps LA4 from being marked done meanwhile.
+#[test]
+#[ignore = "red: not implemented: zb logdet (CONTRACT LA4.2: sign/det/ln enclosure on the cosmo_* la_logdet gate rows; API from slice LA1); un-ignore when src/cholesky.rs exports it"]
+fn la4_logdet_cosmo_rows_replay_through_zb() -> Result<(), String> {
+    for prec in REPLAY_PRECS {
+        replay_red(prec, "logdet.cosmo_")?;
+    }
+    Ok(())
 }
 
 /// Every cosmo family keeps at least one gate row (Spence 2026-10-24) even when its big rows live in the heavy tier.
