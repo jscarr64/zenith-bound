@@ -1,12 +1,12 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -451,7 +451,7 @@
- /// The ball `[l, h]`: `mid = round((l + h) / 2, prec)`, `rad = max(h - mid, mid - l)` rounded up.
- fn result(op: &'static str, l: &ExactNum, h: &ExactNum, prec: Precision) -> BoundResult<Ball> {
+@@ -513,7 +513,7 @@
      let wide = prec.saturating_add(2);
--    let mid = round(l, wide, MID_RM).add(h, wide, MID_RM).ldexp(-1, prec, MID_RM);
-+    let mid = round(l, wide, MID_RM).add(h, wide, MID_RM).ldexp(0, prec, MID_RM);
+     let mid = round(l, wide, MID_RM)
+         .add(h, wide, MID_RM)
+-        .ldexp(-1, prec, MID_RM);
++        .ldexp(0, prec, MID_RM);
      if !finite(&mid) {
          return Ball::all_reals(prec);
      }
