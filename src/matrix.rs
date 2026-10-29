@@ -501,6 +501,72 @@ impl BallMat {
     }
 }
 
+/// The skeleton refusal of an LA op whose algorithm has not landed yet.
+fn not_implemented(op: &'static str) -> BoundError {
+    BoundError::Resource {
+        op,
+        detail: "not_implemented",
+    }
+}
+
+impl BallMat {
+    /// Forward substitution `T⁻¹b` on the lower triangle (CONTRACT 16.S6.12.1).
+    /// Not implemented yet: returns Resource "not_implemented".
+    ///
+    /// # Errors
+    /// `Resource` "not_implemented" (16.S6.12.2 errors once implemented).
+    pub fn solve_lower(
+        &self,
+        _b: &BallVec,
+        _unit_diag: bool,
+        _prec: Precision,
+    ) -> BoundResult<BallVec> {
+        Err(not_implemented("BallMat::solve_lower"))
+    }
+
+    /// Backward substitution `T⁻¹b` on the upper triangle (CONTRACT 16.S6.12.1).
+    /// Not implemented yet: returns Resource "not_implemented".
+    ///
+    /// # Errors
+    /// `Resource` "not_implemented" (16.S6.12.2 errors once implemented).
+    pub fn solve_upper(
+        &self,
+        _b: &BallVec,
+        _unit_diag: bool,
+        _prec: Precision,
+    ) -> BoundResult<BallVec> {
+        Err(not_implemented("BallMat::solve_upper"))
+    }
+
+    /// Many-RHS forward substitution, column by column (CONTRACT 16.S6.12.1).
+    /// Not implemented yet: returns Resource "not_implemented".
+    ///
+    /// # Errors
+    /// `Resource` "not_implemented" (16.S6.12.2 errors once implemented).
+    pub fn solve_lower_mat(
+        &self,
+        _b: &BallMat,
+        _unit_diag: bool,
+        _prec: Precision,
+    ) -> BoundResult<BallMat> {
+        Err(not_implemented("BallMat::solve_lower_mat"))
+    }
+
+    /// Many-RHS backward substitution, column by column (CONTRACT 16.S6.12.1).
+    /// Not implemented yet: returns Resource "not_implemented".
+    ///
+    /// # Errors
+    /// `Resource` "not_implemented" (16.S6.12.2 errors once implemented).
+    pub fn solve_upper_mat(
+        &self,
+        _b: &BallMat,
+        _unit_diag: bool,
+        _prec: Precision,
+    ) -> BoundResult<BallMat> {
+        Err(not_implemented("BallMat::solve_upper_mat"))
+    }
+}
+
 /// zf NaN error kinds from a product step map as in S1 (`arith::classify`, CONTRACT O2): `DivisionByZero` is `Domain`,
 /// `InvalidArgument` is `InvalidArgument`, a NaN without an error kind is `Representation`.
 #[cfg(test)]
