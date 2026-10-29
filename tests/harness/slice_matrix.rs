@@ -1416,13 +1416,14 @@ fn s6_tri_mat_matches_vec_columns() -> Result<(), String> {
     let bm = mat(3, 2, &bvals)?;
     let bcols: [[i64; 3]; 2] = [[1, -2, 5], [4, 0, 3]]; // the columns of bvals
     for unit in [false, true] {
-        for ((vname, fv), (mname, fm)) in TRI_VEC.into_iter().zip(TRI_MAT) {
-            let t = if vname == "solve_lower" {
-                &lower
+        for ((vname, fv), (mname, _)) in TRI_VEC.into_iter().zip(TRI_MAT) {
+            // direct public calls (not the fn table) so the _mat methods are exercised by name
+            let (t, xm) = if vname == "solve_lower" {
+                (&lower, lower.solve_lower_mat(&bm, unit, 53))
             } else {
-                &upper
+                (&upper, upper.solve_upper_mat(&bm, unit, 53))
             };
-            let xm = ok(mname, fm(t, &bm, unit, 53))?;
+            let xm = ok(mname, xm)?;
             if xm.nrows() != 3 || xm.ncols() != 2 {
                 return Err(format!(
                     "tri.mat {mname}: want 3x2, got {}x{}",
