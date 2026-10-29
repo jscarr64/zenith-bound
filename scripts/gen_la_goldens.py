@@ -928,11 +928,24 @@ def first_diff_line(a, b):
             if la != lb: return n
         return n + 1
 
-def sums_header(slice_dir):
-    p = os.path.join(slice_dir, "SHA256SUMS")
-    if os.path.exists(p):
-        return "".join(l for l in open(p, encoding="utf-8") if l.startswith("#"))
-    return ""
+def merge_sums(path, owned):
+    """SHA256SUMS text with only the generator's own lines rewritten. owned maps file name -> sha256 hex.
+    Every other line (comments, other owners' files such as LA3 la_lstsq.txt) stays byte-identical and in place;
+    an owned line already present is replaced in place; a missing owned name is inserted after the last data line
+    whose name sorts before it (else before the first data line, else at the end). A new file gets only the owned lines."""
+    lines = open(path, encoding="utf-8", newline="").read().splitlines(keepends=True) if os.path.exists(path) else []
+    if lines and not lines[-1].endswith("\n"): lines[-1] += "\n"
+    name = lambda l: l.split()[1] if l.strip() and not l.startswith("#") and len(l.split()) == 2 else None
+    seen = set()
+    for i, l in enumerate(lines):
+        k = name(l)
+        if k in owned: lines[i] = f"{owned[k]}  {k}\n"; seen.add(k)
+    for k in sorted(set(owned) - seen):
+        data = [i for i, l in enumerate(lines) if name(l) is not None]
+        before = [i for i in data if name(lines[i]) < k]
+        at = before[-1] + 1 if before else (data[0] if data else len(lines))
+        lines.insert(at, f"{owned[k]}  {k}\n")
+    return "".join(lines)
 
 def read_sums(p):
     return {l.split()[1]: l.split()[0] for l in open(p) if l.strip() and not l.startswith("#")} if os.path.exists(p) else {}
@@ -1043,8 +1056,8 @@ def run(a):
     for sl, t in sorted(out.items()):
         d = os.path.join(SLICES, sl)
         for k, (_, n) in sorted(t["gate"].items()): print(f"wrote {sl}/{k} ({n} bytes)")
-        hdr = sums_header(d)
-        open(os.path.join(d, "SHA256SUMS"), "w", encoding="utf-8", newline="\n").write(hdr + "".join(f"{t['gate'][k][0]}  {k}\n" for k in sorted(t["gate"])))
+        p = os.path.join(d, "SHA256SUMS")   # merge, never drop other owners' lines (Rusty, 2026-10-29)
+        open(p + ".tmp", "w", encoding="utf-8", newline="\n").write(merge_sums(p, {k: v[0] for k, v in t["gate"].items()})); os.replace(p + ".tmp", p)
         if a.skip_heavy: print(f"skip-heavy: {sl}/HEAVY.SHA256 left as is (not regenerated)"); continue
         open(os.path.join(d, "HEAVY.SHA256"), "w", encoding="utf-8", newline="\n").write(HEAVY_HDR + "".join(f"{t['heavy'][k][0]}  {k}\n" for k in sorted(t["heavy"])))
         for k, (_, n) in sorted(t["heavy"].items()):
