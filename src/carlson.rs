@@ -131,14 +131,17 @@ fn finite(x: &ExactNum) -> bool {
     !x.is_nan() && !x.is_inf()
 }
 
-/// The working-precision cap `CAP_FACTOR * prec + CAP_EXTRA`.
-fn wp_cap(prec: Precision) -> Precision {
-    prec.saturating_mul(CAP_FACTOR).saturating_add(CAP_EXTRA)
+/// The working-precision cap `CAP_FACTOR * prec + CAP_EXTRA` (`Resource` on overflow: unreachable for a valid `prec`).
+fn wp_cap(op: &'static str, prec: Precision) -> BoundResult<Precision> {
+    prec.checked_mul(CAP_FACTOR)
+        .and_then(|p| p.checked_add(CAP_EXTRA))
+        .ok_or_else(|| resource(op, "precision cap"))
 }
 
-/// The first working precision `prec + GUARD_BITS`.
-fn wp_start(prec: Precision) -> Precision {
-    prec.saturating_add(GUARD_BITS)
+/// The first working precision `prec + GUARD_BITS` (`Resource` on overflow: unreachable for a valid `prec`).
+fn wp_start(op: &'static str, prec: Precision) -> BoundResult<Precision> {
+    prec.checked_add(GUARD_BITS)
+        .ok_or_else(|| resource(op, "working precision"))
 }
 
 fn lambert(
@@ -166,18 +169,18 @@ fn lambert(
             Ok(v) => v,
             Err(_) => match r.exp() {
                 Some(e) if e > 0 => return unbounded(op, prec, strict),
-                Some(_) | None => pow2(EXPONENT_MIN.saturating_sub(1))
+                Some(_) | None => pow2(EXPONENT_MIN)
                     .ok_or_else(|| resource(op, "tiny radius"))?,
             },
         };
-        endpoints(m, rn, prec)
+        endpoints(op, m, rn, prec)?
     };
     let lo = lo_own.as_ref().unwrap_or(m);
     let hi = hi_own.as_ref().unwrap_or(m);
     if !finite(hi) {
         return unbounded(op, prec, strict);
     }
-    let cap = wp_cap(prec);
+    let cap = wp_cap(op, prec)?;
     let lo_in = finite(lo) && inside(lo, cap, &mut cc);
     let (l, h) = match branch {
         Branch::Principal => {
@@ -214,21 +217,29 @@ fn lambert(
 }
 
 /// `(m - r, m + r)`: exact when the exponents are close, else rounded outward at `prec + 2 * GUARD_BITS` bits.
-fn endpoints(m: &ExactNum, rn: ExactNum, prec: Precision) -> (Option<ExactNum>, Option<ExactNum>) {
+fn endpoints(
+    op: &'static str,
+    m: &ExactNum,
+    rn: ExactNum,
+    prec: Precision,
+) -> BoundResult<(Option<ExactNum>, Option<ExactNum>)> {
     let gap = match (m.exponent(), rn.exponent()) {
         (Some(a), Some(b)) => a.checked_sub(b).map(i64::abs),
         (Some(_), None) | (None, Some(_)) | (None, None) => None,
     };
     let close = m.is_zero() || gap.is_some_and(|g| g <= EXACT_GAP);
     if close {
-        (Some(m.sub_full_prec(&rn)), Some(m.add_full_prec(&rn)))
+        Ok((Some(m.sub_full_prec(&rn)), Some(m.add_full_prec(&rn))))
     } else {
-        let p = prec.saturating_add(GUARD_BITS.saturating_mul(2));
+        let p = GUARD_BITS
+            .checked_mul(2)
+            .and_then(|g| prec.checked_add(g))
+            .ok_or_else(|| resource(op, "endpoint precision"))?;
         let neg = num(0).sub(&rn, p, RoundingMode::Up);
-        (
+        Ok((
             Some(neg.add(m, p, RoundingMode::Down)),
             Some(rn.add(m, p, RoundingMode::Up)),
-        )
+        ))
     }
 }
 
@@ -251,7 +262,10 @@ fn inside(x: &ExactNum, cap: Precision, cc: &mut Consts) -> bool {
         if cmp(&x.mul_full_prec(&e_lo), &minus_one).is_some_and(|o| o != Ordering::Greater) {
             return false;
         }
-        wp = wp.saturating_mul(2);
+        match wp.checked_mul(2) {
+            Some(next) => wp = next,
+            None => return false,
+        }
     }
     false
 }
@@ -269,8 +283,8 @@ fn w_bound(
         return Ok(num(0));
     }
     let log_form = *branch == Branch::Lower || cmp(x, &num(4)) == Some(Ordering::Greater);
-    let cap = wp_cap(prec);
-    let mut wp = wp_start(prec);
+    let cap = wp_cap(op, prec)?;
+    let mut wp = wp_start(op, prec)?;
     while wp <= cap {
         let at = At {
             branch,
@@ -279,16 +293,22 @@ fn w_bound(
             wp,
         };
         let w = newton(&at, x, cc);
+        let doubled = wp.checked_mul(2);
         // Near the branch point `w*e^w` is flat, so `w` carries only about `wp - 2k` good bits when `|1 + w| ~ 2^-k`:
         // a certified bound from it would be valid but loose. Raise `wp` first while the cap allows.
-        if !flat_enough(&w, prec, wp) && wp.saturating_mul(2) <= cap {
-            wp = wp.saturating_mul(2);
-            continue;
+        if !flat_enough(&w, prec, wp) {
+            if let Some(next) = doubled.filter(|n| *n <= cap) {
+                wp = next;
+                continue;
+            }
         }
         if let Some(c) = candidate(&at, &w, x, side, cc) {
             return Ok(c);
         }
-        wp = wp.saturating_mul(2);
+        match doubled {
+            Some(next) => wp = next,
+            None => break,
+        }
     }
     Err(resource(
         op,
@@ -302,9 +322,9 @@ fn flat_enough(w: &ExactNum, prec: Precision, wp: Precision) -> bool {
         Some(e) if e < 0 => usize::try_from(e.unsigned_abs()).unwrap_or(usize::MAX),
         Some(_) | None => return true,
     };
-    wp >= prec
-        .saturating_add(GUARD_BITS)
-        .saturating_add(k.saturating_mul(2))
+    k.checked_mul(2)
+        .and_then(|d| prec.checked_add(GUARD_BITS)?.checked_add(d))
+        .is_some_and(|need| wp >= need)
 }
 
 /// The candidate `w -/+ 2^(e(w) - prec - BRACKET_SHIFT)` (rounded outward), clamped at `-1`, when the sign test proves it.
@@ -510,7 +530,9 @@ fn third(wp: Precision) -> ExactNum {
 
 /// The ball `[l, h]`: `mid = round((l + h) / 2, prec)`, `rad = max(h - mid, mid - l)` rounded up.
 fn result(op: &'static str, l: &ExactNum, h: &ExactNum, prec: Precision) -> BoundResult<Ball> {
-    let wide = prec.saturating_add(2);
+    let wide = prec
+        .checked_add(2)
+        .ok_or_else(|| resource(op, "midpoint precision"))?;
     let mid = round(l, wide, MID_RM)
         .add(h, wide, MID_RM)
         .ldexp(-1, prec, MID_RM);
