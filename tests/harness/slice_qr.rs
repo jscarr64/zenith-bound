@@ -1,4 +1,467 @@
-//! Slice LA3 harness rows (`src/qr.rs`). Owned by slice LA3 alone; S0 stub, no tests yet.
-//! Exact golds: Cassie (owns the zb LA exact golds, 2026-10-24).
+//! Slice LA3 harness rows (`src/qr.rs`): gold replay of `la_qr.txt` (`BallMat::qr`) and `la_lstsq.txt` (`BallMat::lstsq`).
+//! Owner: Rusty (slice LA3, Cassie review 2026-10-29). Exact qr golds: Cassie; lstsq golds: scripts/gen_la_lstsq_goldens.py.
 //! Goldens: tests/goldens/slices/qr/ (its own SHA256SUMS and GENERATORS). Mutants: tools/mutants/manifest.d/qr.txt, ids 1200..=1299.
 //! Golden file headers for this slice are declared here, not in tests/common/goldens.rs.
+//!
+//! Replay (CONTRACT 16.LA.4, 16.LA.5, 16.LA3.3): every row at each of `PRECS`. A value passes when every returned ball contains
+//! the exact value; here, when it covers the gold `[lo256, hi256]` (sufficient, 16.LA.5). A ball that only overlaps it would be
+//! re-decided against the heavy enc4096 block, which the gate tier does not carry, so it is reported as a failure naming the entry.
+//! lstsq rows are containment-only until Harper's `cond_row k_row scale_row containment_only containment_reason` columns land
+//! (the 5 trailing `TODO` fields); the `k_row` tightness bound is a follow-up commit.
+
+use crate::common::goldens::golden_dir;
+use zenith_bound::array::{BallMat, BallVec};
+use zenith_bound::ball::Ball;
+use zenith_bound::error::BoundError;
+use zenith_float_num::{ExactNum, RoundingMode};
+
+/// Replay precisions (the files have no `prec` column), as the LA1 logdet replay (16.LA1.7).
+const PRECS: [usize; 3] = [53, 113, 192];
+/// 16.LA.4: qr rows certified with exact arithmetic; they must return the named error, never `Resource "undecided_*"`.
+const QR_EXACT_CERTIFIED: [&str; 2] = ["qr.refuse.zero2", "qr.refuse.onebyone_zero"];
+/// lstsq rows whose refusal is certified exactly (an exact `0 ± 0` column, 16.LA3.3). Not yet in the 16.LA.4 list (asked of Spence).
+const LSTSQ_EXACT_CERTIFIED: [&str; 1] = ["lstsq.refuse.zero_col_3x2"];
+/// Trailing tightness columns of an lstsq value row (Harper's helper replaces the TODO fields).
+const LSTSQ_COND_COLS: usize = 5;
+
+fn gold_text(name: &str) -> Result<String, String> {
+    let path = golden_dir().join("slices").join("qr").join(name);
+    std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))
+}
+
+fn header_rows(text: &str) -> Result<usize, String> {
+    let line = text
+        .lines()
+        .find_map(|l| l.strip_prefix("# rows: "))
+        .ok_or("no '# rows:' header")?;
+    line.trim()
+        .parse::<usize>()
+        .map_err(|e| format!("bad '# rows:' header {line:?}: {e}"))
+}
+
+fn data_rows(text: &str) -> impl Iterator<Item = Vec<&str>> {
+    text.lines()
+        .filter(|l| !l.starts_with('#'))
+        .map(|l| l.split_whitespace().collect())
+}
+
+fn dims(t: &str) -> Result<(usize, usize), String> {
+    let (m, n) = t.split_once('x').ok_or_else(|| format!("dims {t:?}"))?;
+    let p = |s: &str| s.parse::<usize>().map_err(|e| format!("dims {t:?}: {e}"));
+    Ok((p(m)?, p(n)?))
+}
+
+fn mul(a: usize, b: usize) -> Result<usize, String> {
+    a.checked_mul(b).ok_or_else(|| "size overflow".to_string())
+}
+
+fn add(a: usize, b: usize) -> Result<usize, String> {
+    a.checked_add(b).ok_or_else(|| "size overflow".to_string())
+}
+
+/// A decimal integer, exactly (Horner in 18-digit chunks with full-precision ops).
+fn int(t: &str) -> Result<ExactNum, String> {
+    let (neg, digits) = match t.strip_prefix('-') {
+        Some(d) => (true, d),
+        None => (false, t),
+    };
+    if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
+        return Err(format!("bad integer {t:?}"));
+    }
+    let mut acc = ExactNum::from(0i64);
+    let mut rest = digits;
+    while !rest.is_empty() {
+        let k = rest.len().min(18);
+        let (head, tail) = rest.split_at(k);
+        let chunk = head.parse::<i64>().map_err(|e| format!("{t:?}: {e}"))?;
+        let k32 = u32::try_from(k).map_err(|e| format!("{e}"))?;
+        let scale = 10i64.checked_pow(k32).ok_or("chunk scale")?;
+        acc = acc
+            .mul_full_prec(&ExactNum::from(scale))
+            .add_full_prec(&ExactNum::from(chunk));
+        rest = tail;
+    }
+    let v = if neg {
+        ExactNum::from(0i64).sub_full_prec(&acc)
+    } else {
+        acc
+    };
+    if v.is_nan() {
+        return Err(format!("integer {t:?} did not parse exactly"));
+    }
+    Ok(v)
+}
+
+/// A gold rational `p/q` as a ball at `prec` (exact when `q = 1`, else the S1 `div` enclosure).
+fn rational(t: &str, prec: usize) -> Result<Ball, String> {
+    let (p, q) = t
+        .split_once('/')
+        .ok_or_else(|| format!("bad rational {t:?}"))?;
+    let num = Ball::exact(int(p)?, prec).map_err(|e| format!("{t}: {e:?}"))?;
+    if q == "1" {
+        return Ok(num);
+    }
+    let den = Ball::exact(int(q)?, prec).map_err(|e| format!("{t}: {e:?}"))?;
+    num.div(&den, prec).map_err(|e| format!("{t}: {e:?}"))
+}
+
+/// A gold dyadic `m*2^e`, exactly.
+fn dyadic(t: &str) -> Result<ExactNum, String> {
+    let (m, e) = t
+        .split_once("*2^")
+        .ok_or_else(|| format!("bad dyadic {t:?}"))?;
+    let e = e.parse::<i64>().map_err(|err| format!("{t:?}: {err}"))?;
+    let bits = m
+        .len()
+        .checked_mul(4)
+        .and_then(|b| b.checked_add(64))
+        .ok_or("dyadic width")?;
+    let v = int(m)?.ldexp(e, bits, RoundingMode::None);
+    if v.is_nan() || v.inexact() {
+        return Err(format!("dyadic {t:?} not exact"));
+    }
+    Ok(v)
+}
+
+/// `true` when `b` covers `[lo, hi]` exactly: `mid - rad <= lo` and `hi <= mid + rad`.
+fn covers(b: &Ball, lo: &ExactNum, hi: &ExactNum) -> Result<bool, String> {
+    if b.rad().is_infinity() {
+        return Ok(true);
+    }
+    let r = b.rad().to_exact_num().map_err(|e| format!("{e:?}"))?;
+    let low_gap = lo.sub_full_prec(b.mid()).add_full_prec(&r);
+    let high_gap = b.mid().add_full_prec(&r).sub_full_prec(hi);
+    if low_gap.is_nan() || high_gap.is_nan() {
+        return Err("containment arithmetic failed".to_string());
+    }
+    Ok(!low_gap.is_negative() && !high_gap.is_negative())
+}
+
+fn check_cover(what: &str, b: Option<&Ball>, pair: &[&str]) -> Result<(), String> {
+    let b = b.ok_or_else(|| format!("{what}: missing entry"))?;
+    let (lo, hi) = match pair {
+        [lo, hi] => (dyadic(lo)?, dyadic(hi)?),
+        _ => return Err(format!("{what}: bad lo/hi pair")),
+    };
+    if covers(b, &lo, &hi)? {
+        Ok(())
+    } else {
+        Err(format!(
+            "{what}: ball {:?} ± {:?} does not cover gold [lo256, hi256] (enc4096 re-decision needs the heavy tier)",
+            b.mid(),
+            b.rad()
+        ))
+    }
+}
+
+fn variant(e: &BoundError) -> String {
+    format!("{e:?}")
+        .split(|c: char| !c.is_alphanumeric())
+        .next()
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// 16.LA.4: a refusal row passes on the named error, or on `Resource "undecided_*"` unless the row is exact-certified.
+fn check_refusal(
+    id: &str,
+    got: &BoundError,
+    want: &[&str],
+    certified: &[&str],
+) -> Result<(), String> {
+    let (v, d) = match want {
+        [v, d] => (*v, *d),
+        _ => return Err(format!("{id}: bad ERR tail")),
+    };
+    if variant(got) == v && got.detail() == d {
+        return Ok(());
+    }
+    let shape = v == "DimensionMismatch";
+    if !shape
+        && !certified.contains(&id)
+        && variant(got) == "Resource"
+        && got.detail().starts_with("undecided_")
+    {
+        return Ok(());
+    }
+    Err(format!("{id}: want ERR {v} {d}, got {got:?}"))
+}
+
+fn input_mat<'a>(
+    it: &mut impl Iterator<Item = &'a &'a str>,
+    m: usize,
+    n: usize,
+    prec: usize,
+) -> Result<BallMat, String> {
+    let mut v = Vec::new();
+    for _ in 0..mul(m, n)? {
+        v.push(rational(it.next().ok_or("short row (A)")?, prec)?);
+    }
+    BallMat::from_balls(m, n, v).map_err(|e| format!("{e:?}"))
+}
+
+/// One qr row at `prec`: `case_id mxn A[m*n] (Qt[m*n] Rt[n*n] d[n] Q_lohi[2mn] R_lohi[2nn] | ERR v d)`.
+fn replay_qr(toks: &[&str], prec: usize) -> Result<(), String> {
+    let id = toks.first().ok_or("empty row")?;
+    let (m, n) = dims(toks.get(1).ok_or("no dims")?)?;
+    let mut it = toks.iter().skip(2);
+    let a = input_mat(&mut it, m, n, prec)?;
+    let rest = toks.get(add(2, mul(m, n)?)?..).ok_or("short row")?;
+    let got = a.qr(prec);
+    if rest.first() == Some(&"ERR") {
+        return match got {
+            Ok(_) => Err(format!("{id} @{prec}: value where the gold refuses")),
+            Err(e) => check_refusal(
+                id,
+                &e,
+                rest.get(1..).unwrap_or_default(),
+                &QR_EXACT_CERTIFIED,
+            ),
+        };
+    }
+    let f = got.map_err(|e| format!("{id} @{prec}: {e:?}"))?;
+    let (q, r) = (f.q(), f.r());
+    if (q.nrows(), q.ncols(), r.nrows(), r.ncols()) != (m, n, n, n) {
+        return Err(format!(
+            "{id} @{prec}: Q {}x{}, R {}x{} (want thin {m}x{n}, {n}x{n})",
+            q.nrows(),
+            q.ncols(),
+            r.nrows(),
+            r.ncols()
+        ));
+    }
+    let skip = add(add(mul(m, n)?, mul(n, n)?)?, n)?;
+    let mut pairs = rest
+        .get(skip..)
+        .ok_or("short row (enclosures)")?
+        .as_chunks::<2>()
+        .0
+        .iter();
+    for i in 0..m {
+        for j in 0..n {
+            check_cover(
+                &format!("{id} @{prec} Q[{i}][{j}]"),
+                q.get(i, j),
+                &pairs.next().ok_or("short Q")?[..],
+            )?;
+        }
+    }
+    for i in 0..n {
+        for j in 0..n {
+            check_cover(
+                &format!("{id} @{prec} R[{i}][{j}]"),
+                r.get(i, j),
+                &pairs.next().ok_or("short R")?[..],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// One lstsq row at `prec`: `case_id mxn blen A[m*n] b[blen] (x[n] x_lohi[2n] COND_COLS[5] | ERR v d)`.
+fn replay_lstsq(toks: &[&str], prec: usize) -> Result<(), String> {
+    let id = toks.first().ok_or("empty row")?;
+    let (m, n) = dims(toks.get(1).ok_or("no dims")?)?;
+    let blen = toks
+        .get(2)
+        .ok_or("no blen")?
+        .parse::<usize>()
+        .map_err(|e| format!("{id}: {e}"))?;
+    let mut it = toks.iter().skip(3);
+    let a = input_mat(&mut it, m, n, prec)?;
+    let mut b = Vec::new();
+    for _ in 0..blen {
+        b.push(rational(it.next().ok_or("short row (b)")?, prec)?);
+    }
+    let rest = toks
+        .get(add(add(3, mul(m, n)?)?, blen)?..)
+        .ok_or("short row")?;
+    let got = a.lstsq(&BallVec::from_balls(b), prec);
+    if rest.first() == Some(&"ERR") {
+        return match got {
+            Ok(_) => Err(format!("{id} @{prec}: value where the gold refuses")),
+            Err(e) => check_refusal(
+                id,
+                &e,
+                rest.get(1..).unwrap_or_default(),
+                &LSTSQ_EXACT_CERTIFIED,
+            ),
+        };
+    }
+    let x = got.map_err(|e| format!("{id} @{prec}: {e:?}"))?;
+    if x.len() != n {
+        return Err(format!("{id} @{prec}: x has {} entries, want {n}", x.len()));
+    }
+    let mut pairs = rest
+        .get(n..)
+        .ok_or("short row (x enclosures)")?
+        .as_chunks::<2>()
+        .0
+        .iter();
+    for i in 0..n {
+        check_cover(
+            &format!("{id} @{prec} x[{i}]"),
+            x.get(i),
+            &pairs.next().ok_or("short x")?[..],
+        )?;
+    }
+    Ok(())
+}
+
+/// Replays every row at every `PRECS`, collecting failures so one run names them all.
+fn replay_all(text: &str, f: fn(&[&str], usize) -> Result<(), String>) -> Result<usize, String> {
+    let mut fails = Vec::new();
+    let mut n = 0_usize;
+    for toks in data_rows(text) {
+        for prec in PRECS {
+            n = add(n, 1)?;
+            if let Err(e) = f(&toks, prec) {
+                fails.push(e);
+            }
+        }
+    }
+    if fails.is_empty() {
+        Ok(n)
+    } else {
+        Err(format!(
+            "{} of {n} replays failed:\n{}",
+            fails.len(),
+            fails.join("\n")
+        ))
+    }
+}
+
+fn qr_width(m: usize, n: usize, refusal: bool) -> Result<usize, String> {
+    let tail = if refusal {
+        3
+    } else {
+        add(
+            add(add(mul(m, n)?, mul(n, n)?)?, n)?,
+            mul(2, add(mul(m, n)?, mul(n, n)?)?)?,
+        )?
+    };
+    add(add(2, mul(m, n)?)?, tail)
+}
+
+fn lstsq_width(m: usize, n: usize, blen: usize, refusal: bool) -> Result<usize, String> {
+    let tail = if refusal {
+        3
+    } else {
+        add(mul(3, n)?, LSTSQ_COND_COLS)?
+    };
+    add(add(add(3, mul(m, n)?)?, blen)?, tail)
+}
+
+fn check_widths(text: &str, lstsq: bool) -> Result<usize, String> {
+    let mut seen = 0_usize;
+    for toks in data_rows(text) {
+        let id = toks.first().ok_or("empty row")?;
+        let (m, n) = dims(toks.get(1).ok_or("no dims")?)?;
+        let refusal = toks.contains(&"ERR");
+        let w = if lstsq {
+            let blen = toks
+                .get(2)
+                .ok_or("no blen")?
+                .parse::<usize>()
+                .map_err(|e| format!("{id}: {e}"))?;
+            lstsq_width(m, n, blen, refusal)?
+        } else {
+            qr_width(m, n, refusal)?
+        };
+        if toks.len() != w {
+            return Err(format!("{id}: {} fields, want {w}", toks.len()));
+        }
+        seen = add(seen, 1)?;
+    }
+    let want = header_rows(text)?;
+    if seen != want {
+        return Err(format!("{seen} data rows, header says {want}"));
+    }
+    Ok(seen)
+}
+
+#[test]
+fn la3_qr_gate_rows_match_header_count_and_field_widths() -> Result<(), String> {
+    check_widths(&gold_text("la_qr.txt")?, false).map(|_| ())
+}
+
+#[test]
+fn la3_lstsq_gate_rows_match_header_count_and_field_widths() -> Result<(), String> {
+    check_widths(&gold_text("la_lstsq.txt")?, true).map(|_| ())
+}
+
+#[test]
+fn la3_lstsq_cond_columns_are_todo_until_harpers_helper() -> Result<(), String> {
+    let text = gold_text("la_lstsq.txt")?;
+    for toks in data_rows(&text).filter(|t| !t.contains(&"ERR")) {
+        let tail = toks
+            .len()
+            .checked_sub(LSTSQ_COND_COLS)
+            .and_then(|k| toks.get(k..))
+            .unwrap_or_default();
+        if tail.len() != LSTSQ_COND_COLS || tail.iter().any(|t| *t != "TODO") {
+            return Err(format!(
+                "{:?}: cond columns {tail:?} (tightness is a follow-up commit)",
+                toks.first()
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn la3_exact_certified_rows_exist_and_refuse() -> Result<(), String> {
+    for (file, list) in [
+        ("la_qr.txt", &QR_EXACT_CERTIFIED[..]),
+        ("la_lstsq.txt", &LSTSQ_EXACT_CERTIFIED[..]),
+    ] {
+        let text = gold_text(file)?;
+        for id in list {
+            let row = data_rows(&text)
+                .find(|t| t.first() == Some(id))
+                .ok_or_else(|| format!("{file}: no row {id}"))?;
+            if !row.contains(&"ERR") {
+                return Err(format!("{id}: exact-certified row is not a refusal"));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn la3_harness_parses_and_covers() -> Result<(), String> {
+    let v = dyadic("-3*2^-2")?;
+    let b = Ball::exact(int("-3")?.ldexp(-2, 64, RoundingMode::None), 53)
+        .map_err(|e| format!("{e:?}"))?;
+    if !covers(&b, &v, &v)? || covers(&b, &dyadic("-1*2^0")?, &v)? {
+        return Err("covers wrong on an exact point".to_string());
+    }
+    let third = rational("1/3", 53)?;
+    let lo = dyadic("6148914691236517205*2^-64")?;
+    let hi = dyadic("6148914691236517206*2^-64")?;
+    if !covers(&third, &lo, &hi)? {
+        return Err("1/3 ball does not cover its 64-bit bracket".to_string());
+    }
+    let big = int("123456789012345678901234567890")?;
+    let want = ExactNum::from(123456789012i64)
+        .mul_full_prec(&ExactNum::from(1_000_000_000_000_000_000i64))
+        .add_full_prec(&ExactNum::from(345678901234567890i64));
+    if !big.sub_full_prec(&want).is_zero() {
+        return Err("decimal parse wrong".to_string());
+    }
+    Ok(())
+}
+
+/// Red until the LA3 bodies land (mutants 1200..=1212). Fails on the stub's `Resource "not_implemented"`.
+#[test]
+#[ignore = "red: not implemented: BallMat::qr returns Resource not_implemented (CONTRACT 16.LA3); un-ignore with the bodies commit"]
+fn la3_qr_gate_rows_replay_through_zb() -> Result<(), String> {
+    replay_all(&gold_text("la_qr.txt")?, replay_qr).map(|_| ())
+}
+
+/// Red until the LA3 bodies land and 16.S6.12 `solve_upper` (LA0) is implemented.
+#[test]
+#[ignore = "red: not implemented: BallMat::lstsq returns Resource not_implemented (CONTRACT 16.LA3; needs 16.S6.12 solve_upper)"]
+fn la3_lstsq_gate_rows_replay_through_zb() -> Result<(), String> {
+    replay_all(&gold_text("la_lstsq.txt")?, replay_lstsq).map(|_| ())
+}
