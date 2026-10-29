@@ -57,5 +57,5 @@ try:
 except AssertionError:
     sys.exit(0)
 sys.exit(9)")" = 0 ] || fail "singular accepted: $(tail -3 "$t/out")"
-st_done gen_la_cond 8   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done gen_la_cond 9   # WANT: cases this script runs (tools/selftest_cases.sh)
 echo "gen_la_cond selftest: ok"
