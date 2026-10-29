@@ -55,7 +55,6 @@ fn r_above() -> Result<Mag, String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S2.1/16.S2.2: cmp_far_diff returns None (to_exact_num fails above zf EXPONENT_MAX), bridge.rs:137"]
 fn s2_diff_edge_radius_above_emax_less() -> Result<(), String> {
     let (a, s) = operands()?;
     want(
@@ -66,7 +65,6 @@ fn s2_diff_edge_radius_above_emax_less() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S2.1/16.S2.2: cmp_far_diff returns None (to_exact_num fails above zf EXPONENT_MAX), bridge.rs:137"]
 fn s2_diff_edge_radius_above_emax_mirrored_less() -> Result<(), String> {
     let (a, s) = operands()?;
     want(
@@ -77,7 +75,6 @@ fn s2_diff_edge_radius_above_emax_mirrored_less() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S2.1/16.S2.2: cmp_far_diff returns None (to_exact_num fails above zf EXPONENT_MAX), bridge.rs:137"]
 fn s2_diff_edge_radius_above_emax_greater() -> Result<(), String> {
     let (a, s) = operands()?;
     want(
