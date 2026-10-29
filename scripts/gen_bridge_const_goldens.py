@@ -164,6 +164,9 @@ def write_file(path):
 def main(argv):
     goldlib.require_mpmath()
     selftest()
+    # --skip-heavy is a documented no-op (bridge consts have no heavy tier); tools/goldens_regen.sh passes it to every
+    # slice generator in regen-gate mode, so it is stripped wherever it appears and nothing else changes.
+    argv = [a for a in argv if a != "--skip-heavy"]
     if len(argv) == 2 and argv[0] == "--check":
         os.makedirs(argv[1], exist_ok=True)
         write_file(os.path.join(argv[1], GOLDEN_NAME))
@@ -176,7 +179,7 @@ def main(argv):
             n = fraction_check([ln.rstrip("\n") for ln in fh if ln.strip()])
         print("gen_bridge_const_goldens: fractions selftest: %d rows exact" % n)
         return 0
-    raise SystemExit("usage: ~/.local/oracle-venv/bin/python scripts/gen_bridge_const_goldens.py [--check DIR | --selftest]")
+    raise SystemExit("usage: ~/.local/oracle-venv/bin/python scripts/gen_bridge_const_goldens.py [--check DIR [--skip-heavy] | --selftest]")
 
 
 if __name__ == "__main__":
