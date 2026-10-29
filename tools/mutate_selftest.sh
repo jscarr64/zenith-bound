@@ -223,8 +223,26 @@ printf 'x\n' >> "$t/cases"; out="$(logged loud SHIM_NETFAIL=1 PATH="$sh:$PATH")"
 grep -q '^rc=0$' <<< "$out" && fail "err-loud: an unexpected suite-run failure passed: $out"
 grep -q '^INVALID 001-add-mul: suite run failed without a test failure' <<< "$out" || fail "err-loud: wrong report: $out"
 [ -f "$lg" ] && grep -q ' ERR rc=101 ' "$lg" || fail "err-loud: an unexpected failure (rc 101, no test failed) did not log an ERR trap line: $(cat "$lg" 2>/dev/null | grep ERR)"
+# Harper (2026-10-29, Paul's 1520-full_gate: 070-L8c and 096-E-op-npd exited 1 with "equivalent id 177-N20 / 018-L4 is not in the
+# manifest"): the equivalent-id lookup was `printf ids | grep -q` under pipefail; grep -q exits at the first match, so a printf write
+# after that dies of SIGPIPE (rc 141) and a listed id reads as missing. That raced on the real 4.3K id list; with more ids than a
+# pipe buffer (64K) it is deterministic, so this case proves the lookup with 8000 ids and an equivalent id at the top.
+printf 'x\n' >> "$t/cases"; cp "$r/tools/mutants/EQUIVALENT.txt" "$t/equiv.keep"
+for i in $(seq 100001 108000); do printf 'src/lib.rs:add\t%s-big\t001-add-mul.patch\ttoy\n' "$i"; done > "$r/tools/mutants/manifest.txt"
+printf '100001-big\tfirst of many ids (pipe-buffer case)\n' > "$r/tools/mutants/EQUIVALENT.txt"; cm
+out="$(MUTATE_FLOOR_ZERO_OK=1 MUTATE_FLOOR="$t/mfloor.txt" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" --list 2>&1)" || fail "many ids: --list failed: $(grep -v '^1[0-9]*-big$' <<< "$out")"
+grep -qx '108000-big' <<< "$out" || fail "many ids: --list did not list the last id"
+cp "$t/equiv.keep" "$r/tools/mutants/EQUIVALENT.txt"; setm m.killed
+# a single-id run that exits before printing a verdict must be named, with its exit code and its own FAIL line, not only counted
+# as missing by INCOMPLETE (a stub MUTATE_SH fails every --only run before any mutant is applied)
+printf 'x\n' >> "$t/cases"
+printf '#!/usr/bin/env bash\ncase " $* " in *" --only "*) echo "mutate: FAIL simulated pre-verdict failure" >&2; exit 1 ;; esac\nexec "%s/mutate.sh" "$@"\n' "$here" > "$t/stub-mutate.sh"; chmod +x "$t/stub-mutate.sh"
+out="$(MUTATE_SH="$t/stub-mutate.sh" MUTATE_FLOOR_ZERO_OK=1 MUTATE_FLOOR="$t/mfloor.txt" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate_slice.sh" central 2>&1)" && fail "no-verdict: slice run passed: $out"
+grep -q '^NO-VERDICT 001-add-mul: mutate.sh --only 001-add-mul exited 1 before a verdict: mutate: FAIL simulated pre-verdict failure$' <<< "$out" || fail "no-verdict: no NO-VERDICT line naming the id and its error: $out"
+grep -q '^mutate_slice: FAIL NO-VERDICT: 001-add-mul (slice central)$' <<< "$out" || fail "no-verdict: no FAIL NO-VERDICT summary naming the id: $out"
+rm -rf "$t/mutate-out/central"
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-want_cases=37; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+want_cases=39; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
 [ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
 echo "mutate selftest: ok ($ncases cases)"
