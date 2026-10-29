@@ -166,9 +166,8 @@ fn s2_goldens_cmp_exact_num_rows() -> Result<(), String> {
     verdict("N", &bad)
 }
 
-// Red: the 8 opposite-sign near-EMAX rows (lines 540, 541, 546, 547, 594, 595, 600, 601; harper_s2_diff_overflow.rs) get None.
+// Includes the 8 opposite-sign near-EMAX rows (lines 540, 541, 546, 547, 594, 595, 600, 601; harper_s2_diff_overflow.rs).
 #[test]
-#[ignore = "red: CONTRACT 16.S2.2: cmp_exact_diff returns None when |a-b| exceeds zf EXPONENT_MAX (opposite-sign near-EMAX operands)"]
 fn s2_goldens_cmp_exact_diff_rows() -> Result<(), String> {
     let mut bad = Vec::new();
     for (line, row) in rows("D", 1028)? {
