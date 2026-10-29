@@ -155,9 +155,9 @@ ck; RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 RUNLOG_POPLOG=/nonexistent bash "$here/runl
 # (RUNLOG_AGENT, else poprun's POPLOG_AGENT, else popslot's POPSLOT_AGENT); with none, runlog refuses (no hardcoded default).
 printf '#!/usr/bin/env bash\n. "$RUNLOG_LIB"; runlog_wrap agent-job "$@"\necho agent-ran\n' > "$t/agent.sh"
 ( unset RUNLOG_AGENT POPSLOT_AGENT; POPLOG_AGENT=spence bash "$t/agent.sh" ) > "$t/a1" 2>&1
-ck; find "$POPLOG_ROOT/spence" -name '*-agent-job.log' 2>/dev/null | grep -q . || fail "POPLOG_AGENT=spence: no log under spence/: $(cat "$t/a1")"
+ck; grep -q . <<< "$(find "$POPLOG_ROOT/spence" -name '*-agent-job.log' 2>/dev/null)" || fail "POPLOG_AGENT=spence: no log under spence/: $(cat "$t/a1")"
 rm -rf "$POPLOG_ROOT/spence"; ( unset RUNLOG_AGENT POPLOG_AGENT; POPSLOT_AGENT=spence bash "$t/agent.sh" ) > "$t/a2" 2>&1
-ck; find "$POPLOG_ROOT/spence" -name '*-agent-job.log' 2>/dev/null | grep -q . || fail "POPSLOT_AGENT=spence: no log under spence/: $(cat "$t/a2")"
+ck; grep -q . <<< "$(find "$POPLOG_ROOT/spence" -name '*-agent-job.log' 2>/dev/null)" || fail "POPSLOT_AGENT=spence: no log under spence/: $(cat "$t/a2")"
 ( unset RUNLOG_AGENT POPLOG_AGENT POPSLOT_AGENT; bash "$t/agent.sh" ) > "$t/a3" 2>&1; rc=$?
 ck; [ "$rc" != 0 ] || fail "no agent given: runlog ran anyway: $(cat "$t/a3")"
 ck; grep -q "agent-ran" "$t/a3" && fail "no agent given: the script body ran"
