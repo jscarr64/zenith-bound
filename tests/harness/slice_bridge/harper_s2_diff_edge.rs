@@ -99,3 +99,56 @@ fn s2_diff_edge_radius_at_emax_less() -> Result<(), String> {
         Ordering::Less,
     )
 }
+
+// Mantissa-above-TOP branch of cmp_far_diff (me == e + 1, mant != TOP => Greater), E = EXPONENT_MAX, scaled by
+// 2^(200-E) as above (|a - s| -> 2^200 - 1 - 2^70, |a + s| -> 2^200 - 1 + 2^70, both < 2^200 + 2^70):
+// Mag(TOP+1, E+1) = (2^63 + 1) 2^(E-63) = 2^E + 2^(E-63) -> 2^200 + 2^137 > 2^200 + 2^70, so Greater for both.
+// Mag(u64::MAX, E+1) = (2^64 - 1) 2^(E-63) = 2^(E+1) - 2^(E-63) -> 2^201 - 2^137 > 2^200 + 2^70, so Greater for both.
+// Mag(TOP, E+1) (the other branch) is the Less / Greater pair above. Kills: `!= TOP` to `== TOP` (TOP+1 |a+s| row goes
+// to the 2^E path, Less; the TOP rows above go Greater), Greater to Less or Equal, and the branch deleted (2^E path).
+
+fn r_above_mant(mant: u64) -> Result<Mag, String> {
+    mag(mant, EXPONENT_MAX.checked_add(1).ok_or("E+1")?)
+}
+
+#[test]
+fn s2_diff_edge_radius_above_emax_mant_top_plus_one_greater() -> Result<(), String> {
+    let (a, s) = operands()?;
+    let r = r_above_mant(TOP.checked_add(1).ok_or("TOP+1")?)?; // 2^E + 2^(E-63)
+    want(
+        "(2^E+2^(E-63)) vs |a - -s|",
+        r.cmp_exact_diff(&a, &neg(&s)),
+        Ordering::Greater,
+    )?;
+    want(
+        "(2^E+2^(E-63)) vs |-a - s|",
+        r.cmp_exact_diff(&neg(&a), &s),
+        Ordering::Greater,
+    )?;
+    want(
+        "(2^E+2^(E-63)) vs |a - s|",
+        r.cmp_exact_diff(&a, &s),
+        Ordering::Greater,
+    )
+}
+
+#[test]
+fn s2_diff_edge_radius_above_emax_mant_max_greater() -> Result<(), String> {
+    let (a, s) = operands()?;
+    let r = r_above_mant(u64::MAX)?; // 2^(E+1) - 2^(E-63)
+    want(
+        "(2^(E+1)-2^(E-63)) vs |a - -s|",
+        r.cmp_exact_diff(&a, &neg(&s)),
+        Ordering::Greater,
+    )?;
+    want(
+        "(2^(E+1)-2^(E-63)) vs |-a - s|",
+        r.cmp_exact_diff(&neg(&a), &s),
+        Ordering::Greater,
+    )?;
+    want(
+        "(2^(E+1)-2^(E-63)) vs |a - s|",
+        r.cmp_exact_diff(&a, &s),
+        Ordering::Greater,
+    )
+}
