@@ -2,3 +2,7 @@
 //! Exact golds: Cassie (owns the zb LA exact golds, 2026-10-24).
 //! Goldens: tests/goldens/slices/eigen/ (its own SHA256SUMS and GENERATORS). Mutants: tools/mutants/manifest.d/eigen.txt, ids 1400..=1499.
 //! Golden file headers for this slice are declared here, not in tests/common/goldens.rs.
+
+// ---- Harper wide-range LA rows (child module under tests/harness/slice_eigen/) ----------------------------------------
+
+mod harper_la_eig;

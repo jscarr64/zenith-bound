@@ -161,3 +161,7 @@ fn la4_gls_every_cosmo_family_has_a_gate_row() -> Result<(), String> {
     ];
     families_present(&gls_gate_text()?, "gls.cosmo_", &fams)
 }
+
+// ---- Harper wide-range LA rows (child module under tests/harness/slice_gls/) ------------------------------------------
+
+mod harper_la_gls;

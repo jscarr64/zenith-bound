@@ -12,7 +12,7 @@ t=$(mktemp -d "$(zb_scratch)/la4-red-selftest.XXXXXX") || fail "mktemp failed"; 
 # fx NAME LA4_STATUS_LINE OTHER_STATUS_LINE [MARKER_TEXT...]: a fixture tree with docs/CONTRACT.md and one test file per marker
 fx() {
   local d="$t/$1" i=0; mkdir -p "$d/docs" "$d/tests/harness"
-  printf '## Slices\n### Slice LA2\n- **LA2.3** lu rows.\n### Slice LA3 (`src/qr.rs`)\n%s\n### Slice LA4 (`src/gls.rs`)\n%s\n- **LA4.1** gls rows.\n- **LA4.2** logdet rows; see also LA4.7 (prose mention only).\n### Slice LA5\n_Empty._\n### Slice S2 (`src/bridge.rs`)\n- **16.S2.1 cmp_exact_num.** cmp rows.\n- **16.S2.2 cmp_exact_diff.** diff rows; see also 16.S2.7 (prose mention only).\n' "$3" "$2" > "$d/docs/CONTRACT.md"
+  printf '## Slices\n### Slice LA2\n- **LA2.3** lu rows.\n### Slice LA3 (`src/qr.rs`)\n%s\n### Slice LA4 (`src/gls.rs`)\n%s\n- **LA4.1** gls rows.\n- **LA4.2** logdet rows; see also LA4.7 (prose mention only).\n### Slice LA5\n_Empty._\n- **16.LA5a.1 eig_sym.** eig rows.\n### Slice S2 (`src/bridge.rs`)\n- **16.S2.1 cmp_exact_num.** cmp rows.\n- **16.S2.2 cmp_exact_diff.** diff rows; see also 16.S2.7 (prose mention only).\n' "$3" "$2" > "$d/docs/CONTRACT.md"
   shift 3
   for m in "$@"; do i=$((i + 1)); printf '#[test]\n#[ignore = "%s"]\nfn t%s() {}\n' "$m" "$i" > "$d/tests/harness/t$i.rs"; done
 }
@@ -44,6 +44,9 @@ fx cprose '_Empty._' '_Empty._' 'red: CONTRACT 16.S2.7: prose only'; ck; [ "$(ru
 fx cmalformed '_Empty._' '_Empty._' 'red: CONTRACT S2.1: missing the 16. prefix'; ck; [ "$(run cmalformed)" = 1 ] || fail "a malformed CONTRACT id passed"
 ck; grep -q 'malformed' "$t/out" || fail "malformed id not named: $(cat "$t/out")"
 fx cnocolon '_Empty._' '_Empty._' 'red: CONTRACT 16.S2.1x rows'; ck; [ "$(run cnocolon)" = 1 ] || fail "a CONTRACT id without its colon passed"
+# Harper (2026-10-29): a lowercase sub-slice letter (16.LA5a.1) is a well-formed id; it still needs its entry.
+fx csub '_Empty._' '_Empty._' 'red: CONTRACT 16.LA5a.1: eig rows'; ck; [ "$(run csub)" = 0 ] || fail "a 16.LA5a.1 marker with its entry failed: $(cat "$t/out")"
+fx csubmissing '_Empty._' '_Empty._' 'red: CONTRACT 16.LA5a.2: no entry'; ck; [ "$(run csubmissing)" = 1 ] || fail "a 16.LA5a.2 marker with no entry passed"
 mkdir -p "$t/nocontract/tests"; ck; [ "$(run nocontract)" = 2 ] || fail "missing CONTRACT.md not a setup error"
-st_done la4_red_markers 23   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done la4_red_markers 25   # WANT: cases this script runs (tools/selftest_cases.sh)
 echo "la4_red_markers selftest: ok"

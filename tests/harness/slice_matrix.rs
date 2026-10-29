@@ -1016,3 +1016,7 @@ fn s6_ballmat_add_sub_hand_rows() -> Result<(), String> {
     let d = ok("BallMat::sub Infinity", inf()?.sub(&w, 53))?;
     want_all_reals_first_only("BallMat::sub", d.as_array().as_slice())
 }
+
+// ---- Harper wide-range LA rows (child module under tests/harness/slice_matrix/) ---------------------------------------
+
+mod harper_la_tri;

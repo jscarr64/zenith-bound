@@ -9,6 +9,7 @@ pub mod digest;
 pub mod edges;
 pub mod generators;
 pub mod goldens;
+pub mod la_rows;
 pub mod modular;
 pub mod points;
 pub mod replay;
