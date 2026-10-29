@@ -1,2 +1,2 @@
 # Slice S4b golden checksums (sha256sum format), checked by tools/goldens_regen.sh. Every *.txt in this directory must be listed.
-# EMPTY: no goldens yet (delete this line with the first entry)
+260140675cc7bc39d6e5ae57dfbd94e2d99be5c766d0c3bf838403fb1decf7ba  lambertw_rows.txt
