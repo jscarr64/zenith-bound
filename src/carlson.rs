@@ -141,7 +141,13 @@ fn wp_start(prec: Precision) -> Precision {
     prec.saturating_add(GUARD_BITS)
 }
 
-fn lambert(op: &'static str, x: &Ball, prec: Precision, policy: &DomainPolicy, branch: &Branch) -> BoundResult<Ball> {
+fn lambert(
+    op: &'static str,
+    x: &Ball,
+    prec: Precision,
+    policy: &DomainPolicy,
+    branch: &Branch,
+) -> BoundResult<Ball> {
     check_prec(op, prec)?;
     let strict = match policy {
         DomainPolicy::Strict => true,
@@ -160,7 +166,8 @@ fn lambert(op: &'static str, x: &Ball, prec: Precision, policy: &DomainPolicy, b
             Ok(v) => v,
             Err(_) => match r.exp() {
                 Some(e) if e > 0 => return unbounded(op, prec, strict),
-                Some(_) | None => pow2(EXPONENT_MIN.saturating_sub(1)).ok_or_else(|| resource(op, "tiny radius"))?,
+                Some(_) | None => pow2(EXPONENT_MIN.saturating_sub(1))
+                    .ok_or_else(|| resource(op, "tiny radius"))?,
             },
         };
         endpoints(m, rn, prec)
@@ -180,7 +187,10 @@ fn lambert(op: &'static str, x: &Ball, prec: Precision, policy: &DomainPolicy, b
             } else if strict || !inside(hi, cap, &mut cc) {
                 return Err(domain(op));
             } else {
-                (num(-1), w_bound(op, branch, hi, &Side::Above, prec, &mut cc)?)
+                (
+                    num(-1),
+                    w_bound(op, branch, hi, &Side::Above, prec, &mut cc)?,
+                )
             }
         }
         Branch::Lower => {
@@ -193,7 +203,10 @@ fn lambert(op: &'static str, x: &Ball, prec: Precision, policy: &DomainPolicy, b
             } else if strict || !inside(hi, cap, &mut cc) {
                 return Err(domain(op));
             } else {
-                (w_bound(op, branch, hi, &Side::Below, prec, &mut cc)?, num(-1))
+                (
+                    w_bound(op, branch, hi, &Side::Below, prec, &mut cc)?,
+                    num(-1),
+                )
             }
         }
     };
@@ -212,7 +225,10 @@ fn endpoints(m: &ExactNum, rn: ExactNum, prec: Precision) -> (Option<ExactNum>, 
     } else {
         let p = prec.saturating_add(GUARD_BITS.saturating_mul(2));
         let neg = num(0).sub(&rn, p, RoundingMode::Up);
-        (Some(neg.add(m, p, RoundingMode::Down)), Some(rn.add(m, p, RoundingMode::Up)))
+        (
+            Some(neg.add(m, p, RoundingMode::Down)),
+            Some(rn.add(m, p, RoundingMode::Up)),
+        )
     }
 }
 
@@ -256,7 +272,12 @@ fn w_bound(
     let cap = wp_cap(prec);
     let mut wp = wp_start(prec);
     while wp <= cap {
-        let at = At { branch, log_form, prec, wp };
+        let at = At {
+            branch,
+            log_form,
+            prec,
+            wp,
+        };
         let w = newton(&at, x, cc);
         // Near the branch point `w*e^w` is flat, so `w` carries only about `wp - 2k` good bits when `|1 + w| ~ 2^-k`:
         // a certified bound from it would be valid but loose. Raise `wp` first while the cap allows.
@@ -269,7 +290,10 @@ fn w_bound(
         }
         wp = wp.saturating_mul(2);
     }
-    Err(resource(op, "Lambert W bound not certified within the precision cap"))
+    Err(resource(
+        op,
+        "Lambert W bound not certified within the precision cap",
+    ))
 }
 
 /// `wp >= prec + GUARD_BITS + 2k` where `|1 + w| ~ 2^-k` (true away from `-1`).
@@ -278,11 +302,19 @@ fn flat_enough(w: &ExactNum, prec: Precision, wp: Precision) -> bool {
         Some(e) if e < 0 => usize::try_from(e.unsigned_abs()).unwrap_or(usize::MAX),
         Some(_) | None => return true,
     };
-    wp >= prec.saturating_add(GUARD_BITS).saturating_add(k.saturating_mul(2))
+    wp >= prec
+        .saturating_add(GUARD_BITS)
+        .saturating_add(k.saturating_mul(2))
 }
 
 /// The candidate `w -/+ 2^(e(w) - prec - BRACKET_SHIFT)` (rounded outward), clamped at `-1`, when the sign test proves it.
-fn candidate(at: &At<'_>, w: &ExactNum, x: &ExactNum, side: &Side, cc: &mut Consts) -> Option<ExactNum> {
+fn candidate(
+    at: &At<'_>,
+    w: &ExactNum,
+    x: &ExactNum,
+    side: &Side,
+    cc: &mut Consts,
+) -> Option<ExactNum> {
     let (branch, prec, wp) = (at.branch, at.prec, at.wp);
     if !finite(w) {
         return None;
@@ -297,10 +329,12 @@ fn candidate(at: &At<'_>, w: &ExactNum, x: &ExactNum, side: &Side, cc: &mut Cons
     let vs_one = cmp(&c, &minus_one)?;
     let c = match (branch, side, vs_one) {
         // W0 >= -1 and W-1 <= -1 always: these clamps need no test.
-        (Branch::Principal, Side::Below, Ordering::Less) | (Branch::Lower, Side::Above, Ordering::Greater | Ordering::Equal) => {
+        (Branch::Principal, Side::Below, Ordering::Less)
+        | (Branch::Lower, Side::Above, Ordering::Greater | Ordering::Equal) => {
             return Some(minus_one);
         }
-        (Branch::Principal, Side::Above, Ordering::Less) | (Branch::Lower, Side::Below, Ordering::Greater) => minus_one,
+        (Branch::Principal, Side::Above, Ordering::Less)
+        | (Branch::Lower, Side::Below, Ordering::Greater) => minus_one,
         (Branch::Principal, Side::Below | Side::Above, Ordering::Equal | Ordering::Greater)
         | (Branch::Lower, Side::Below, Ordering::Less | Ordering::Equal)
         | (Branch::Lower, Side::Above, Ordering::Less) => c,
@@ -319,15 +353,21 @@ fn product_test(w: &ExactNum, x: &ExactNum, side: &Side, wp: Precision, cc: &mut
         Side::Below => !w.is_negative(),
         Side::Above => w.is_negative(),
     };
-    let rm = if up { RoundingMode::Up } else { RoundingMode::Down };
+    let rm = if up {
+        RoundingMode::Up
+    } else {
+        RoundingMode::Down
+    };
     let ew = w.exp(wp, rm, cc);
     if !finite(&ew) {
         return false;
     }
     let f = w.mul_full_prec(&ew);
     match (side, cmp(&f, x)) {
-        (Side::Below, Some(Ordering::Less | Ordering::Equal)) | (Side::Above, Some(Ordering::Greater | Ordering::Equal)) => true,
-        (Side::Below, Some(Ordering::Greater) | None) | (Side::Above, Some(Ordering::Less) | None) => false,
+        (Side::Below, Some(Ordering::Less | Ordering::Equal))
+        | (Side::Above, Some(Ordering::Greater | Ordering::Equal)) => true,
+        (Side::Below, Some(Ordering::Greater) | None)
+        | (Side::Above, Some(Ordering::Less) | None) => false,
     }
 }
 
@@ -347,8 +387,10 @@ fn log_test(w: &ExactNum, x: &ExactNum, side: &Side, wp: Precision, cc: &mut Con
     }
     let lhs = lw.add_full_prec(w);
     match (side, cmp(&lhs, &lx)) {
-        (Side::Below, Some(Ordering::Less | Ordering::Equal)) | (Side::Above, Some(Ordering::Greater | Ordering::Equal)) => true,
-        (Side::Below, Some(Ordering::Greater) | None) | (Side::Above, Some(Ordering::Less) | None) => false,
+        (Side::Below, Some(Ordering::Less | Ordering::Equal))
+        | (Side::Above, Some(Ordering::Greater | Ordering::Equal)) => true,
+        (Side::Below, Some(Ordering::Greater) | None)
+        | (Side::Above, Some(Ordering::Less) | None) => false,
     }
 }
 
@@ -375,7 +417,8 @@ fn branch_p(x: &ExactNum, wp: Precision, cc: &mut Consts) -> ExactNum {
 fn newton(at: &At<'_>, x: &ExactNum, cc: &mut Consts) -> ExactNum {
     let (branch, log_form, wp) = (at.branch, at.log_form, at.wp);
     // x < -1/4: seed from the branch-point series in p = sqrt(2 (1 + e x)).
-    let near_branch = pow2(-2).is_some_and(|q| cmp(x, &num(0).sub_full_prec(&q)) == Some(Ordering::Less));
+    let near_branch =
+        pow2(-2).is_some_and(|q| cmp(x, &num(0).sub_full_prec(&q)) == Some(Ordering::Less));
     let minus_one = num(-1);
     let mut w = if near_branch {
         let p = branch_p(x, wp, cc);
@@ -393,7 +436,11 @@ fn newton(at: &At<'_>, x: &ExactNum, cc: &mut Consts) -> ExactNum {
     } else {
         x.add_full_prec(&num(1)).ln(wp, MID_RM, cc)
     };
-    let lx = if log_form { abs_of(x).ln(wp, MID_RM, cc) } else { num(0) };
+    let lx = if log_form {
+        abs_of(x).ln(wp, MID_RM, cc)
+    } else {
+        num(0)
+    };
     let tol = i64::try_from(wp).ok().and_then(|p| p.checked_sub(4));
     for _ in 0..NEWTON_STEPS {
         if !finite(&w) {
@@ -402,7 +449,10 @@ fn newton(at: &At<'_>, x: &ExactNum, cc: &mut Consts) -> ExactNum {
         let w1 = w.add_full_prec(&num(1));
         let step = if log_form {
             // g = ln|w| + w - ln|x|, w -= g·w/(w+1)
-            let g = abs_of(&w).ln(wp, MID_RM, cc).add(&w, wp, MID_RM).sub(&lx, wp, MID_RM);
+            let g = abs_of(&w)
+                .ln(wp, MID_RM, cc)
+                .add(&w, wp, MID_RM)
+                .sub(&lx, wp, MID_RM);
             g.mul(&w, wp, MID_RM).div(&w1, wp, MID_RM)
         } else {
             // f = w - x e^-w, w -= f/(w+1)
@@ -429,7 +479,13 @@ fn newton(at: &At<'_>, x: &ExactNum, cc: &mut Consts) -> ExactNum {
 }
 
 /// Keeps an iterate on its branch: halfway back to the old iterate (or towards `-1`) when it jumps across.
-fn keep_branch(branch: &Branch, log_form: bool, old: &ExactNum, next: ExactNum, wp: Precision) -> ExactNum {
+fn keep_branch(
+    branch: &Branch,
+    log_form: bool,
+    old: &ExactNum,
+    next: ExactNum,
+    wp: Precision,
+) -> ExactNum {
     let minus_one = num(-1);
     let bad = match branch {
         Branch::Principal if log_form => !next.is_positive(),
@@ -439,7 +495,11 @@ fn keep_branch(branch: &Branch, log_form: bool, old: &ExactNum, next: ExactNum, 
     if !bad {
         return next;
     }
-    let bound = if *branch == Branch::Principal && log_form { num(0) } else { minus_one };
+    let bound = if *branch == Branch::Principal && log_form {
+        num(0)
+    } else {
+        minus_one
+    };
     old.add_full_prec(&bound).ldexp(-1, wp, MID_RM)
 }
 
@@ -451,7 +511,9 @@ fn third(wp: Precision) -> ExactNum {
 /// The ball `[l, h]`: `mid = round((l + h) / 2, prec)`, `rad = max(h - mid, mid - l)` rounded up.
 fn result(op: &'static str, l: &ExactNum, h: &ExactNum, prec: Precision) -> BoundResult<Ball> {
     let wide = prec.saturating_add(2);
-    let mid = round(l, wide, MID_RM).add(h, wide, MID_RM).ldexp(-1, prec, MID_RM);
+    let mid = round(l, wide, MID_RM)
+        .add(h, wide, MID_RM)
+        .ldexp(-1, prec, MID_RM);
     if !finite(&mid) {
         return Ball::all_reals(prec);
     }

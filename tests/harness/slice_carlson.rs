@@ -87,7 +87,10 @@ fn take_val(f: &[&str], i: &mut usize) -> Result<ExactNum, String> {
 fn want_contains(what: &str, b: &Ball, x: &ExactNum) -> Result<(), String> {
     match b.contains(x) {
         Tri::True => Ok(()),
-        t @ (Tri::False | Tri::Unknown) => Err(format!("{}: {:?} does not contain {:?} ({:?})", what, b, x, t)),
+        t @ (Tri::False | Tri::Unknown) => Err(format!(
+            "{}: {:?} does not contain {:?} ({:?})",
+            what, b, x, t
+        )),
     }
 }
 
@@ -105,7 +108,11 @@ fn call(br: &Branch, x: &Ball, prec: usize, policy: &DomainPolicy) -> Result<Bal
 }
 
 enum Want {
-    Ok { llo: ExactNum, hhi: ExactNum, tb: ExactNum },
+    Ok {
+        llo: ExactNum,
+        hhi: ExactNum,
+        tb: ExactNum,
+    },
     Domain,
     AllReals,
 }
@@ -131,7 +138,11 @@ fn parse_row(line: usize, text: &str) -> Result<Row, String> {
         Some(&"clip") => DomainPolicy::Clip,
         other => return Err(format!("line {}: policy {:?}", line, other)),
     };
-    let prec: usize = f.get(2).ok_or("short row")?.parse().map_err(|_| format!("line {}: prec", line))?;
+    let prec: usize = f
+        .get(2)
+        .ok_or("short row")?
+        .parse()
+        .map_err(|_| format!("line {}: prec", line))?;
     let mut i = 3;
     let xm = take_val(&f, &mut i)?;
     let x = if f.get(i) == Some(&"inf") {
@@ -155,11 +166,21 @@ fn parse_row(line: usize, text: &str) -> Result<Row, String> {
         Some(&"allreals") => Want::AllReals,
         other => return Err(format!("line {}: outcome {:?}", line, other)),
     };
-    Ok(Row { line, branch, policy, prec, x, want })
+    Ok(Row {
+        line,
+        branch,
+        policy,
+        prec,
+        x,
+        want,
+    })
 }
 
 fn gold_rows() -> Result<Vec<Row>, String> {
-    let path = golden_dir().join("slices").join("carlson").join("lambertw_rows.txt");
+    let path = golden_dir()
+        .join("slices")
+        .join("carlson")
+        .join("lambertw_rows.txt");
     let text = fs::read_to_string(&path).map_err(|e| format!("{}: {}", path.display(), e))?;
     let mut rows = Vec::new();
     for (n, l) in text.lines().enumerate() {
@@ -175,7 +196,10 @@ fn gold_rows() -> Result<Vec<Row>, String> {
 }
 
 fn check_row(r: &Row) -> Result<(), String> {
-    let what = format!("line {} {:?} {:?} prec {}", r.line, r.branch, r.policy, r.prec);
+    let what = format!(
+        "line {} {:?} {:?} prec {}",
+        r.line, r.branch, r.policy, r.prec
+    );
     let got = call(&r.branch, &r.x, r.prec, &r.policy);
     match (&r.want, got) {
         (Want::Domain, Err(BoundError::Domain { .. })) => Ok(()),
@@ -188,7 +212,12 @@ fn check_row(r: &Row) -> Result<(), String> {
             want_contains(&format!("{} HHI", what), &b, hhi)?;
             let bound = Mag::from_exact_num(tb);
             if b.rad() > &bound {
-                return Err(format!("{}: rad {:?} above TB {:?} (16.S4b.3)", what, b.rad(), bound));
+                return Err(format!(
+                    "{}: rad {:?} above TB {:?} (16.S4b.3)",
+                    what,
+                    b.rad(),
+                    bound
+                ));
             }
             Ok(())
         }
@@ -211,7 +240,12 @@ fn lambertw_gold_rows() -> Result<(), String> {
     if bad.is_empty() {
         Ok(())
     } else {
-        Err(format!("{} of {} rows failed:\n{}", bad.len(), rows.len(), bad.join("\n")))
+        Err(format!(
+            "{} of {} rows failed:\n{}",
+            bad.len(),
+            rows.len(),
+            bad.join("\n")
+        ))
     }
 }
 
@@ -230,8 +264,13 @@ fn lambertw_bad_prec() -> Result<(), String> {
         }
     }
     // The public methods themselves, not only through `call`.
-    match (x.lambert_w0(0, &DomainPolicy::Strict), x.lambert_wm1(0, &DomainPolicy::Clip)) {
-        (Err(BoundError::InvalidArgument { .. }), Err(BoundError::InvalidArgument { .. })) => Ok(()),
+    match (
+        x.lambert_w0(0, &DomainPolicy::Strict),
+        x.lambert_wm1(0, &DomainPolicy::Clip),
+    ) {
+        (Err(BoundError::InvalidArgument { .. }), Err(BoundError::InvalidArgument { .. })) => {
+            Ok(())
+        }
         got => Err(format!("direct prec 0: {:?}", got)),
     }
 }
@@ -260,19 +299,30 @@ fn lambertw_out_of_range_radius() -> Result<(), String> {
     let quarter = ExactNum::from_mag_parts(TOP, -1, 64).map_err(|e| format!("{:?}", e))?;
     let cases = [
         (Branch::W0, num(1), (5671432904, 5671432905)),
-        (Branch::Wm1, num(0).sub_full_prec(&quarter), (-21532923642, -21532923641)),
+        (
+            Branch::Wm1,
+            num(0).sub_full_prec(&quarter),
+            (-21532923642, -21532923641),
+        ),
     ];
     for (br, m, (lo, hi)) in cases {
         let x = ball(m, mag(TOP, EXPONENT_MIN - 200)?, 53)?;
-        let b = call(&br, &x, 53, &DomainPolicy::Strict).map_err(|e| format!("{:?} tiny radius: {:?}", br, e))?;
+        let b = call(&br, &x, 53, &DomainPolicy::Strict)
+            .map_err(|e| format!("{:?} tiny radius: {:?}", br, e))?;
         let lo = ratio(lo, 10_000_000_000, RoundingMode::Down);
         let hi = ratio(hi, 10_000_000_000, RoundingMode::Up);
         if !b.is_informative() || b.contains(&lo) != Tri::False || b.contains(&hi) != Tri::False {
-            return Err(format!("{:?} tiny radius: {:?} not inside ({:?}, {:?})", br, b, lo, hi));
+            return Err(format!(
+                "{:?} tiny radius: {:?} not inside ({:?}, {:?})",
+                br, b, lo, hi
+            ));
         }
         let mid = b.mid();
         if mid.compare(&lo).is_none_or(|c| c <= 0) || mid.compare(&hi).is_none_or(|c| c >= 0) {
-            return Err(format!("{:?} tiny radius: mid {:?} outside ({:?}, {:?})", br, mid, lo, hi));
+            return Err(format!(
+                "{:?} tiny radius: mid {:?} outside ({:?}, {:?})",
+                br, mid, lo, hi
+            ));
         }
     }
     Ok(())
@@ -289,7 +339,11 @@ fn lambertw_call_order_determinism() -> Result<(), String> {
     };
     let fwd: Vec<Result<String, String>> = rows.iter().map(run).collect();
     if !fwd.iter().any(|r| r.is_ok()) {
-        return Err(format!("no row of {} gave a ball: {:?}", rows.len(), fwd.first()));
+        return Err(format!(
+            "no row of {} gave a ball: {:?}",
+            rows.len(),
+            fwd.first()
+        ));
     }
     let mut rev: Vec<Result<String, String>> = rows.iter().rev().map(run).collect();
     rev.reverse();
