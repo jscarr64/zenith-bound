@@ -20,7 +20,8 @@ Definitions (G = P^T |L| |U|, so |A| <= G entrywise; |.| entrywise; gamma_n ~ n 
     cond_row = || |A^-1| G ||_inf                        exact rational >= 1 (componentwise Skeel condition with LU growth)
     k_row    = 4 + ceil(log2 dim) + ceil(log2 cond_row)  exact integer; dim = n (square ops), m rows (lstsq)
     scale_row: 1 (ln outputs), ||x||_inf (solve, lstsq)
-    containment_only, reason: 1 k_row_too_large when prec > k_row + 8 holds for no replay prec in PRECS
+    containment_only, reason: one of REASONS (closed): 2 lstsq_x_zero (LA3: x = 0, scale_row undefined; the lstsq builder
+                              sets it), else     containment_only, reason: 1 k_row_too_large when prec > k_row + 8 holds for no replay prec in PRECS
                               (k_row + 8 >= max(PRECS)); else 0 tight. Prec-independent: 1 = containment only at every
                               replay prec; 0 = the bound applies at each prec with prec > k_row + 8 (the harness decides per prec).
     rref (diagnostic only, never a gate): the coefficient c with first-order bound c * 2^-prec from |dA| <= gamma_n G:
@@ -34,13 +35,17 @@ from gmpy2 import mpq as F
 PRECS = (53, 113, 192)
 COLUMNS = ("cond_row", "k_row", "scale_row", "containment_only", "reason", "rref")
 FORMAT_VERSION = 2
+# The one closed containment_only code/reason set (shared with LA3 lstsq; tests/harness/slice_cholesky.rs COND_REASONS):
+# 0 tight, 1 k_row_too_large (k_row + 8 >= max(PRECS)), 2 lstsq_x_zero (lstsq x = 0: scale_row undefined, containment only).
+REASONS = ((0, "tight"), (1, "k_row_too_large"), (2, "lstsq_x_zero"))
+TIGHT, K_ROW_TOO_LARGE = REASONS[:2]   # REASONS[2] is set only by the LA3 lstsq builder
 FORMAT_LINES = [
     f"format: {FORMAT_VERSION} (format 1 had no cond columns; readers accept both, keyed on this line)",
     "cond columns: after the value columns of a non-refusal row, in this order: " + " ".join(COLUMNS) + " (refusal rows have none)",
     "cond_row: exact rational p/q = || |A^-1| P^T|L||U| ||_inf (componentwise Skeel condition with growth from the exact L, U of la_lu's pivoting)",
     "k_row: decimal integer = 4 + ceil(log2 n) + ceil(log2 cond_row), exact",
     "scale_row: exact rational p/q; 1/1 for ln outputs (logdet), ||x||_inf for solve",
-    f"containment_only reason: 0 tight | 1 k_row_too_large (k_row + 8 >= {max(PRECS)}: no replay prec in {{{', '.join(map(str, PRECS))}}} has prec > k_row + 8). The flag does not depend on prec: 1 means containment only at EVERY replay prec; 0 does not mean tight at every prec, the replay still applies prec > k_row + 8 per prec",
+    f"containment_only reason: closed set {' | '.join(f'{c} {r}' for c, r in REASONS)} (k_row_too_large: k_row + 8 >= {max(PRECS)}: no replay prec in {{{', '.join(map(str, PRECS))}}} has prec > k_row + 8; lstsq_x_zero: lstsq x = 0, scale_row undefined). The code does not depend on prec: 1 or 2 means containment only at EVERY replay prec; 0 does not mean tight at every prec, the replay still applies prec > k_row + 8 per prec",
     "rref: exact rational p/q, diagnostic only (never a gate): c with first-order bound c*2^-prec from |dA| <= gamma_n P^T|L||U|, gamma_n ~ n*2^-prec; logdet c = n*tr(|A^-1| P^T|L||U|), solve c = n*|| |A^-1| P^T|L||U| |x| ||_inf",
     "tightness (replay): rad <= 2^(k_row - prec) * max(|v|, scale_row) when prec > k_row + 8, containment only otherwise",
 ]
@@ -97,8 +102,8 @@ def make_cond_cols(cond_row, dim, scale_row, rref):
     """CondCols from an exact cond_row >= 1 and the op dimension dim >= 1 (n for square ops, m for lstsq); see the module doc."""
     cond_row = F(cond_row); assert cond_row >= 1 and dim >= 1
     k_row = 4 + (dim - 1).bit_length() + ceil_log2(cond_row)
-    co = int(k_row + 8 >= max(PRECS))
-    return CondCols(cond_row, k_row, F(scale_row), co, "k_row_too_large" if co else "tight", F(rref))
+    co, reason = K_ROW_TOO_LARGE if k_row + 8 >= max(PRECS) else TIGHT
+    return CondCols(cond_row, k_row, F(scale_row), co, reason, F(rref))
 
 def cond_tokens(c):
     return [_q(c.cond_row), str(c.k_row), _q(c.scale_row), str(c.containment_only), c.reason, _q(c.rref)]

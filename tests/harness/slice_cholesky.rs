@@ -99,7 +99,7 @@ fn logdet_row_width(dims: &str, refusal: bool, cond: usize) -> Result<usize, Str
 /// The replay precisions of CONTRACT 16.LA1.7 (the file has no prec column).
 const REPLAY_PRECS: [u32; 3] = [53, 113, 192];
 
-/// Largest replay precision; `containment_only` is 1 exactly when `k_row + 8 >= MAX_REPLAY_PREC` (scripts/la_cond_cols.py).
+/// Largest replay precision; `containment_only` is 1 (k_row_too_large) exactly when `k_row + 8 >= MAX_REPLAY_PREC`; 2 is lstsq_x_zero (any k_row) (scripts/la_cond_cols.py).
 const MAX_REPLAY_PREC: u32 = 192;
 
 /// The format-2 cond columns the replay uses (cond_row, scale_row and rref are exact p/q, checked for shape only).
@@ -108,10 +108,13 @@ struct CondCols {
     containment_only: bool,
 }
 
+/// The closed containment_only reason set (scripts/la_cond_cols.py REASONS): tight (flag 0), k_row_too_large (flag 1,
+/// k_row + 8 >= MAX_REPLAY_PREC), lstsq_x_zero (flag 2, LA3 lstsq rows with x = 0: scale_row undefined, any k_row).
+const COND_REASONS: [&str; 3] = ["tight", "k_row_too_large", "lstsq_x_zero"];
+
 /// Parses and cross-checks the six cond columns (in order cond_row k_row scale_row containment_only reason rref).
-fn parse_cond_cols<'a>(id: &str, cols: impl Iterator<Item = &'a str>) -> Result<CondCols, String> {
-    let c: Vec<&str> = cols.collect();
-    let [cond_row, k_row, scale_row, flag, reason, rref] = c.as_slice() else {
+fn parse_cond_cols(id: &str, c: &[&str]) -> Result<CondCols, String> {
+    let [cond_row, k_row, scale_row, flag, reason, rref] = c else {
         return Err(format!("{id}: want 6 cond columns, got {}", c.len()));
     };
     for (name, v) in [
@@ -131,12 +134,19 @@ fn parse_cond_cols<'a>(id: &str, cols: impl Iterator<Item = &'a str>) -> Result<
         .parse::<u32>()
         .map_err(|e| format!("{id}: k_row {k_row:?}: {e}"))?;
     let too_large = k_row.checked_add(8).ok_or("k_row overflows")? >= MAX_REPLAY_PREC;
-    let containment_only = match (*flag, *reason) {
-        ("0", "tight") => false,
-        ("1", "k_row_too_large") => true,
+    if !COND_REASONS.contains(reason) {
+        return Err(format!(
+            "{id}: unknown containment_only reason {reason:?} (closed set {COND_REASONS:?})"
+        ));
+    }
+    // (flag, reason) -> (containment_only, the k_row + 8 >= MAX_REPLAY_PREC value it implies; None: independent of k_row)
+    let (containment_only, implied) = match (*flag, *reason) {
+        ("0", "tight") => (false, Some(false)),
+        ("1", "k_row_too_large") => (true, Some(true)),
+        ("2", "lstsq_x_zero") => (true, None),
         (f, r) => return Err(format!("{id}: bad containment_only/reason {f} {r}")),
     };
-    if containment_only != too_large {
+    if implied.is_some_and(|t| t != too_large) {
         return Err(format!(
             "{id}: containment_only {flag} disagrees with k_row {k_row} (k_row + 8 >= {MAX_REPLAY_PREC} is {too_large})"
         ));
@@ -189,7 +199,7 @@ fn logdet_rows(text: &str) -> Result<Vec<LogdetRow>, String> {
             None
         } else {
             let skip = toks.len().checked_sub(ncond).ok_or("short row")?;
-            Some(parse_cond_cols(id, toks.iter().skip(skip).copied())?)
+            Some(parse_cond_cols(id, toks.get(skip..).ok_or("short row")?)?)
         };
         rows.push(LogdetRow {
             id: (*id).to_string(),
@@ -288,6 +298,41 @@ fn la1_logdet_format2_rejects_bad_cond_columns() -> Result<(), String> {
             Err(e) => return Err(format!("{bad:?}: wrong error {e}")),
             Ok(_) => return Err(format!("{bad:?}: bad cond columns accepted")),
         }
+    }
+    Ok(())
+}
+
+/// The reason token is from the closed set: an unknown one is rejected, lstsq_x_zero (code 2) is accepted at any k_row.
+#[test]
+fn la1_logdet_format2_reason_set_is_closed() -> Result<(), String> {
+    let good = " 1/1 4 1/1 0 tight 1/1\n";
+    for (bad, want) in [
+        (
+            " 1/1 4 1/1 1 x_zero 1/1\n",
+            "unknown containment_only reason",
+        ),
+        (
+            " 1/1 4 1/1 0 Tight 1/1\n",
+            "unknown containment_only reason",
+        ),
+        (" 1/1 4 1/1 0 lstsq_x_zero 1/1\n", "bad containment_only"),
+        (" 1/1 4 1/1 1 lstsq_x_zero 1/1\n", "bad containment_only"),
+    ] {
+        match logdet_rows(&V2_ROW.replace(good, bad)) {
+            Err(e) if e.contains(want) => {}
+            Err(e) => return Err(format!("{bad:?}: wrong error {e}")),
+            Ok(_) => return Err(format!("{bad:?}: bad reason accepted")),
+        }
+    }
+    let rows = logdet_rows(&V2_ROW.replace(good, " 1/1 4 1/1 2 lstsq_x_zero 1/1\n"))?;
+    let flags: Vec<Option<bool>> = rows
+        .iter()
+        .map(|r| r.cond.as_ref().map(|c| c.containment_only))
+        .collect();
+    if flags != [Some(true), None] {
+        return Err(format!(
+            "lstsq_x_zero row flags {flags:?}, want [Some(true), None]"
+        ));
     }
     Ok(())
 }

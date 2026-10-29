@@ -17,7 +17,7 @@
 # cond_row: exact rational p/q = || |A^-1| P^T|L||U| ||_inf (componentwise Skeel condition with growth from the exact L, U of la_lu's pivoting)
 # k_row: decimal integer = 4 + ceil(log2 n) + ceil(log2 cond_row), exact
 # scale_row: exact rational p/q; 1/1 for ln outputs (logdet), ||x||_inf for solve
-# containment_only reason: 0 tight | 1 k_row_too_large (k_row + 8 >= 192: no replay prec in {53, 113, 192} has prec > k_row + 8). The flag does not depend on prec: 1 means containment only at EVERY replay prec; 0 does not mean tight at every prec, the replay still applies prec > k_row + 8 per prec
+# containment_only reason: closed set 0 tight | 1 k_row_too_large | 2 lstsq_x_zero (k_row_too_large: k_row + 8 >= 192: no replay prec in {53, 113, 192} has prec > k_row + 8; lstsq_x_zero: lstsq x = 0, scale_row undefined). The code does not depend on prec: 1 or 2 means containment only at EVERY replay prec; 0 does not mean tight at every prec, the replay still applies prec > k_row + 8 per prec
 # rref: exact rational p/q, diagnostic only (never a gate): c with first-order bound c*2^-prec from |dA| <= gamma_n P^T|L||U|, gamma_n ~ n*2^-prec; logdet c = n*tr(|A^-1| P^T|L||U|), solve c = n*|| |A^-1| P^T|L||U| |x| ||_inf
 # tightness (replay): rad <= 2^(k_row - prec) * max(|v|, scale_row) when prec > k_row + 8, containment only otherwise
 # numbers: every exact entry is p/q in lowest terms, q > 0, arbitrary-size signed integers; dyadics are m*2^e with m odd (or 0*2^0); fields are single-space separated; no floats.
