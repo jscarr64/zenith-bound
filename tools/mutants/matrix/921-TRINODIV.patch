@@ -1,7 +1,7 @@
 diff --git a/src/matrix.rs b/src/matrix.rs
 --- a/src/matrix.rs
 +++ b/src/matrix.rs
-@@ -646,7 +646,7 @@
+@@ -645,7 +645,7 @@
              }
          };
          let u = Neg::neg(neg_u);

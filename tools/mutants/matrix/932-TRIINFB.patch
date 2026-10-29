@@ -1,7 +1,7 @@
 diff --git a/src/matrix.rs b/src/matrix.rs
 --- a/src/matrix.rs
 +++ b/src/matrix.rs
-@@ -621,6 +621,12 @@
+@@ -620,6 +620,12 @@
          prec,
      } = *sys;
      let range = || resource(op, "index out of range");

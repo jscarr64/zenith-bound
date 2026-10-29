@@ -1123,7 +1123,6 @@ fn tri_mat_balls(n: usize, balls: Vec<Ball>) -> Result<BallMat, String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S6.12.3: forward/back substitution, dyadic systems are solved exactly (radius 0)"]
 fn s6_tri_dyadic_exact_lower_and_upper() -> Result<(), String> {
     // x = [1, 2, -1]; the other triangle holds 100s that must never be read (mutant 916).
     let lower = mat(3, 3, &[2, 100, 100, 1, 4, 100, -3, 2, 8])?;
@@ -1150,7 +1149,6 @@ fn s6_tri_dyadic_exact_lower_and_upper() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S6.12.1: unit_diag takes the diagonal as exactly 1 and does not read it"]
 fn s6_tri_unit_diag() -> Result<(), String> {
     // diagonal 7 is ignored with unit_diag: x = [1, 2]
     let lower = mat(2, 2, &[7, 0, 3, 7])?;
@@ -1195,7 +1193,6 @@ fn s6_tri_unit_diag() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S6.12.4: non-dyadic point systems enclose the exact rational solution"]
 fn s6_tri_non_dyadic_exact_rational() -> Result<(), String> {
     // [[3,0],[1,3]] x = [1,1]: x = [1/3, 2/9]
     let lower = mat(2, 2, &[3, 0, 1, 3])?;
@@ -1224,7 +1221,6 @@ fn s6_tri_non_dyadic_exact_rational() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S6.12.4: the radii of b and of earlier x_j are carried into the result"]
 fn s6_tri_radii_propagate() -> Result<(), String> {
     let one = || Mag::from_exact_num(&num(1));
     for (name, f) in TRI_VEC {
@@ -1256,7 +1252,6 @@ fn s6_tri_radii_propagate() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S6.12.2: n = 0 returns an empty result, Ok"]
 fn s6_tri_empty_system() -> Result<(), String> {
     for (name, f) in TRI_VEC {
         let x = ok(name, f(&mat(0, 0, &[])?, &vec_of(&[])?, false, 53))?;
@@ -1274,7 +1269,6 @@ fn s6_tri_empty_system() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S6.12.2: errors in order prec, shape (b_len), then the first diagonal ball containing 0"]
 fn s6_tri_errors_in_order() -> Result<(), String> {
     for (name, f) in TRI_VEC {
         let sq = mat(2, 2, &[1, 0, 0, 1])?;
@@ -1350,7 +1344,6 @@ fn s6_tri_errors_in_order() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S6.12.2: a diagonal ball containing 0 (|m| <= r, Infinity included) is certified Singular"]
 fn s6_tri_singular_diagonal() -> Result<(), String> {
     // diagonal entry 1 (index 1) is the test ball `m ± r` (`None` = Infinity); the other diagonal is 1.
     let rad = |r: Option<i64>| r.map_or_else(Mag::infinity, |k| Mag::from_exact_num(&num(k)));
@@ -1388,7 +1381,6 @@ fn s6_tri_singular_diagonal() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S6.12.3: an Infinity term gives all-reals entries as Ok, never Singular"]
 fn s6_tri_infinity_in_b_is_all_reals_ok() -> Result<(), String> {
     // lower: b0 all reals → x0 and x1 (which reads x0) all reals
     let b = BallVec::from_balls(vec![ball(0, Mag::infinity(), 53)?, pt(1)?]);
@@ -1416,7 +1408,6 @@ fn s6_tri_infinity_in_b_is_all_reals_ok() -> Result<(), String> {
 }
 
 #[test]
-#[ignore = "red: CONTRACT 16.S6.12.1: column j of the _mat result is exactly the vector form on column j of b"]
 fn s6_tri_mat_matches_vec_columns() -> Result<(), String> {
     let lower = mat(3, 3, &[3, 0, 0, 1, 3, 0, -2, 5, 7])?;
     let upper = mat(3, 3, &[3, 1, -2, 0, 3, 5, 0, 0, 7])?;

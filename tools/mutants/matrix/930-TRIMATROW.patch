@@ -1,7 +1,7 @@
 diff --git a/src/matrix.rs b/src/matrix.rs
 --- a/src/matrix.rs
 +++ b/src/matrix.rs
-@@ -731,8 +731,8 @@
+@@ -730,8 +730,8 @@
      };
      for (j, col) in cols.iter_mut().enumerate() {
          let b_at = |i: usize| {

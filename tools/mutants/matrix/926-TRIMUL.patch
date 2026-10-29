@@ -1,7 +1,7 @@
 diff --git a/src/matrix.rs b/src/matrix.rs
 --- a/src/matrix.rs
 +++ b/src/matrix.rs
-@@ -649,7 +649,7 @@
+@@ -648,7 +648,7 @@
          let x = if unit_diag {
              u
          } else {
