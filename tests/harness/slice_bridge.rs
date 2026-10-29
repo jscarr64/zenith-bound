@@ -1013,3 +1013,9 @@ mod harper_s2_edges;
 
 // Harper S2 (2026-10-29): cmp_exact_diff wide gap with the radius above zf EXPONENT_MAX.
 mod harper_s2_diff_edge;
+
+// Harper S2 (2026-10-29): every row of bridge_cmp.txt (scripts/gen_bridge_cmp_goldens.py) asserted exactly.
+mod harper_s2_goldens;
+
+// Harper S2 red (2026-10-29): cmp_exact_diff None when |a - b| leaves zf range (16.S2.2).
+mod harper_s2_diff_overflow;

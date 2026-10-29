@@ -1,6 +1,6 @@
 #!/home/jsc64/.local/oracle-venv/bin/python
 """
-WIP (not yet wired into GENERATORS / SHA256SUMS, no harness consumer yet).
+Consumer: tests/harness/slice_bridge/harper_s2_goldens.rs (every row asserted exactly). Not yet in GENERATORS / SHA256SUMS.
 Generates tests/goldens/slices/bridge/bridge_cmp.txt: S2 rows for Mag::cmp_exact_num, Mag::cmp_exact_diff,
 Mag::from_exact_num / from_exact_num_lower and Mag::to_exact_num.
 TOKENS. ExactNum: 'nan' '+inf' '-inf' '+0' '-0' or '[+-]HEX^E' = +-HEX * 2^E (HEX lowercase, odd).
@@ -11,7 +11,9 @@ TRUTH. Exact Python integers only: the sign of a sum of signed dyadics is found 
 lie within 256 bits of each other (summed exactly), the top nonzero cluster decides (a gap of > 64 bits makes the lower
 clusters unable to change the sign). Close-gap rows are cross-checked with mpmath libmp exact mpf_sub/mpf_cmp; up/lo are
 cross-checked against mpmath from_man_exp(.., 64, 'f'/'c') plus containment and 1-ulp tightness. Any mismatch exits 3.
-STREAMING: rows are written one at a time.
+STREAMING: rows are written one at a time. SIZE: the 100000-bit values appear only in the few HUGE D rows (low thousands of rows,
+well under 1 MB). EDGE: the hand-worked cmp_far_diff rows of tests/harness/slice_bridge/harper_s2_diff_edge.rs (radius above
+EXPONENT_MAX: Mag(TOP, E+1), Mag(TOP+1, E+1), Mag(u64::MAX, E+1), Mag(u64::MAX, E)) are emitted with their hand truth asserted.
 """
 import os
 import resource
@@ -20,7 +22,7 @@ import sys
 import goldlib
 from mpmath import libmp as L
 
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 GOLDEN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "goldens", "slices", "bridge")
 GOLDEN_NAME = "bridge_cmp.txt"
 EXPONENT_MAX = (1 << 62) - 1
@@ -212,9 +214,31 @@ def fixed_x():
     out = ["nan", "+inf", "-inf", (0, 0, 0), (1, 0, 0)]
     for s in (0, 1):
         out += [xnum(s, 1, 0), xnum(s, (1 << 64) - 1, EXPONENT_MAX - 64), xnum(s, 1, EXPONENT_MIN - 1),
-                xnum(s, (1 << 100000) + 1, -100000), xnum(s, (1 << 100000) - 1, -100000),
-                xnum(s, (1 << 65) - 1, EXPONENT_MAX - 65), xnum(s, (1 << 64) + 1, EXPONENT_MIN - 1)]
+                                xnum(s, (1 << 65) - 1, EXPONENT_MAX - 65), xnum(s, (1 << 64) + 1, EXPONENT_MIN - 1)]
     return out
+
+
+def huge_d_rows():
+    """The 100000-bit values, in a few D rows only: a = 1 +- 2^-100000 against 1 and against each other, the radius
+    1 (gt), 2^-100000 (Mag(TOP, -99999); eq against 1) and 2^-100001 (lt)."""
+    one = xnum(0, 1, 0)
+    hp, hm = xnum(0, (1 << 100000) + 1, -100000), xnum(0, (1 << 100000) - 1, -100000)
+    for a, b in ((hp, one), (one, hm), (hp, hm), (xnum(1, hp[1], hp[2]), xnum(1, 1, 0))):
+        for r in ((TOP, 1), (TOP, -99999), (TOP, -100000)):
+            yield r, a, b
+
+
+def edge_d_rows():
+    """harper_s2_diff_edge.rs, E = EXPONENT_MAX: a = 2^E (1 - 2^-200), s = 2^(E-130); (r, a, b, hand truth)."""
+    e = EXPONENT_MAX
+    a = xnum(0, (1 << 200) - 1, e - 200)
+    s = xnum(0, 1, e - 130)
+    na, ns = xnum(1, a[1], a[2]), xnum(1, s[1], s[2])
+    for r, want in (((TOP, e + 1), ("lt", "lt", "gt")), ((TOP + 1, e + 1), ("gt", "gt", "gt")),
+                    (((1 << 64) - 1, e + 1), ("gt", "gt", "gt")), (((1 << 64) - 1, e), ("lt", "lt", None))):
+        for (x, y), w in zip(((a, ns), (na, s), (a, s)), want):
+            if w is not None:
+                yield r, x, y, w
 
 
 FIXED_MAGS = ["inf", (0, 0), (TOP, 1), (TOP | 1, 1), ((1 << 64) - 1, 0), ((1 << 64) - 1, I64_MAX), (TOP, I64_MIN),
@@ -239,6 +263,15 @@ def rows(limit):
                 got = cmp_diff(r, a, b)
                 cross_diff(r, a, b, got)
                 yield "D %s %s %s %s" % (emag(r), enum(a), enum(b), got)
+    for r, a, b in huge_d_rows():
+        got = cmp_diff(r, a, b)
+        cross_diff(r, a, b, got)
+        yield "D %s %s %s %s" % (emag(r), enum(a), enum(b), got)
+    for r, a, b, want in edge_d_rows():
+        got = cmp_diff(r, a, b)
+        if got != want:
+            raise Bad("edge row %r %r %r: oracle %s, hand truth %s" % (r, a, b, got, want))
+        yield "D %s %s %s %s" % (emag(r), enum(a), enum(b), got)
     while n < limit:
         n += 1
         x = rand_x(rng)
