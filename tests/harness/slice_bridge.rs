@@ -1019,3 +1019,6 @@ mod harper_s2_goldens;
 
 // Harper S2 red (2026-10-29): cmp_exact_diff None when |a - b| leaves zf range (16.S2.2).
 mod harper_s2_diff_overflow;
+
+/// Harper S2 rows above 1028 bits at the zf edges.
+mod harper_s2_wide;
