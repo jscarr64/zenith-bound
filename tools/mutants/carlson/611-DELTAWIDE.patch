@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -299,7 +299,7 @@
+@@ -287,7 +287,7 @@
      if !finite(w) {
          return None;
      }

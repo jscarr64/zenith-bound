@@ -9,4 +9,4 @@ diff --git a/src/carlson.rs b/src/carlson.rs
 +    let log_form = *branch == Branch::Lower;
      let cap = wp_cap(prec);
      let mut wp = wp_start(prec);
-     let mut clamped = false;
+     while wp <= cap {

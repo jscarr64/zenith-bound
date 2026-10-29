@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -463,7 +463,7 @@
+@@ -451,7 +451,7 @@
  /// The ball `[l, h]`: `mid = round((l + h) / 2, prec)`, `rad = max(h - mid, mid - l)` rounded up.
  fn result(op: &'static str, l: &ExactNum, h: &ExactNum, prec: Precision) -> BoundResult<Ball> {
      let wide = prec.saturating_add(2);
