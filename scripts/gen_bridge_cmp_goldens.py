@@ -1,6 +1,6 @@
 #!/home/jsc64/.local/oracle-venv/bin/python
 """
-Consumer: tests/harness/slice_bridge/harper_s2_goldens.rs (every row asserted exactly). Not yet in GENERATORS / SHA256SUMS.
+Consumer: tests/harness/slice_bridge/harper_s2_goldens.rs (every row asserted exactly). Listed in tests/goldens/slices/bridge/GENERATORS and SHA256SUMS (checked by tools/goldens_regen.sh).
 Generates tests/goldens/slices/bridge/bridge_cmp.txt: S2 rows for Mag::cmp_exact_num, Mag::cmp_exact_diff,
 Mag::from_exact_num / from_exact_num_lower and Mag::to_exact_num.
 TOKENS. ExactNum: 'nan' '+inf' '-inf' '+0' '-0' or '[+-]HEX^E' = +-HEX * 2^E (HEX lowercase, odd).
