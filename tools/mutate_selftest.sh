@@ -91,6 +91,15 @@ out="$(run)" || fail "stale logdir: killable mutant not accepted: $out"
 touch "$t/mutate-out/all/999-stale.out"; out="$(run --only 001-add-mul)" || fail "stale logdir --only: $out"
 [ -f "$t/mutate-out/all/999-stale.out" ] || fail "stale logdir: --only removed another id's .out"
 rm -f "$t/mutate-out/all/999-stale.out" "$t/mutate-out/all/keep.txt"; rm -rf "$t/mutate-out/other"
+# Spence (2026-10-29): slice mode (tools/mutate_slice.sh, the gate's path) runs one --only per id, so it clears the slice logdir's .out
+# files ONCE at the start, by mutate.sh's full-run rule; an id that has left the manifest must not leave a stale .out behind.
+printf 'x\n' >> "$t/cases"; mkdir -p "$t/mutate-out/central" "$t/mutate-out/other"
+touch "$t/mutate-out/central/006-removed.out" "$t/mutate-out/central/keep.txt" "$t/mutate-out/other/006-removed.out"
+out="$(MUTATE_FLOOR_ZERO_OK=1 MUTATE_FLOOR="$t/mfloor.txt" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate_slice.sh" central 2>&1)" || fail "slice stale logdir: slice run failed: $out"
+[ -e "$t/mutate-out/central/006-removed.out" ] && fail "slice stale logdir: a removed id's .out was kept by a slice run"
+[ -f "$t/mutate-out/central/001-add-mul.out" ] || fail "slice stale logdir: the current id's 001-add-mul.out is missing"
+[ -f "$t/mutate-out/central/keep.txt" ] && [ -f "$t/mutate-out/other/006-removed.out" ] || fail "slice stale logdir: a non-.out file or another slice's .out was removed"
+rm -rf "$t/mutate-out/central" "$t/mutate-out/other"
 
 # a surviving mutant makes the runner exit nonzero and is reported as SURVIVED
 setm m.surv; out="$(run)" && fail "surviving mutant passed (runner exited 0)"
@@ -216,6 +225,6 @@ grep -q '^INVALID 001-add-mul: suite run failed without a test failure' <<< "$ou
 [ -f "$lg" ] && grep -q ' ERR rc=101 ' "$lg" || fail "err-loud: an unexpected failure (rc 101, no test failed) did not log an ERR trap line: $(cat "$lg" 2>/dev/null | grep ERR)"
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-want_cases=36; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+want_cases=37; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
 [ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
 echo "mutate selftest: ok ($ncases cases)"

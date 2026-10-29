@@ -9,6 +9,7 @@
 #   SURVIVED    a survivor with no equivalent entry (mutate.sh prints SURVIVED-EQUIVALENT for documented ones)
 #   BELOW floor the slice's KILLED / KILLED+SURVIVED-EQUIVALENT counts are under its floor (mutate.sh --floor --slice)
 # and on a duplicate result id, a result for an id other than the run's --only id, an unreadable id list or floor, or a nonzero runner exit.
+# Before a full slice run it clears that slice's logdir of stale *.out files once (clear_outs below; mutate.sh --only keeps other ids' files).
 # A result is an UNINDENTED line `KILLED|SURVIVED-EQUIVALENT|SURVIVED|INVALID <id>` (mutate.sh echoes suite output indented; that never counts).
 #   TIMEOUT <id> one mutant ran past MUTANT_TIMEOUT_S (each id runs as its own `mutate.sh --slice S --only ID` under that limit)
 #   KILLED-OOM <id> the run was SIGKILLed (exit 137) before its limit: not timeout's own -k kill, so the OOM killer or another SIGKILL
@@ -45,6 +46,16 @@ slices() { local sl; sl=$("$M" --slices) || { echo "mutate_slice: FAIL mutate.sh
   [ -n "$sl" ] || { echo "mutate_slice: FAIL mutate.sh --slices listed nothing" >&2; return 1; }; printf '%s\n' "$sl"; }
 # slice_ids SLICE: the slice's manifest ids (fails closed)
 slice_ids() { "$M" --list --slice "$1" || { echo "mutate_slice: FAIL mutate.sh --list --slice $1 failed" >&2; return 1; }; }
+# clear_outs SLICE (Spence, 2026-10-29): each id runs as `mutate.sh --only ID`, which removes only its own <id>.out, so a full slice run
+# first clears the slice logdir ONCE, by mutate.sh's full-run rule (regular *.out files directly in <logdir>/<slice>; other files, subdirs
+# and other slices are left alone). An id that has left the manifest cannot leave a stale .out behind. The logdir is resolved as mutate.sh
+# does: MUTATE_LOGDIR, else MUTATE_PERSIST (default the parent of MUTATE_TARGET) with MUTATE_TARGET, else MUTATE_TMP (default zb_scratch),
+# then /mutate-out. A dir that does not exist yet is fine (mutate.sh creates it). A PARTIAL (ID_REGEX) run does not clear.
+clear_outs() { local lb d
+  if [ -n "${MUTATE_TARGET:-}" ]; then lb=${MUTATE_PERSIST:-$(dirname "$MUTATE_TARGET")}; else lb=${MUTATE_TMP:-$(zb_scratch)}; fi
+  d=${MUTATE_LOGDIR:-$lb/mutate-out}/$1; [ -d "$d" ] || return 0
+  find "$d" -mindepth 1 -maxdepth 1 -type f -name '*.out' -delete || { echo "mutate_slice: FAIL cannot clear stale .out files in $d"; return 1; }
+}
 # one SLICE: run and check one slice; its result ids go to $w/SLICE.got
 one() {
   local s=$1 re=${2-} partial=0 ids n fl id left lim t0 t1 el irc tmo="" oom="" cut=""  fk fke to rc=0 out=$w/$1.out res got nres miss dup oth inv sur nk ne bad=0 tmax
@@ -62,6 +73,7 @@ one() {
   to=$((n * budget + setup))
   echo "mutate_slice: slice $s: $n ids, timeout ${to}s ($n x ${budget}s + ${setup}s setup), floor killed $fk killed+equivalent $fke"
   : > "$w/$s.got"; : > "$w/$s.res"; : > "$w/$s.oth"
+  [ "$partial" = 1 ] || clear_outs "$s" || return 1
   if [ "$n" -gt 0 ]; then
     : > "$out"; t0=$SECONDS
     for id in $ids; do
