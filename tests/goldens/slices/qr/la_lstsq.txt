@@ -16,14 +16,14 @@
 # cond_row: exact rational p/q = || |A^-1| P^T|L||U| ||_inf (componentwise Skeel condition with growth from the exact L, U of la_lu's pivoting)
 # k_row: decimal integer = 4 + ceil(log2 n) + ceil(log2 cond_row), exact
 # scale_row: exact rational p/q; 1/1 for ln outputs (logdet), ||x||_inf for solve
-# containment_only reason: 0 tight | 1 k_row_too_large (k_row + 8 >= 192: no replay prec in {53, 113, 192} has prec > k_row + 8)
+# containment_only reason: closed set 0 tight | 1 k_row_too_large | 2 lstsq_x_zero (k_row_too_large: k_row + 8 >= 192: no replay prec in {53, 113, 192} has prec > k_row + 8; lstsq_x_zero: lstsq x = 0, scale_row undefined). The code does not depend on prec: 1 or 2 means containment only at EVERY replay prec; 0 does not mean tight at every prec, the replay still applies prec > k_row + 8 per prec
 # rref: exact rational p/q, diagnostic only (never a gate): c with first-order bound c*2^-prec from |dA| <= gamma_n P^T|L||U|, gamma_n ~ n*2^-prec; logdet c = n*tr(|A^-1| P^T|L||U|), solve c = n*|| |A^-1| P^T|L||U| |x| ||_inf
 # tightness (replay): rad <= 2^(k_row - prec) * max(|v|, scale_row) when prec > k_row + 8, containment only otherwise
 # lstsq cond (16.LA.5): with A m x n full column rank, A^+ = (A^T A)^-1 A^T, x = A^+ b, r = b - A x (all exact):
 #   cond_row = ( || |A^+||A| ||_inf * ||x||_inf + || |(A^T A)^-1| |A^T| |r| ||_inf ) / ||x||_inf  (exact-fit r = 0: first term only; residual term not capped)
 #   k_row = 4 + ceil(log2 m) + ceil(log2 cond_row) (m = row count); scale_row = ||x||_inf
 #   rref (diagnostic, never a gate) = m * || |A^+||A||x| + |(A^T A)^-1||A^T||r| ||_inf
-#   containment_only reason: 0 tight | 1 k_row_too_large (k_row + 8 >= 192) | 1 lstsq_x_zero (x = 0: cond_row and k_row from the first term || |A^+||A| ||_inf only)
+#   x = 0 (lstsq_x_zero, in the closed reason set above): cond_row and k_row from the first term || |A^+||A| ||_inf only
 # numbers: every exact entry is p/q in lowest terms, q > 0, arbitrary-size signed integers; dyadics are m*2^e with m odd (or 0*2^0); fields are single-space separated; no floats.
 # case_id: <op>.<family>.<variant>, stable across regenerations; inputs are always listed before outputs; dims gives every matrix size, so a row's field count is fixed by dims; refusal rows end in 'ERR <variant> <detail>' (variant = zb BoundError variant).
 lstsq.tall.3x2 3x2 3 1/1 1/1 1/1 2/1 1/1 3/1 1/1 2/1 2/1 2/3 1/2 38597363079105398474523661669562635951089994888546854679819194669304376546645*2^-255 77194726158210796949047323339125271902179989777093709359638389338608753093291*2^-256 1*2^-1 1*2^-1 32/3 10 2/3 0 tight 58/3
@@ -34,7 +34,7 @@ lstsq.refuse.dupcol_4x2 4x2 4 1/1 1/1 2/1 2/1 3/1 3/1 4/1 4/1 1/1 1/1 1/1 1/1 ER
 lstsq.refuse.wide2x3 2x3 2 1/1 0/1 0/1 0/1 1/1 0/1 1/1 1/1 ERR DimensionMismatch wide
 lstsq.refuse.blen_3x2_b2 3x2 2 1/1 1/1 1/1 2/1 1/1 3/1 1/1 1/1 ERR DimensionMismatch b_len
 lstsq.refuse.blen_3x2_b4 3x2 4 1/1 1/1 1/1 2/1 1/1 3/1 1/1 1/1 1/1 1/1 ERR DimensionMismatch b_len
-lstsq.x_zero.3x2 3x2 3 1/1 0/1 0/1 1/1 0/1 0/1 0/1 0/1 1/1 0/1 0/1 0*2^0 0*2^0 0*2^0 0*2^0 1/1 6 0/1 1 lstsq_x_zero 0/1
+lstsq.x_zero.3x2 3x2 3 1/1 0/1 0/1 1/1 0/1 0/1 0/1 0/1 1/1 0/1 0/1 0*2^0 0*2^0 0*2^0 0*2^0 1/1 6 0/1 2 lstsq_x_zero 0/1
 lstsq.empty.3x0 3x0 3 1/1 1/1 1/1
 lstsq.empty.0x0 0x0 0
 lstsq.refuse.blen_3x0_b2 3x0 2 1/1 1/1 ERR DimensionMismatch b_len

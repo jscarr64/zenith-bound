@@ -1,6 +1,7 @@
 //! Slice LA3 harness rows (`src/qr.rs`): gold replay of `la_qr.txt` (`BallMat::qr`) and `la_lstsq.txt` (`BallMat::lstsq`).
 //! Owner: Rusty (slice LA3, Cassie review 2026-10-29). Exact qr golds: Cassie; lstsq golds: scripts/gen_la_lstsq_goldens.py.
 //! Goldens: tests/goldens/slices/qr/ (its own SHA256SUMS and GENERATORS). Mutants: tools/mutants/manifest.d/qr.txt, ids 1200..=1299.
+//! COVERS: BallMat::qr, BallMat::lstsq, BallQr::q, BallQr::r, BallQr::into_parts, BallQr::lstsq
 //! Golden file headers for this slice are declared here, not in tests/common/goldens.rs.
 //!
 //! Replay (CONTRACT 16.LA.4, 16.LA.5, 16.LA3.3): every row at each of `PRECS`. A value passes when every returned ball contains
@@ -33,7 +34,7 @@ const LSTSQ_COND_COLS: usize = 6;
 const LSTSQ_REASONS: [(&str, &str); 3] = [
     ("0", "tight"),
     ("1", "k_row_too_large"),
-    ("1", "lstsq_x_zero"),
+    ("2", "lstsq_x_zero"),
 ];
 
 /// Value rows whose computed `σ` ball reaches 0 at a replay precision, pinned to the measured `Resource "undecided_rank"`
@@ -570,7 +571,7 @@ fn la3_lstsq_exact_fit_and_x_zero_cond_rows_16_la_5() -> Result<(), String> {
         ),
         (
             "lstsq.x_zero.3x2",
-            ["1/1", "6", "0/1", "1", "lstsq_x_zero", "0/1"],
+            ["1/1", "6", "0/1", "2", "lstsq_x_zero", "0/1"],
         ),
     ] {
         let toks = data_rows(&text)
@@ -712,7 +713,7 @@ fn enc_pairs<'a>(text: &'a str, id: &str, mn: usize) -> Result<Vec<&'a str>, Str
         .ok_or_else(|| format!("{id}: short heavy row"))
 }
 
-fn pair_at<'a>(p: &[&'a str], k: usize) -> Result<(ExactNum, ExactNum), String> {
+fn pair_at(p: &[&str], k: usize) -> Result<(ExactNum, ExactNum), String> {
     let i = mul(k, 2)?;
     match (p.get(i), p.get(add(i, 1)?)) {
         (Some(lo), Some(hi)) => Ok((dyadic(lo)?, dyadic(hi)?)),
@@ -800,4 +801,36 @@ fn la3_qr_hilbert_256_contains_by_heavy_tier() -> Result<(), String> {
     } else {
         Err(format!("hilbert tiers measured {got:?}, recorded {want:?}"))
     }
+}
+
+/// `BallQr::lstsq`, `BallMat::lstsq` and `BallQr::into_parts` on A = [3; 4], b = [3; 4]: |R_00| = sqrt(3^2 + 4^2) = 5 and the exact
+/// fit x = 1 (A·1 = b), contained at every replay prec; `into_parts` returns R_00 and the 2x1 Q.
+#[test]
+fn la3_qr_into_parts_and_factored_lstsq_on_3_4_5() -> Result<(), String> {
+    let e = |n: i64| ExactNum::from(n);
+    for prec in PRECS {
+        let ball = |v: i64| Ball::exact(ExactNum::from(v), prec).map_err(|er| format!("{er:?}"));
+        let a = BallMat::from_balls(2, 1, vec![ball(3)?, ball(4)?]).map_err(|er| format!("{er:?}"))?;
+        let f = a.qr(prec).map_err(|er| format!("qr: {er:?}"))?;
+        let x_f = f
+            .lstsq(&BallVec::from_balls(vec![ball(3)?, ball(4)?]), prec)
+            .map_err(|er| format!("BallQr::lstsq: {er:?}"))?;
+        let x_m = a
+            .lstsq(&BallVec::from_balls(vec![ball(3)?, ball(4)?]), prec)
+            .map_err(|er| format!("BallMat::lstsq: {er:?}"))?;
+        for (what, x) in [("BallQr::lstsq", &x_f), ("BallMat::lstsq", &x_m)] {
+            if !covers(x.get(0).ok_or("x empty")?, &e(1), &e(1))? {
+                return Err(format!("prec {prec}: {what} x does not contain 1"));
+            }
+        }
+        let (q, r) = f.into_parts();
+        let r00 = r.get(0, 0).ok_or("R_00 missing")?;
+        if !(covers(r00, &e(5), &e(5))? || covers(r00, &e(-5), &e(-5))?) {
+            return Err(format!("prec {prec}: into_parts R_00 does not contain ±5"));
+        }
+        if q.get(1, 0).is_none() || q.get(0, 0).is_none() {
+            return Err(format!("prec {prec}: into_parts Q is not 2x1"));
+        }
+    }
+    Ok(())
 }

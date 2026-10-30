@@ -114,7 +114,7 @@ LSTSQ_FORMAT_LINES = [
     "  cond_row = ( || |A^+||A| ||_inf * ||x||_inf + || |(A^T A)^-1| |A^T| |r| ||_inf ) / ||x||_inf  (exact-fit r = 0: first term only; residual term not capped)",
     "  k_row = 4 + ceil(log2 m) + ceil(log2 cond_row) (m = row count); scale_row = ||x||_inf",
     "  rref (diagnostic, never a gate) = m * || |A^+||A||x| + |(A^T A)^-1||A^T||r| ||_inf",
-    f"  containment_only reason: 0 tight | 1 k_row_too_large (k_row + 8 >= {max(PRECS)}) | 1 lstsq_x_zero (x = 0: cond_row and k_row from the first term || |A^+||A| ||_inf only)",
+    "  x = 0 (lstsq_x_zero, in the closed reason set above): cond_row and k_row from the first term || |A^+||A| ||_inf only",
 ]
 
 def _inv_exact(N):
@@ -157,4 +157,4 @@ def la_cond_cols_lstsq(A, b, x):
     assert cond >= 1
     k_row = 4 + (m - 1).bit_length() + ceil_log2(cond)
     if reason is None: reason = "k_row_too_large" if k_row + 8 >= max(PRECS) else "tight"
-    return CondCols(F(cond), k_row, F(xn), int(reason != "tight"), reason, rref)
+    return CondCols(F(cond), k_row, F(xn), dict((r, c) for c, r in REASONS)[reason], reason, rref)
