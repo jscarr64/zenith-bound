@@ -339,6 +339,32 @@ def selftest():
     _check(oracle_problems(good, "/usr", "/usr", vpath, venv, "/home/u/.local") != [], "system prefix not reported")
     _check(oracle_problems(good, venv, venv, vpath, venv, "/home/u/.local") != [], "prefix == base_prefix (not a venv) not reported")
     _check(oracle_problems(good, venv, "/usr/local", vpath + ["/home/u/.local/lib/python3.12/site-packages"], venv, "/home/u/.local") != [], "~/.local on sys.path not reported")
+    # team env only (Jeff 10:01 AM CT 2026-10-30: the team never uses ~/.local/oracle-venv). require_team_env(prefix) returns the env
+    # name or raises SystemExit (nonzero) with a typed 'goldlib: REFUSED[...]' message; write_lines records the name in DIR/PROVENANCE.
+    st = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".local", "goldlib-selftest")
+    def _refused(prefix, root, tag):
+        try:
+            require_team_env(prefix, root)
+        except SystemExit as e:
+            return e.code not in (None, 0) and isinstance(e.code, str) and e.code.startswith("goldlib: REFUSED[%s]" % tag)
+        return False
+    # (a) Jeff's oracle venv is refused (the path is only a string here; it is never run)
+    _check(_refused(os.path.expanduser("~/.local/oracle-venv"), TEAM_ENV_ROOT, "oracle-venv"), "~/.local/oracle-venv not refused")
+    # (b) any other path is refused
+    _check(_refused("/usr", TEAM_ENV_ROOT, "not-team-env"), "/usr not refused")
+    _check(_refused(os.path.join(st, "elsewhere", "venv"), TEAM_ENV_ROOT, "not-team-env"), "arbitrary venv path not refused")
+    # (c) a team-env-shaped dir (fixture under .local/, nothing under ~/team-env) that fails verify_env.sh is refused
+    fake_root = os.path.join(st, "team-env")
+    os.makedirs(os.path.join(fake_root, "fake-env", "bin"), exist_ok=True)
+    _check(_refused(os.path.join(fake_root, "fake-env"), fake_root, "verify-failed"), "team-env-shaped dir failing verify_env not refused")
+    # (d) the default team env is accepted and its name lands in PROVENANCE
+    _check(DEFAULT_TEAM_ENV == "oracle-2026-10-30", "default team env")
+    _check(require_team_env(os.path.join(TEAM_ENV_ROOT, DEFAULT_TEAM_ENV), TEAM_ENV_ROOT) == DEFAULT_TEAM_ENV, "oracle-2026-10-30 not accepted")
+    out = os.path.join(st, "prov")
+    os.makedirs(out, exist_ok=True)
+    write_lines(os.path.join(out, "x.txt"), ["a"], env_name=DEFAULT_TEAM_ENV)
+    with open(os.path.join(out, "PROVENANCE")) as f:
+        _check("x.txt team-env=oracle-2026-10-30" in f.read(), "env name not written into PROVENANCE")
     # splitmix64: the same reference values as tests/harness/*_selftest.rs (computed independently of Rust)
     g = SplitMix64(0)
     _check([g.next() for _ in range(3)] == [0xE220A8397B1DCDAF, 0x6E789E6AA1B965F4, 0x06C45D188009454F], "seed 0 reference outputs")
