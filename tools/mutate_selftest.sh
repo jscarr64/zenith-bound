@@ -241,8 +241,21 @@ out="$(MUTATE_SH="$t/stub-mutate.sh" MUTATE_FLOOR_ZERO_OK=1 MUTATE_FLOOR="$t/mfl
 grep -q '^NO-VERDICT 001-add-mul: mutate.sh --only 001-add-mul exited 1 before a verdict: mutate: FAIL simulated pre-verdict failure$' <<< "$out" || fail "no-verdict: no NO-VERDICT line naming the id and its error: $out"
 grep -q '^mutate_slice: FAIL NO-VERDICT: 001-add-mul (slice central)$' <<< "$out" || fail "no-verdict: no FAIL NO-VERDICT summary naming the id: $out"
 rm -rf "$t/mutate-out/central"
+# Harper (2026-10-30, Paul's 1146-full_gate on 479b31bf: `ERR rc=141 line=69 cmd=rl=$(grep -v ... "$inc" | head -1)` on
+# `--list --slice zf_special`): head -1 exits after the range line and grep dies of SIGPIPE under pipefail. Deterministic with an
+# include longer than a pipe buffer (64K): a real run log of `--list --slice zf_special` must hold no ERR line.
+printf 'x\n' >> "$t/cases"; mkdir -p "$r/tools/mutants/manifest.d"
+{ printf '# range: 700-799\n'; for i in $(seq 1 8000); do printf '# pad %s ..........................................................\n' "$i"; done; } > "$r/tools/mutants/manifest.d/zf_special.txt"; cm
+out="$( ( unset POPLOG_FILE POPLOG_PID POPLOG_STATE_DIR POPLOG_PROGRESS_FILE POPLOG_RUNNING RUNLOG_INNER RUNLOG_ACTIVE
+  env POPLOG_ROOT="$t/pl-zfs" RUNLOG_AGENT=selftest MUTATE_FLOOR_ZERO_OK=1 MUTATE_FLOOR="$t/mfloor.txt" \
+    MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" --list --slice zf_special 2>&1; echo "rc=$?" )
+  find "$t/pl-zfs/selftest" -name '*-mutate.log' | head -1)"; lg=$(tail -1 <<< "$out")
+grep -q '^rc=0$' <<< "$out" || fail "err-quiet zf_special: --list --slice zf_special failed: $out"
+[ -f "$lg" ] || fail "err-quiet zf_special: no run log: $out"
+grep -q ' ERR ' "$lg" && fail "err-quiet zf_special: --list --slice zf_special logged ERR trap lines: $(grep ' ERR ' "$lg")"
+rm -rf "$r/tools/mutants/manifest.d"; cm
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-want_cases=39; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+want_cases=40; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
 [ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
 echo "mutate selftest: ok ($ncases cases)"
