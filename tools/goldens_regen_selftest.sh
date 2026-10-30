@@ -150,5 +150,21 @@ HMARGS=; hm ZB_GATE_MODE=bogus
 ck; [ "$grc" = 2 ] || fail "an unknown ZB_GATE_MODE exited $grc, want 2: $out"
 # Spence LA4 minor: an unknown mode also records the ZB_GATE_MODE= line, before the refusal
 ck; grep -qx 'goldens-regen: ZB_GATE_MODE=bogus' <<< "$out" || fail "unknown ZB_GATE_MODE refusal did not record ZB_GATE_MODE first: $out"
+# Spence LA2 review of f0ea86a1 (2026-10-30, ~/pop-logs/spence/2026-10-30/1320-la2rev-gate-rerun.log): with ORACLE_PY set to the team env,
+# goldens-regen still ran ~/.local/oracle-venv/bin/python. The interpreter is GOLDENS_PYTHON, else ORACLE_PY, else ~/team-env/oracle-2026-10-30;
+# it must be ~/team-env/<name>/bin/python, pass verify_env.sh <name> and goldlib's check (path checked BEFORE anything runs it), and the
+# env name is logged. `--env-only` runs just that preflight. Jeff's ~/.local/oracle-venv is only ever a string here: never executed.
+ev() { out=$( unset GOLDENS_PYTHON ORACLE_PY ZB_TEAM_ENV_ROOT; env "$@" RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 GOLDENS_ROOT="$here/.." "$here/goldens_regen.sh" --env-only 2>&1 ); grc=$?; }
+ev ORACLE_PY="$HOME/.local/oracle-venv/bin/python"
+ck; [ "$grc" != 0 ] && grep -q 'goldens-regen: FAIL team-env: .*REFUSED\[oracle-venv\]' <<< "$out" || fail "ORACLE_PY=~/.local/oracle-venv was not refused loudly (rc $grc): $out"
+ev ORACLE_PY="$HOME/team-env/zb-no-such-env/bin/python"
+ck; [ "$grc" != 0 ] && grep -q 'goldens-regen: FAIL team-env: .*missing' <<< "$out" || fail "a missing team env was not refused loudly (rc $grc): $out"
+mkdir -p "$t/te/fake-env/bin"; ln -sf "$HOME/team-env/oracle-2026-10-30/bin/python" "$t/te/fake-env/bin/python"; printf '#!/bin/sh\necho "MISMATCH: $1 (selftest stub)"; exit 1\n' > "$t/te/verify_env.sh"; chmod +x "$t/te/verify_env.sh"
+ev ZB_TEAM_ENV_ROOT="$t/te" ORACLE_PY="$t/te/fake-env/bin/python"
+ck; [ "$grc" != 0 ] && grep -q 'goldens-regen: FAIL team-env: .*verify_env.sh fake-env failed' <<< "$out" || fail "a team env failing verify_env.sh was not refused loudly (rc $grc): $out"
+ev ORACLE_PY="$HOME/team-env/oracle-2026-10-30/bin/python"
+ck; [ "$grc" = 0 ] && grep -qx 'goldens-regen: team-env=oracle-2026-10-30 (verify_env.sh OK, goldlib OK)' <<< "$out" || fail "ORACLE_PY=team env: not used or not logged (rc $grc): $out"
+ev
+ck; [ "$grc" = 0 ] && grep -qx 'goldens-regen: team-env=oracle-2026-10-30 (verify_env.sh OK, goldlib OK)' <<< "$out" || fail "default interpreter is not the team env oracle-2026-10-30 (rc $grc): $out"
 echo "goldens_regen selftest: ok"
-st_done goldens_regen 60   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done goldens_regen 65   # WANT: cases this script runs (tools/selftest_cases.sh)
