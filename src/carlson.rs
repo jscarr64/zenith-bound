@@ -560,6 +560,7 @@ mod slice_carlson_unit {
     #[test]
     fn product_test_below_refuses_greater() -> Result<(), String> {
         let mut cc = Consts::new().map_err(|e| format!("Consts::new: {:?}", e))?;
+        // no-source: hand-derived: 1·e^1 = e > 1 (refused by Below), 0·e^0 = 0 <= 1 (accepted).
         if product_test(&num(1), &num(1), &Side::Below, 128, &mut cc) {
             return Err("product_test(1, 1, Below) accepted 1·e > 1".into());
         }
@@ -573,6 +574,7 @@ mod slice_carlson_unit {
     #[test]
     fn log_test_above_refuses_less() -> Result<(), String> {
         let mut cc = Consts::new().map_err(|e| format!("Consts::new: {:?}", e))?;
+        // no-source: hand-derived: ln 1 + 1 = 1 < ln 100 ≈ 4.6 (refused by Above), 1 >= ln 1 = 0 (accepted).
         if log_test(&num(1), &num(100), &Side::Above, 128, &mut cc) {
             return Err("log_test(1, 100, Above) accepted 1 >= ln 100".into());
         }
@@ -587,6 +589,8 @@ mod slice_carlson_unit {
     #[test]
     fn result_contains_endpoints() -> Result<(), String> {
         let mut bad = Vec::new();
+        // no-source: hand-chosen inputs: l = -1, h = k/7 - 1 (non-dyadic, so mid - l needs > 64 bits); the expected
+        // outcome is the enclosure property (result contains l and h), not a computed number.
         for prec in [100, 200, 300] {
             for k in 1..17 {
                 let l = num(-1);
@@ -603,6 +607,31 @@ mod slice_carlson_unit {
             Ok(())
         } else {
             Err(format!("{} of 48 lose an endpoint:\n{}", bad.len(), bad.join("\n")))
+        }
+    }
+
+    /// 626-RADBELOW64 at low `prec`: with a 2-to-40-bit midpoint and `mid - l` needing about 90 bits, rounding that half-width
+    /// down can drop `l` when the midpoint rounds towards `h`.
+    #[test]
+    fn result_contains_endpoints_low_prec() -> Result<(), String> {
+        // no-source: hand-chosen inputs: l = 1 + 2^-90, h = j/7 (j = 8..63) at 400 bits; the expected outcome is the
+        // enclosure property (result contains l and h), not a computed number.
+        let tiny = num(1).ldexp(-90, 8, RoundingMode::Down);
+        let mut bad = Vec::new();
+        for prec in 2..41 {
+            for j in 8..64 {
+                let l = num(1).add_full_prec(&tiny);
+                let h = num(j).div(&num(7), 400, RoundingMode::Down);
+                match result("lambert_w0", &l, &h, prec) {
+                    Ok(b) if b.contains(&l) == Tri::True && b.contains(&h) == Tri::True => {}
+                    got => bad.push(format!("prec {} j {}: {:?}", prec, j, got)),
+                }
+            }
+        }
+        if bad.is_empty() {
+            Ok(())
+        } else {
+            Err(format!("{} of {} lose an endpoint:\n{}", bad.len(), 39 * 56, bad.join("\n")))
         }
     }
 }

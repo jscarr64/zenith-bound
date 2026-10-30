@@ -400,6 +400,8 @@ fn lambertw_undecided_counts_outside() -> Result<(), String> {
 #[test]
 fn lambertw_w0_clip_contains_minus_one() -> Result<(), String> {
     let mut bad = Vec::new();
+    // source: W0(-1/e) = -1, DLMF 4.13 (https://dlmf.nist.gov/4.13).
+    // no-source: hand-chosen inputs: mid -0.360..-0.367, r = 0.01, so each ball straddles -1/e ≈ -0.367879.
     for prec in [100, 200, 300] {
         for j in 0..8 {
             let r = Mag::from_exact_num(&ratio(1, 100, RoundingMode::Up));
