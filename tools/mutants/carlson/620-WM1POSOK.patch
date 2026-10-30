@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -197,9 +197,6 @@
+@@ -196,9 +196,6 @@
              }
          }
          Branch::Lower => {

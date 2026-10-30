@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -280,7 +280,7 @@
+@@ -279,7 +279,7 @@
      cc: &mut Consts,
  ) -> BoundResult<ExactNum> {
      if x.is_zero() && *branch == Branch::Principal {

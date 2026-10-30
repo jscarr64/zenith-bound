@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -250,7 +250,7 @@
+@@ -249,7 +249,7 @@
      }
      let minus_one = num(-1);
      if cmp(x, &minus_one) != Some(Ordering::Greater) {

@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -342,7 +342,7 @@
+@@ -341,7 +341,7 @@
      let shift = i64::try_from(prec).ok()?.checked_add(BRACKET_SHIFT)?;
      let delta = pow2(w.exponent()?.checked_sub(shift)?)?;
      let c = match side {

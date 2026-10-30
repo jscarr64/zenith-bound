@@ -1,7 +1,7 @@
 diff --git a/src/carlson.rs b/src/carlson.rs
 --- a/src/carlson.rs
 +++ b/src/carlson.rs
-@@ -445,7 +445,7 @@
+@@ -444,7 +444,7 @@
          let p2 = p.mul_full_prec(&p).mul(&third(wp), wp, MID_RM);
          match branch {
              Branch::Principal => minus_one.add_full_prec(&p).sub(&p2, wp, MID_RM),
