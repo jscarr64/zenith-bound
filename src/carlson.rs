@@ -169,8 +169,7 @@ fn lambert(
             Ok(v) => v,
             Err(_) => match r.exp() {
                 Some(e) if e > 0 => return unbounded(op, prec, strict),
-                Some(_) | None => pow2(EXPONENT_MIN)
-                    .ok_or_else(|| resource(op, "tiny radius"))?,
+                Some(_) | None => pow2(EXPONENT_MIN).ok_or_else(|| resource(op, "tiny radius"))?,
             },
         };
         endpoints(op, m, rn, prec)?
@@ -606,7 +605,11 @@ mod slice_carlson_unit {
         if bad.is_empty() {
             Ok(())
         } else {
-            Err(format!("{} of 48 lose an endpoint:\n{}", bad.len(), bad.join("\n")))
+            Err(format!(
+                "{} of 48 lose an endpoint:\n{}",
+                bad.len(),
+                bad.join("\n")
+            ))
         }
     }
 
@@ -631,7 +634,12 @@ mod slice_carlson_unit {
         if bad.is_empty() {
             Ok(())
         } else {
-            Err(format!("{} of {} lose an endpoint:\n{}", bad.len(), 39 * 56, bad.join("\n")))
+            Err(format!(
+                "{} of {} lose an endpoint:\n{}",
+                bad.len(),
+                39 * 56,
+                bad.join("\n")
+            ))
         }
     }
 }
