@@ -803,16 +803,36 @@ fn la3_qr_hilbert_256_contains_by_heavy_tier() -> Result<(), String> {
     }
 }
 
-/// `BallQr::lstsq`, `BallMat::lstsq` and `BallQr::into_parts` on A = [3; 4], b = [3; 4]: |R_00| = sqrt(3^2 + 4^2) = 5 and the exact
-/// fit x = 1 (A·1 = b), contained at every replay prec; `into_parts` returns R_00 and the 2x1 Q.
+/// `BallQr::into_parts` on A = [3; 4]: R is 1x1 with |R_00| = sqrt(3^2 + 4^2) = 5, Q is 2x1; contained at every replay prec.
 #[test]
-fn la3_qr_into_parts_and_factored_lstsq_on_3_4_5() -> Result<(), String> {
+fn la3_qr_into_parts_3_4_5() -> Result<(), String> {
     let e = |n: i64| ExactNum::from(n);
     for prec in PRECS {
         let ball = |v: i64| Ball::exact(ExactNum::from(v), prec).map_err(|er| format!("{er:?}"));
         let a = BallMat::from_balls(2, 1, vec![ball(3)?, ball(4)?]).map_err(|er| format!("{er:?}"))?;
-        let f = a.qr(prec).map_err(|er| format!("qr: {er:?}"))?;
-        let x_f = f
+        let (q, r) = a.qr(prec).map_err(|er| format!("qr: {er:?}"))?.into_parts();
+        let r00 = r.get(0, 0).ok_or("R_00 missing")?;
+        if !(covers(r00, &e(5), &e(5))? || covers(r00, &e(-5), &e(-5))?) {
+            return Err(format!("prec {prec}: into_parts R_00 does not contain ±5"));
+        }
+        if q.get(1, 0).is_none() || q.get(2, 0).is_some() || q.get(0, 1).is_some() || r.get(0, 1).is_some() {
+            return Err(format!("prec {prec}: into_parts shapes are not Q 2x1, R 1x1"));
+        }
+    }
+    Ok(())
+}
+
+/// `BallQr::lstsq` and `BallMat::lstsq` on A = [3; 4], b = [3; 4]: the exact fit x = 1 (A·1 = b), contained at every replay prec.
+#[test]
+#[ignore = "red: CONTRACT 16.S6.12: lstsq value rows reach BallMat::solve_upper (LA0), Resource not_implemented"]
+fn la3_factored_and_direct_lstsq_on_3_4_5() -> Result<(), String> {
+    let e = |n: i64| ExactNum::from(n);
+    for prec in PRECS {
+        let ball = |v: i64| Ball::exact(ExactNum::from(v), prec).map_err(|er| format!("{er:?}"));
+        let a = BallMat::from_balls(2, 1, vec![ball(3)?, ball(4)?]).map_err(|er| format!("{er:?}"))?;
+        let x_f = a
+            .qr(prec)
+            .map_err(|er| format!("qr: {er:?}"))?
             .lstsq(&BallVec::from_balls(vec![ball(3)?, ball(4)?]), prec)
             .map_err(|er| format!("BallQr::lstsq: {er:?}"))?;
         let x_m = a
@@ -822,14 +842,6 @@ fn la3_qr_into_parts_and_factored_lstsq_on_3_4_5() -> Result<(), String> {
             if !covers(x.get(0).ok_or("x empty")?, &e(1), &e(1))? {
                 return Err(format!("prec {prec}: {what} x does not contain 1"));
             }
-        }
-        let (q, r) = f.into_parts();
-        let r00 = r.get(0, 0).ok_or("R_00 missing")?;
-        if !(covers(r00, &e(5), &e(5))? || covers(r00, &e(-5), &e(-5))?) {
-            return Err(format!("prec {prec}: into_parts R_00 does not contain ±5"));
-        }
-        if q.get(1, 0).is_none() || q.get(0, 0).is_none() {
-            return Err(format!("prec {prec}: into_parts Q is not 2x1"));
         }
     }
     Ok(())

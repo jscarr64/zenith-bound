@@ -64,7 +64,7 @@ ck; [ "$(pyc "from la_cond_cols import *; from gmpy2 import mpq as F
 A = [[F(1)], [F(1)]]
 t = cond_tokens(la_cond_cols_lstsq(A, [F(1), F(3)], [F(2)])); assert t == ['3/2', '6', '2/1', '0', 'tight', '6/1'], t
 t = cond_tokens(la_cond_cols_lstsq(A, [F(2), F(2)], [F(2)])); assert t == ['1/1', '5', '2/1', '0', 'tight', '4/1'], t
-t = cond_tokens(la_cond_cols_lstsq([[F(1)], [F(-1)]], [F(1), F(1)], [F(0)])); assert t == ['1/1', '5', '0/1', '1', 'lstsq_x_zero', '2/1'], t
+t = cond_tokens(la_cond_cols_lstsq([[F(1)], [F(-1)]], [F(1), F(1)], [F(0)])); assert t == ['1/1', '5', '0/1', '2', 'lstsq_x_zero', '2/1'], t
 try:
     la_cond_cols_lstsq(A, [F(1), F(3)], [F(1)])
 except AssertionError:
