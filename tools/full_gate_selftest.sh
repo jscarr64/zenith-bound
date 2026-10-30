@@ -177,7 +177,18 @@ ck; grep -q 'TIMEOUT' "$t/d-oom.out" && miss+="[oom: reported as TIMEOUT: $(grep
 ck; tag=mu-slicesbad; mu env FAKE_MUT=slicesbad && miss+="[slicesbad: gate exited 0] "
 ck; grep -q 'the --slices cause' "$t/logs/mu-slicesbad-mutants.log" 2>/dev/null || miss+="[slicesbad: step log lost the cause: $(cat "$t/logs/mu-slicesbad-mutants.log" 2>/dev/null)] "
 [ -z "$miss" ] || fail "mutants step did not catch: $miss"
-st_done full_gate 118   # WANT: cases this script runs (tools/selftest_cases.sh)
+# 11. build-debug runs EVERY test binary even when an earlier one fails (--no-fail-fast): without it cargo stops at the first failing
+# binary, so later binaries' summaries (and their tests) never reach the step log or test-floor (Spence, 2026-10-30). Fixture crate: tests/a_fail.rs
+# (one failing test) runs before tests/b_pass.rs (one passing test); the step must fail AND the log must hold both summaries.
+mk nf; mkdir -p "$t/nf/tools"; cp "$root/tools/fresh_test_run.sh" "$root/tools/runlog.sh" "$root/tools/scratch.sh" "$t/nf/tools/"
+printf '[package]\nname = "nf"\nversion = "0.0.0"\nedition = "2021"\n\n[dependencies]\n' > "$t/nf/Cargo.toml"
+printf '#[test]\nfn planted_fail() -> Result<(), String> {\n    Err(String::from("planted failure"))\n}\n' > "$t/nf/tests/a_fail.rs"
+printf '#[test]\nfn later_pass() -> Result<(), String> {\n    Ok(())\n}\n' > "$t/nf/tests/b_pass.rs"
+git init -q "$t/nf" || fail "git init nf failed"
+ck; "${fe[@]}" GATE_STEPS=build-debug T="$t/logs" REPO="$t/nf" CARGO_TARGET_DIR="$t/nf-target" "$root/tools/full_gate.sh" nf > /dev/null 2>&1 && fail "build-debug with a failing test binary exited 0"
+ck; grep -q 'test result: FAILED' "$t/logs/nf-build-debug.log" || fail "build-debug log has no FAILED summary for tests/a_fail.rs: $(cat "$t/logs/nf-build-debug.log")"
+ck; grep -q 'test result: ok. 1 passed' "$t/logs/nf-build-debug.log" || fail "build-debug stopped at the first failing binary: no summary for tests/b_pass.rs (cargo test without --no-fail-fast)"
+st_done full_gate 121   # WANT: cases this script runs (tools/selftest_cases.sh)
 # the gate's real mutation run must not inherit MUTATE_FLOOR_ZERO_OK=1 (only the selftest fixture may use a 0 floor), nor the selftest-only
 # MUTANT_TIMEOUT_S / MUTANT_BUDGET_S / MUTATE_SETUP_S / MUTATE_SH, nor any env mutate.sh reads (MUTATE_REPO MUTATE_MANIFEST MUTATE_EQUIVALENT MUTATE_FLOOR MUTATE_TIMEOUT MUTATE_BUILD_TIMEOUT MUTATE_TMP MUTATE_PERSIST), in its --all run or in its --step-timeout computation
 u='env -u MUTATE_FLOOR_ZERO_OK -u MUTANT_TIMEOUT_S -u MUTANT_BUDGET_S -u MUTATE_SETUP_S -u MUTATE_SH -u MUTATE_REPO -u MUTATE_MANIFEST -u MUTATE_EQUIVALENT -u MUTATE_FLOOR -u MUTATE_TIMEOUT -u MUTATE_BUILD_TIMEOUT -u MUTATE_TMP -u MUTATE_PERSIST tools/mutate_slice\.sh'
