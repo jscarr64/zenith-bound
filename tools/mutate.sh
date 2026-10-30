@@ -66,7 +66,7 @@ slmap=$(printf '%s\n' "$rows" | awk -F'\t' 'NF { print $2 "\tcentral" }')   # id
 ranges=""
 for inc in "$mdir"/manifest.d/*.txt; do
   [ -f "$inc" ] || continue
-  rl=$(grep -v -E '^[[:space:]]*$' "$inc" | head -1)
+  rl=$(grep -m1 -v -E '^[[:space:]]*$' "$inc" || true)   # -m1, not | head -1: SIGPIPE rc 141 under pipefail (Paul 1146-full_gate)
   if [[ ! $rl =~ ^#\ range:\ ([0-9]{1,6})-([0-9]{1,6})$ ]]; then echo "mutate: FAIL $inc: first line must be '# range: LO-HI'"; exit 1; fi
   lo=$((10#${BASH_REMATCH[1]})); hi=$((10#${BASH_REMATCH[2]}))
   [ "$lo" -le "$hi" ] || { echo "mutate: FAIL $inc: range $lo-$hi is empty"; exit 1; }
