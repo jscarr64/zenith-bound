@@ -58,7 +58,7 @@ done
 rows=$(grep -v -E '^[[:space:]]*(#|$)' "$manifest" || true)
 mdir=$(dirname "$manifest")
 # badrows FILE ROWS: every row needs exactly 4 non-empty tab-separated columns (a row with no tab used to slip through --list)
-badrows() { local bad; bad=$(printf '%s\n' "$2" | awk -F'\t' 'NF && (NF != 4 || $1 == "" || $2 == "" || $3 == "" || $4 == "")' | head -3)
+badrows() { local bad; bad=$(printf '%s\n' "$2" | awk -F'\t' 'NF && (NF != 4 || $1 == "" || $2 == "" || $3 == "" || $4 == "") && n++ < 3')   # n<3 in awk, not | head -3: SIGPIPE rc 141 under pipefail
   [ -z "$bad" ] || { printf 'mutate: FAIL %s: row needs 4 tab-separated columns: %s\n' "$1" "$bad"; exit 1; }; }
 badrows "$manifest" "$rows"
 slmap=$(printf '%s\n' "$rows" | awk -F'\t' 'NF { print $2 "\tcentral" }')   # id<TAB>slice, for --slice
@@ -220,7 +220,7 @@ head_sha=$(git -C "$repo" rev-parse HEAD 2>/dev/null) || { echo "mutate: FAIL ca
 # Mutants run on a worktree of the COMMITTED HEAD, so a dirty tree (edits or untracked files, e.g. new tests not yet committed) would
 # test other code than the tree on disk. Refuse it (Spence, 2026-10-23: 2102-zb-mut180 SURVIVED on HEAD 7191a1f, before mag_sort was committed).
 dirty=$(git -C "$repo" status --porcelain 2>&1) || { echo "mutate: FAIL git status failed in $repo: $dirty"; exit 2; }
-if [ -n "$dirty" ]; then echo "mutate: FAIL dirty tree in $repo (mutants test the committed HEAD $head_sha; commit or stash first):"; printf '%s\n' "$dirty" | head -20 | sed 's/^/    /'; exit 2; fi
+if [ -n "$dirty" ]; then echo "mutate: FAIL dirty tree in $repo (mutants test the committed HEAD $head_sha; commit or stash first):"; sed -n '1,20s/^/    /p' <<< "$dirty"; exit 2; fi
 # Cargo.lock is gitignored, so a worktree of HEAD has none: without it every cargo call re-resolves the git dependency over the network
 # (0934-zb-slice-a-full-gate3: DNS retries on every mutant ran out the 20m budget, and resolve errors were miscounted). Use the repo's lock,
 # offline and locked; no lock FAILS (fail closed).
