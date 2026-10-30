@@ -1,8 +1,8 @@
-#!/usr/bin/env python3
+#!/home/jsc64/team-env/oracle-2026-10-30/bin/python
 """Exact linear-algebra reference goldens for zenith-bound (zenith-float 2.0).
 
 Pinned oracle: sympy 1.14.0, mpmath 1.3.0. Run it with ~/team-env/oracle-2026-10-30/bin/python
-(the env python3 in the shebang is only a fallback; the version check below rejects other pins).
+(the shebang is the team env; the version check below rejects other pins).
 Usage:
     gen_la_goldens.py                 write the gate files tests/goldens/slices/<slice>/la_<op>.txt, each slice's
                                       SHA256SUMS (gate files) and HEAVY.SHA256 (sha256 of the uncommitted heavy file)

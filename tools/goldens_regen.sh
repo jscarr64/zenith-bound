@@ -12,13 +12,30 @@ export LC_ALL=C
 # but goldlib's startup check (four exact pins, sys.prefix is the venv, no ~/.local on sys.path) still applies, so only the venv passes.
 export PYTHONNOUSERSITE=1
 root=${GOLDENS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
-PY=${GOLDENS_PYTHON:-$HOME/team-env/oracle-2026-10-30/bin/python}
+# The interpreter (Spence LA2 review of f0ea86a1, 2026-10-30: ORACLE_PY was ignored and ~/.local/oracle-venv ran): GOLDENS_PYTHON, else
+# ORACLE_PY, else ~/team-env/oracle-2026-10-30/bin/python. team_env_preflight checks the path string first (Jeff's ~/.local/oracle-venv
+# and anything not ~/team-env/<name>/bin/python are refused without being run), then verify_env.sh <name>, then goldlib's own check,
+# and logs the env name. Any failure is a loud FAIL (exit 1). ZB_TEAM_ENV_ROOT is a selftest hook only.
+te_root=${ZB_TEAM_ENV_ROOT:-$HOME/team-env}
+PY=${GOLDENS_PYTHON:-${ORACLE_PY:-$HOME/team-env/oracle-2026-10-30/bin/python}}
+team_env_preflight() {
+  local name gl
+  te_fail() { echo "goldens-regen: FAIL team-env: $*"; exit 1; }
+  case $PY in "$HOME/.local/oracle-venv"|"$HOME/.local/oracle-venv"/*) te_fail "REFUSED[oracle-venv] $PY: ~/.local/oracle-venv is retired; use $te_root/<name>/bin/python (GOLDENS_PYTHON or ORACLE_PY)" ;; esac
+  case $PY in "$te_root"/*/bin/python*) ;; *) te_fail "REFUSED[not-team-env] $PY is not $te_root/<name>/bin/python" ;; esac
+  name=${PY#"$te_root"/}; name=${name%%/*}
+  [ -x "$PY" ] || te_fail "team env $name missing: $PY does not exist or is not executable (Paul builds team envs)"
+  "$te_root/verify_env.sh" "$name" || te_fail "verify_env.sh $name failed ($te_root)"
+  gl=$("$PY" scripts/goldlib.py --team-env) || te_fail "goldlib refused $PY: $gl"
+  [ "$gl" = "team-env=$name" ] || te_fail "goldlib reports '$gl', want team-env=$name"
+  echo "goldens-regen: team-env=$name (verify_env.sh OK, goldlib OK)"
+}
 GENERATORS="scripts/gen_goldens.py scripts/gen_ball_goldens.py scripts/gen_ball_enclosure.py"
 # stdout generators (no --check): name and committed file
 STDOUT_GENERATORS="scripts/gen_review_goldens.py:mag_ops_review.txt"
 self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-slices_only=0; regen=0
-for arg in "$@"; do case $arg in --slices-only) slices_only=1 ;; --regen) regen=1 ;; *) echo "goldens-regen: usage: tools/goldens_regen.sh [--slices-only] [--regen]"; exit 2 ;; esac; done
+slices_only=0; regen=0; env_only=0
+for arg in "$@"; do case $arg in --slices-only) slices_only=1 ;; --regen) regen=1 ;; --env-only) env_only=1 ;; *) echo "goldens-regen: usage: tools/goldens_regen.sh [--slices-only] [--regen] [--env-only]"; exit 2 ;; esac; done
 # Modes (Paul, 2026-10-24: oracle python ran flat out 10+ min in every gate). The key is a sha256 of every scripts/*.py, every
 # committed golden input (tests/goldens/**: *.txt except untracked *_heavy.txt, SHA256SUMS, HEAVY.SHA256, GENERATORS), this script,
 # and the oracle (interpreter path and venv *.dist-info names). It is stamped under $GOLDENS_KEY_DIR (default $(zb_scratch)/goldens-regen-keys)
@@ -35,6 +52,8 @@ gate_mode=${ZB_GATE_MODE:-regular}
 if [ "$gate_mode" = merge ] && [ "$regen" != 1 ]; then echo "goldens-regen: REFUSING: ZB_GATE_MODE=merge needs --regen (the merge gate must regenerate and recompute every heavy row)"; exit 2; fi
 if [ "$gate_mode" = merge ] && [ "$slices_only" = 1 ]; then echo "goldens-regen: REFUSING: ZB_GATE_MODE=merge does not allow --slices-only (the merge gate must run every generator, not only the per-slice checks)"; exit 2; fi
 cd "$root" || exit 2
+if [ "$slices_only" = 0 ]; then team_env_preflight; fi   # every python mode, cached included
+if [ "$env_only" = 1 ]; then exit 0; fi
 tmp=$(mktemp -d "$(zb_scratch)"/zb-goldens-regen.XXXXXX) || { echo "goldens-regen: mktemp failed"; exit 2; }; runlog_on_exit "rm -rf \"$tmp\""
 # Pop direct-run guard (~/pop-logs/bin/popguard.sh, 11:49 2026-10-24: a bare 58 GB generator run global-OOMed Pop): before the
 # first generator, refuse (exit 3) outside a capped popslot/poprun memory scope. Hosts without popguard.sh (CI) run unguarded, with a WARNING.

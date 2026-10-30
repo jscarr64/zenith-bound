@@ -514,5 +514,8 @@ def selftest():
 if __name__ == "__main__":
     if sys.argv[1:] == ["--selftest"]:
         selftest()
+    elif sys.argv[1:] == ["--team-env"]:   # goldens_regen.sh preflight (Spence LA2 review, 2026-10-30)
+        require_oracle()
+        print("team-env=%s" % TEAM_ENV)
     else:
-        raise SystemExit("usage: ~/team-env/oracle-2026-10-30/bin/python scripts/goldlib.py --selftest")
+        raise SystemExit("usage: ~/team-env/oracle-2026-10-30/bin/python scripts/goldlib.py --selftest | --team-env")

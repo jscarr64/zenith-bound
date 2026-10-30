@@ -79,9 +79,11 @@ ck; grep -q "grep failed (rc 2)" <<< "$out" || fail "grep rc 2: no clear message
 # committed inputs (gate files, SHA256SUMS, HEAVY.SHA256, GENERATORS) and the oracle versions. Key unchanged since the last passing
 # run: python is skipped entirely, only the pinned sums are verified (mode=cached). Key changed: python runs, heavy rows by pin only
 # (--skip-heavy). --regen: full regen, heavy rows recomputed. ZB_GATE_MODE=merge REFUSES (exit 2) without --regen. Mode and reason logged.
-mkdir -p "$t/venv/bin"; printf '#!/bin/sh\necho "$*" >> "%s/genargs"\nexit "${FAKEPY_RC:-0}"\n' "$t" > "$t/venv/bin/python"; chmod +x "$t/venv/bin/python"
+# a fake team env "fake" under $t/venv (ZB_TEAM_ENV_ROOT hook; stub verify_env.sh passes): goldens_regen preflights it (Spence LA2 review, 2026-10-30)
+mkdir -p "$t/venv/fake/bin"; printf '#!/bin/sh\necho "OK: $1 (selftest stub)"\n' > "$t/venv/verify_env.sh"; chmod +x "$t/venv/verify_env.sh"
+printf '#!/bin/sh\ncase "$*" in *"goldlib.py --team-env") echo team-env=fake; exit 0;; esac\necho "$*" >> "%s/genargs"\nexit "${FAKEPY_RC:-0}"\n' "$t" > "$t/venv/fake/bin/python"; chmod +x "$t/venv/fake/bin/python"
 printf '#!/bin/sh\nexit 0\n' > "$t/okguard"; chmod +x "$t/okguard"
-hm() { : > "$t/genargs"; out=$(env ZB_GATE_MODE= "$@" GOLDENS_PYTHON="$t/venv/bin/python" GOLDENS_KEY_DIR="$t/keys" POPGUARD="$t/okguard" GOLDENS_ROOT="$root" RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 "$here/goldens_regen.sh" --slices-only $HMARGS 2>&1); grc=$?; }
+hm() { : > "$t/genargs"; out=$(env ZB_GATE_MODE= "$@" ZB_TEAM_ENV_ROOT="$t/venv" GOLDENS_PYTHON="$t/venv/fake/bin/python" GOLDENS_KEY_DIR="$t/keys" POPGUARD="$t/okguard" GOLDENS_ROOT="$root" RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 "$here/goldens_regen.sh" --slices-only $HMARGS 2>&1); grc=$?; }
 ran() { [ -s "$t/genargs" ]; }
 fx; mkdir -p "$root/scripts"; printf 'v1\n' > "$root/scripts/fake.py"; printf 'scripts/fake.py\n' > "$d/GENERATORS"; printf 'a\n' > "$d/a.txt"; sum a.txt > "$d/SHA256SUMS"
 HMARGS=; hm
@@ -99,7 +101,7 @@ ck; ran && grep -q 'mode=regen-gate (key [0-9a-f]\{16\} changed: inputs differ' 
 hm; ck; ran && fail "second run after a golden change ran python again"
 printf 'v2\n' > "$root/scripts/fake.py"; hm
 ck; ran || fail "a changed generator script did not rerun python: $out"
-mkdir -p "$t/venv/lib/python3.12/site-packages/sympy-9.9.dist-info"; hm
+mkdir -p "$t/venv/fake/lib/python3.12/site-packages/sympy-9.9.dist-info"; hm
 ck; ran || fail "a changed oracle version did not rerun python: $out"
 printf '%064d  la_x_heavy.txt\n' 1 > "$d/HEAVY.SHA256"; hm
 ck; ran || fail "a changed HEAVY.SHA256 did not rerun python: $out"
@@ -126,7 +128,7 @@ ck; ran && fail "merge --slices-only refusal still ran python"
 # the full (not --slices-only) merge --regen run is accepted, logged and PASSES (Spence BLOCK 0843-rv-la4n-3628469: the rc was never
 # asserted, so a mutant forcing every merge-mode full run to exit 1 still printed ok). The fixture gets top-level tests/goldens: the
 # fake python prints nothing, so the stdout generator's committed file is empty, and SHA256SUMS lists it.
-hf() { : > "$t/genargs"; out=$(env ZB_GATE_MODE= "$@" GOLDENS_PYTHON="$t/venv/bin/python" GOLDENS_KEY_DIR="$t/keys" POPGUARD="$t/okguard" GOLDENS_ROOT="$root" RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 "$here/goldens_regen.sh" $HMARGS 2>&1); grc=$?; }
+hf() { : > "$t/genargs"; out=$(env ZB_GATE_MODE= "$@" ZB_TEAM_ENV_ROOT="$t/venv" GOLDENS_PYTHON="$t/venv/fake/bin/python" GOLDENS_KEY_DIR="$t/keys" POPGUARD="$t/okguard" GOLDENS_ROOT="$root" RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 "$here/goldens_regen.sh" $HMARGS 2>&1); grc=$?; }
 : > "$root/tests/goldens/mag_ops_review.txt"; (cd "$root/tests/goldens" && sha256sum mag_ops_review.txt > SHA256SUMS)
 HMARGS=--regen; hf ZB_GATE_MODE=merge
 ck; [ "$grc" = 0 ] || fail "merge-gate --regen (full run) exited $grc, want 0: $out"
