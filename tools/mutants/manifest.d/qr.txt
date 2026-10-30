@@ -14,3 +14,4 @@ src/qr.rs:solve_from	1209-QB	qr/1209-QB.patch	harness
 src/qr.rs:solve_from	1210-SOLVELOWER	qr/1210-SOLVELOWER.patch	harness
 src/qr.rs:BallMat::lstsq	1211-BLENTRUNC	qr/1211-BLENTRUNC.patch	harness
 src/qr.rs:factor	1212-SQRTMID	qr/1212-SQRTMID.patch	harness
+src/qr.rs:factor	1213-SIGNINV	qr/1213-SIGNINV.patch	harness
