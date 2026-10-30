@@ -31,7 +31,7 @@
 # shellcheck source=tools/runlog.sh
 . "${BASH_SOURCE[0]%/*}/runlog.sh"; runlog_wrap full_gate "$@"   # run log (tools/runlog.sh)
 set -u
-# PYTHONNOUSERSITE=1: nothing from ~/.local outside a venv (the golden generators run in ~/.local/oracle-venv; see tools/goldens_regen.sh).
+# PYTHONNOUSERSITE=1: nothing from ~/.local outside a venv (the golden generators run in the team env ~/team-env/oracle-2026-10-30; see tools/goldens_regen.sh).
 export PYTHONNOUSERSITE=1
 T=${T:-$(zb_scratch)/zb-gate-logs}; mkdir -p "$T"
 cd "${REPO:-$(cd "$(dirname "$0")/.." && pwd)}" || exit 2

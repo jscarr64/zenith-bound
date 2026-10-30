@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exact linear-algebra reference goldens for zenith-bound (zenith-float 2.0).
 
-Pinned oracle: sympy 1.14.0, mpmath 1.3.0. Run it with ~/.local/oracle-venv/bin/python
+Pinned oracle: sympy 1.14.0, mpmath 1.3.0. Run it with ~/team-env/oracle-2026-10-30/bin/python
 (the env python3 in the shebang is only a fallback; the version check below rejects other pins).
 Usage:
     gen_la_goldens.py                 write the gate files tests/goldens/slices/<slice>/la_<op>.txt, each slice's
@@ -13,7 +13,7 @@ Usage:
 
 Memory (Paul, 2026-10-24, after a 58 GB OOM): rows stream to unlinked spool files under target/la-goldens-spool/ and are hashed
 incrementally; run every invocation under poprun/popslot, /usr/bin/time -v and a cap, e.g.
-    prlimit --as=4294967296 -- /usr/bin/time -v ~/.local/oracle-venv/bin/python scripts/gen_la_goldens.py --check --skip-heavy
+    prlimit --as=4294967296 -- /usr/bin/time -v ~/team-env/oracle-2026-10-30/bin/python scripts/gen_la_goldens.py --check --skip-heavy
 --skip-heavy never computes the heavy cosmo_* rows (gate only; HEAVY.SHA256 is left as is in write mode).
 
 Slices (S0, tests/goldens/slices/<slice>/): LA1 cholesky, LA2 lu (+ solve, logdet), LA3 qr, LA4 gls, LA5a eigen (symmetric), LA5b eigen (general, stub: pending complex Ball).
@@ -53,7 +53,7 @@ import sys, os, re, random, hashlib, argparse, difflib, tempfile, signal, time
 try:
     from gmpy2 import mpq as F
 except ImportError as e:
-    raise SystemExit(f"gen_la_goldens.py: gmpy2 missing ({e}); run with ~/.local/oracle-venv/bin/python (mpmath backend gmpy)")
+    raise SystemExit(f"gen_la_goldens.py: gmpy2 missing ({e}); run with ~/team-env/oracle-2026-10-30/bin/python (mpmath backend gmpy)")
 from math import isqrt
 
 SYMPY_PIN = "1.14.0"
@@ -62,7 +62,7 @@ import sympy, mpmath
 from mpmath import iv
 if sympy.__version__ != SYMPY_PIN or mpmath.__version__ != MPMATH_PIN:
     raise SystemExit(f"gen_la_goldens.py: oracle pin mismatch: sympy {sympy.__version__} (need {SYMPY_PIN}), "
-                     f"mpmath {mpmath.__version__} (need {MPMATH_PIN}); run with ~/.local/oracle-venv/bin/python")
+                     f"mpmath {mpmath.__version__} (need {MPMATH_PIN}); run with ~/team-env/oracle-2026-10-30/bin/python")
 sys.set_int_max_str_digits(0)
 
 GEN = "scripts/gen_la_goldens.py"

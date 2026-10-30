@@ -1,11 +1,11 @@
-#!/home/jsc64/.local/oracle-venv/bin/python
+#!/home/jsc64/team-env/oracle-2026-10-30/bin/python
 """
 Generates tests/goldens/slices/arith/arith_oracle_rows.txt: slice S1 (src/arith.rs) oracle rows for the Ball ops that exist in src
 (add, sub, mul, mul_exact, sqr, powi, sqrt, neg; div/inv/hypot wait for zf R13, CONTRACT 16.S1.8) at 26 precisions from 1 to 4096 bits.
-    ~/.local/oracle-venv/bin/python scripts/gen_arith_oracle.py              write the golden (only inside a popslot/poprun scope on Pop)
-    ~/.local/oracle-venv/bin/python scripts/gen_arith_oracle.py --check DIR [--skip-heavy]  regenerate into DIR and compare byte for byte (tools/goldens_regen.sh)
-    ~/.local/oracle-venv/bin/python scripts/gen_arith_oracle.py --sample DIR N   write only the first N precisions into DIR (the RSS proof run)
-    ~/.local/oracle-venv/bin/python scripts/gen_arith_oracle.py --selftest   negative tests of this generator
+    ~/team-env/oracle-2026-10-30/bin/python scripts/gen_arith_oracle.py              write the golden (only inside a popslot/poprun scope on Pop)
+    ~/team-env/oracle-2026-10-30/bin/python scripts/gen_arith_oracle.py --check DIR [--skip-heavy]  regenerate into DIR and compare byte for byte (tools/goldens_regen.sh)
+    ~/team-env/oracle-2026-10-30/bin/python scripts/gen_arith_oracle.py --sample DIR N   write only the first N precisions into DIR (the RSS proof run)
+    ~/team-env/oracle-2026-10-30/bin/python scripts/gen_arith_oracle.py --selftest   negative tests of this generator
 
 ROW: OP PREC W N AMID ARAD BMID BRAD LO HI RREF, values 'SIGN EXP MANT' as in ball_enclosure_rows.txt. Unused B fields are '0 0 0'; N is the powi
 exponent (sqr rows carry N = 2, others 0); mul_exact has BRAD = 0 (an exact scalar). [LO, HI] is the exact image of the input ball(s) (corner analysis on

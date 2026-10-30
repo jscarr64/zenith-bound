@@ -1,11 +1,11 @@
-#!/home/jsc64/.local/oracle-venv/bin/python
+#!/home/jsc64/team-env/oracle-2026-10-30/bin/python
 """
 Generates tests/goldens/slices/bridge/bridge_consts.txt (slice S2, CONTRACT 16.S2.6): for the seven zenith-float constants
 (ConstantId Pi E Ln2 Ln10 Sqrt2 Phi EulerGamma) at every precision of PS, the two p-bit neighbours DOWN < c < UP and a truth
-interval [TLO, THI] of c at p + 192 bits (TLO rounded down, THI rounded up). Run with ~/.local/oracle-venv/bin/python:
-    ~/.local/oracle-venv/bin/python scripts/gen_bridge_const_goldens.py              write the golden
-    ~/.local/oracle-venv/bin/python scripts/gen_bridge_const_goldens.py --check DIR  regenerate into DIR and compare byte for byte
-    ~/.local/oracle-venv/bin/python scripts/gen_bridge_const_goldens.py --selftest   the generator's own checks
+interval [TLO, THI] of c at p + 192 bits (TLO rounded down, THI rounded up). Run with ~/team-env/oracle-2026-10-30/bin/python:
+    ~/team-env/oracle-2026-10-30/bin/python scripts/gen_bridge_const_goldens.py              write the golden
+    ~/team-env/oracle-2026-10-30/bin/python scripts/gen_bridge_const_goldens.py --check DIR  regenerate into DIR and compare byte for byte
+    ~/team-env/oracle-2026-10-30/bin/python scripts/gen_bridge_const_goldens.py --selftest   the generator's own checks
 
 ORACLE. mpmath 1.3.0 libmp. Every directed result is settled twice, as zenith-float's scripts/gen_r14_const_goldens.py does (the
 generator of zf's r14_consts.jsonl, whose Down/Up rows this file matches at the shared precisions): the round-to-nearest value
@@ -179,7 +179,7 @@ def main(argv):
             n = fraction_check([ln.rstrip("\n") for ln in fh if ln.strip()])
         print("gen_bridge_const_goldens: fractions selftest: %d rows exact" % n)
         return 0
-    raise SystemExit("usage: ~/.local/oracle-venv/bin/python scripts/gen_bridge_const_goldens.py [--check DIR [--skip-heavy] | --selftest]")
+    raise SystemExit("usage: ~/team-env/oracle-2026-10-30/bin/python scripts/gen_bridge_const_goldens.py [--check DIR [--skip-heavy] | --selftest]")
 
 
 if __name__ == "__main__":

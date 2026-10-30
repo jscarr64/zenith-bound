@@ -1,10 +1,10 @@
-#!/home/jsc64/.local/oracle-venv/bin/python
+#!/home/jsc64/team-env/oracle-2026-10-30/bin/python
 """Generate tests/goldens/mag_ops_review.txt: boundary rows for the Mag operations.
 
 The expected values come from an independent big-integer oracle written for the L0a review
 (Rusty's oracle.py, reproduced here): a value is M * 2^k with an infinitesimal tail delta in
 {-1, 0, +1}, and the result is the least (up) or greatest (down) Mag at or above or below it. It
-shares no code with the Rust crate. Usage: ~/.local/oracle-venv/bin/python scripts/gen_review_goldens.py > tests/goldens/mag_ops_review.txt
+shares no code with the Rust crate. Usage: ~/team-env/oracle-2026-10-30/bin/python scripts/gen_review_goldens.py > tests/goldens/mag_ops_review.txt
 (no mpmath is used; goldlib's oracle startup check still runs so every generator has one interpreter)
 
 Row format (one per line): binary `OP EA MA EB MB R`, unary `OP E M R`, ulp `ulp_mag|half_ulp EXP PREC R`;

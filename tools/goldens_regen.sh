@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Golden regeneration gate (TEST_PLAN section 9): the goldlib self-test, then every generator with `--check DIR` into a fresh temp dir
-# under $(zb_scratch) (byte-compared with tests/goldens), then `sha256sum -c tests/goldens/SHA256SUMS`. Uses the oracle venv ~/.local/oracle-venv/bin/python (scripts/goldlib.py require_oracle). No network.
+# under $(zb_scratch) (byte-compared with tests/goldens), then `sha256sum -c tests/goldens/SHA256SUMS`. Uses the oracle venv ~/team-env/oracle-2026-10-30/bin/python (scripts/goldlib.py require_oracle). No network.
 # Temp files go under $(zb_scratch). `--slices-only` runs only the per-slice checks (no oracle; tools/goldens_regen_selftest.sh uses it).
 # Per-slice SHA256SUMS: entries in strict sha256sum format, or, with no entries, an explicit `# EMPTY` marker line (never both).
 # Untracked *_heavy.txt goldens (.gitignored; hashes pinned elsewhere) are not demanded in SHA256SUMS. Nothing under the repo is written. To add a generator, add a line to the GENERATORS list.
@@ -12,7 +12,7 @@ export LC_ALL=C
 # but goldlib's startup check (four exact pins, sys.prefix is the venv, no ~/.local on sys.path) still applies, so only the venv passes.
 export PYTHONNOUSERSITE=1
 root=${GOLDENS_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
-PY=${GOLDENS_PYTHON:-$HOME/.local/oracle-venv/bin/python}
+PY=${GOLDENS_PYTHON:-$HOME/team-env/oracle-2026-10-30/bin/python}
 GENERATORS="scripts/gen_goldens.py scripts/gen_ball_goldens.py scripts/gen_ball_enclosure.py"
 # stdout generators (no --check): name and committed file
 STDOUT_GENERATORS="scripts/gen_review_goldens.py:mag_ops_review.txt"
