@@ -423,6 +423,7 @@ mod slice_lu_work_prec {
     /// 16.LA.6: `w = prec + 64 + 2·⌈log2(n + 1)⌉`, capped.
     #[test]
     fn slice_lu_work_prec_formula_and_cap() -> Result<(), String> {
+        // no-source: hand-derived: prec + 64 + 2·ceil(log2(n + 1)) per 16.LA.6, e.g. n = 3: 53 + 64 + 2·2 = 121.
         for (prec, n, want) in [
             (53, 0, 117),
             (53, 1, 119),

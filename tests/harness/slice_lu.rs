@@ -876,6 +876,7 @@ fn straddle() -> Result<Ball, String> {
 
 #[test]
 fn la2_rectangular_input_is_dimension_mismatch_everywhere() -> Result<(), String> {
+    // no-source: hand-derived: arbitrary 2x3 integer input; only the DimensionMismatch error kind is asserted.
     let a = int_mat(2, 3, &[1, 2, 3, 4, 5, 6])?;
     want_err_detail("lu", a.lu(53), "DimensionMismatch", "rectangular")?;
     want_err_detail("logdet", a.logdet(53), "DimensionMismatch", "rectangular")?;
@@ -896,6 +897,7 @@ fn la2_rectangular_input_is_dimension_mismatch_everywhere() -> Result<(), String
 /// 16.LA.3: prec is checked first, before shape.
 #[test]
 fn la2_bad_prec_is_invalid_argument_before_shape() -> Result<(), String> {
+    // no-source: hand-derived: arbitrary integer inputs; only the InvalidArgument error kind is asserted (prec 0 is out of range).
     let a = int_mat(2, 3, &[1, 2, 3, 4, 5, 6])?;
     want_err_detail("lu", a.lu(0), "InvalidArgument", "")?;
     want_err_detail("logdet", a.logdet(0), "InvalidArgument", "")?;
@@ -919,6 +921,7 @@ fn la2_bad_prec_is_invalid_argument_before_shape() -> Result<(), String> {
 /// 16.LA.3: a right-hand side of the wrong length is `DimensionMismatch "b_len"`.
 #[test]
 fn la2_solve_b_len_mismatch() -> Result<(), String> {
+    // no-source: hand-derived: arbitrary nonsingular 2x2 input; only the b_len error kind is asserted.
     let a = int_mat(2, 2, &[2, 1, 1, 3])?;
     want_err_detail(
         "solve",
@@ -944,6 +947,7 @@ fn la2_solve_b_len_mismatch() -> Result<(), String> {
 /// 16.LA2.3: pivot on the largest |mid|; 16.LA2.1 ties go to the lowest row index; perm records the source rows.
 #[test]
 fn la2_lu_pivot_choice_ties_and_perm() -> Result<(), String> {
+    // no-source: hand-derived: perms, signs and det = -1 of these permutation/integer matrices worked out by hand from 16.LA2.1/16.LA2.3.
     // column 0 = (1, -3, 2): pivot row 1 (largest |mid|, negative), perm[0] = 1.
     let lu = ok("lu", int_mat(3, 3, &[1, 0, 0, -3, 1, 0, 2, 0, 1])?.lu(53))?;
     if lu.perm().first() != Some(&1) {
@@ -973,6 +977,7 @@ fn la2_lu_pivot_choice_ties_and_perm() -> Result<(), String> {
         return Err(format!("swap2: sign {} det {d:?}", ls.perm_sign()));
     }
     // [[4,3],[2,1]]: no swap, L = [[1,0],[1/2,1]] exact, U = [[4,3],[0,-1/2]] exact.
+    // no-source: hand-derived: [[4,3],[2,1]]: l_10 = 2/4 = 1/2, u_11 = 1 - (1/2)·3 = -1/2, all exact dyadics.
     let l2 = ok("lu", int_mat(2, 2, &[4, 3, 2, 1])?.lu(53))?;
     let half = pow2(-1)?;
     let mhalf = -plus_zero(&half)?;
@@ -998,6 +1003,7 @@ fn la2_lu_pivot_choice_ties_and_perm() -> Result<(), String> {
 /// `det` is exactly `0 ± 0`, `logdet` and `solve` give the certified `Singular "singular"`.
 #[test]
 fn la2_zero_column_is_skipped_and_certified_singular() -> Result<(), String> {
+    // no-source: hand-derived: column 0 is exactly zero, so the skip rule (16.LA2.3) leaves u_00 = 0 ± 0 and det = 0 exactly.
     let a = int_mat(3, 3, &[0, 1, 2, 0, 3, 4, 0, 5, 7])?;
     let lu = ok("lu", a.lu(53))?;
     if lu.perm().first() != Some(&0) {
@@ -1038,6 +1044,7 @@ fn la2_zero_column_is_skipped_and_certified_singular() -> Result<(), String> {
 /// `Resource "undecided_det"` (never Domain or a value), `solve` is `Resource "undecided_pivot"` (16.LA2.4).
 #[test]
 fn la2_straddling_pivot_is_undecided_not_singular() -> Result<(), String> {
+    // no-source: hand-derived: 1 ± 2 encloses 0 but its mid is nonzero, so 16.LA2.4 makes it undecided, not singular.
     let a = ok("from_balls", BallMat::from_balls(1, 1, vec![straddle()?]))?;
     let lu = ok("lu", a.lu(53))?;
     let d = ok("det", lu.det(53))?;
@@ -1073,6 +1080,7 @@ fn la2_straddling_pivot_is_undecided_not_singular() -> Result<(), String> {
 /// 80-bit products comes back tight at prec 53 (kills 1118-WORKPREC: at plain prec 53 the cancellation leaves rad ~2^27).
 #[test]
 fn la2_det_uses_guarded_work_prec() -> Result<(), String> {
+    // no-source: hand-derived: det [[2^40+1, 2^40], [2^40, 2^40-1]] = (2^80 - 1) - 2^80 = -1; 2^-40 is a loose cap (prec-53 rounding of -1 is exact, guard bits keep the rest far below 2^-40).
     let e = |v: i64| ok("exact", Ball::exact(num(v), 53));
     let a = ok(
         "from_balls",
@@ -1107,6 +1115,7 @@ fn la2_det_uses_guarded_work_prec() -> Result<(), String> {
 /// 16.LA1.4: an overflowing det product gives an all-reals `det` as `Ok`, never an error.
 #[test]
 fn la2_det_overflow_is_all_reals_ok() -> Result<(), String> {
+    // no-source: hand-derived: diag(M, M) with M = TOP·2^EXPONENT_MAX overflows M·M past EXPONENT_MAX, so the det must be all-reals (16.LA1.4).
     let big = ExactNum::from_mag_parts(TOP, EXPONENT_MAX, 64).map_err(|e| format!("{e:?}"))?;
     let b0 = ok("big", Ball::exact(plus_zero(&big)?, 64))?;
     let b1 = ok("big", Ball::exact(big, 64))?;
@@ -1133,6 +1142,7 @@ fn la2_det_overflow_is_all_reals_ok() -> Result<(), String> {
 #[test]
 fn la2_results_carry_prec_and_exact_rows_stay_exact() -> Result<(), String> {
     for prec in PRECS {
+        // no-source: hand-derived: P·A = [[4,3],[2,1]] gives U = [[4,3],[0,-1/2]] and det = -(4·(-1/2)) = 2, all dyadic so exact at every prec.
         let lu = ok("lu", int_mat(2, 2, &[2, 1, 4, 3])?.lu(prec))?;
         let d = ok("det", lu.det(prec))?;
         if d.prec() != prec || !d.is_exact() || d.contains(&num(2)) != Tri::True {
