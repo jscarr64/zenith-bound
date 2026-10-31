@@ -77,6 +77,29 @@ out="$(run)" && fail "empty manifest passed (0 mutants proves nothing): $out"; e
 # a real mutant must be KILLED
 setm m.killed; out="$(run)" || fail "killable mutant not accepted: $out"
 echo "$out" | grep -c "^KILLED 001-add-mul" > /dev/null || fail "killed: wrong report: $out"
+# per-ID output (Harper, 2026-10-29): the KILLED line is followed by an indented line naming the failing test, and the mutant's
+# own cargo test output is kept as <logdir>/<slice>/<id>.out (it used to be one run.log the next mutant overwrote)
+echo "$out" | grep -A1 "^KILLED 001-add-mul" | grep -q "^    failing tests: add_works (output: " || fail "killed: no failing-test line naming add_works: $out"
+grep -q "panicked" "$t/mutate-out/all/001-add-mul.out" 2>/dev/null || fail "killed: no per-ID output $t/mutate-out/all/001-add-mul.out"
+# Spence review (2026-10-29): a full run first clears its slice logdir of .out files (stale ones from an earlier HEAD must not look
+# current); --only removes just its own id.out (mutate_slice.sh runs a slice one --only id at a time). Nothing else is touched.
+mkdir -p "$t/mutate-out/all" "$t/mutate-out/other"; touch "$t/mutate-out/all/999-stale.out" "$t/mutate-out/all/keep.txt" "$t/mutate-out/other/999-stale.out"
+out="$(run)" || fail "stale logdir: killable mutant not accepted: $out"
+[ -e "$t/mutate-out/all/999-stale.out" ] && fail "stale logdir: a stale .out from an earlier run was kept in the slice logdir"
+[ -f "$t/mutate-out/all/001-add-mul.out" ] || fail "stale logdir: this run's own 001-add-mul.out is missing"
+[ -f "$t/mutate-out/all/keep.txt" ] && [ -f "$t/mutate-out/other/999-stale.out" ] || fail "stale logdir: a non-.out file or another slice's .out was removed"
+touch "$t/mutate-out/all/999-stale.out"; out="$(run --only 001-add-mul)" || fail "stale logdir --only: $out"
+[ -f "$t/mutate-out/all/999-stale.out" ] || fail "stale logdir: --only removed another id's .out"
+rm -f "$t/mutate-out/all/999-stale.out" "$t/mutate-out/all/keep.txt"; rm -rf "$t/mutate-out/other"
+# Spence (2026-10-29): slice mode (tools/mutate_slice.sh, the gate's path) runs one --only per id, so it clears the slice logdir's .out
+# files ONCE at the start, by mutate.sh's full-run rule; an id that has left the manifest must not leave a stale .out behind.
+printf 'x\n' >> "$t/cases"; mkdir -p "$t/mutate-out/central" "$t/mutate-out/other"
+touch "$t/mutate-out/central/006-removed.out" "$t/mutate-out/central/keep.txt" "$t/mutate-out/other/006-removed.out"
+out="$(MUTATE_FLOOR_ZERO_OK=1 MUTATE_FLOOR="$t/mfloor.txt" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate_slice.sh" central 2>&1)" || fail "slice stale logdir: slice run failed: $out"
+[ -e "$t/mutate-out/central/006-removed.out" ] && fail "slice stale logdir: a removed id's .out was kept by a slice run"
+[ -f "$t/mutate-out/central/001-add-mul.out" ] || fail "slice stale logdir: the current id's 001-add-mul.out is missing"
+[ -f "$t/mutate-out/central/keep.txt" ] && [ -f "$t/mutate-out/other/006-removed.out" ] || fail "slice stale logdir: a non-.out file or another slice's .out was removed"
+rm -rf "$t/mutate-out/central" "$t/mutate-out/other"
 
 # a surviving mutant makes the runner exit nonzero and is reported as SURVIVED
 setm m.surv; out="$(run)" && fail "surviving mutant passed (runner exited 0)"
@@ -94,6 +117,8 @@ setm m.bad; out="$(run)" && fail "non-applying patch passed"; echo "$out" | grep
 # a hang is killed by the timeout
 setm m.hang; out="$(MUTATE_TIMEOUT=5s run)" || fail "hanging mutant not accepted as killed: $out"
 echo "$out" | grep -c "^KILLED 004-hang.*timed out" > /dev/null || fail "hang: wrong report: $out"
+# Spence review (2026-10-29): a timeout KILLED is followed by the same indented failing-tests line, `(timed out)` for the names
+echo "$out" | grep -A1 "^KILLED 004-hang" | grep -q "^    failing tests: (timed out) (output: $t/mutate-out/all/004-hang.out)$" || fail "hang: no failing-tests (timed out) line after KILLED: $out"
 
 # --only selects one row; an unknown id is an error
 cat m.killed m.surv > "$r/tools/mutants/manifest.txt"; cm
@@ -198,8 +223,26 @@ printf 'x\n' >> "$t/cases"; out="$(logged loud SHIM_NETFAIL=1 PATH="$sh:$PATH")"
 grep -q '^rc=0$' <<< "$out" && fail "err-loud: an unexpected suite-run failure passed: $out"
 grep -q '^INVALID 001-add-mul: suite run failed without a test failure' <<< "$out" || fail "err-loud: wrong report: $out"
 [ -f "$lg" ] && grep -q ' ERR rc=101 ' "$lg" || fail "err-loud: an unexpected failure (rc 101, no test failed) did not log an ERR trap line: $(cat "$lg" 2>/dev/null | grep ERR)"
+# Harper (2026-10-29, Paul's 1520-full_gate: 070-L8c and 096-E-op-npd exited 1 with "equivalent id 177-N20 / 018-L4 is not in the
+# manifest"): the equivalent-id lookup was `printf ids | grep -q` under pipefail; grep -q exits at the first match, so a printf write
+# after that dies of SIGPIPE (rc 141) and a listed id reads as missing. That raced on the real 4.3K id list; with more ids than a
+# pipe buffer (64K) it is deterministic, so this case proves the lookup with 8000 ids and an equivalent id at the top.
+printf 'x\n' >> "$t/cases"; cp "$r/tools/mutants/EQUIVALENT.txt" "$t/equiv.keep"
+for i in $(seq 100001 108000); do printf 'src/lib.rs:add\t%s-big\t001-add-mul.patch\ttoy\n' "$i"; done > "$r/tools/mutants/manifest.txt"
+printf '100001-big\tfirst of many ids (pipe-buffer case)\n' > "$r/tools/mutants/EQUIVALENT.txt"; cm
+out="$(MUTATE_FLOOR_ZERO_OK=1 MUTATE_FLOOR="$t/mfloor.txt" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate.sh" --list 2>&1)" || fail "many ids: --list failed: $(grep -v '^1[0-9]*-big$' <<< "$out")"
+grep -qx '108000-big' <<< "$out" || fail "many ids: --list did not list the last id"
+cp "$t/equiv.keep" "$r/tools/mutants/EQUIVALENT.txt"; setm m.killed
+# a single-id run that exits before printing a verdict must be named, with its exit code and its own FAIL line, not only counted
+# as missing by INCOMPLETE (a stub MUTATE_SH fails every --only run before any mutant is applied)
+printf 'x\n' >> "$t/cases"
+printf '#!/usr/bin/env bash\ncase " $* " in *" --only "*) echo "mutate: FAIL simulated pre-verdict failure" >&2; exit 1 ;; esac\nexec "%s/mutate.sh" "$@"\n' "$here" > "$t/stub-mutate.sh"; chmod +x "$t/stub-mutate.sh"
+out="$(MUTATE_SH="$t/stub-mutate.sh" MUTATE_FLOOR_ZERO_OK=1 MUTATE_FLOOR="$t/mfloor.txt" MUTATE_MANIFEST="$r/tools/mutants/manifest.txt" "$here/mutate_slice.sh" central 2>&1)" && fail "no-verdict: slice run passed: $out"
+grep -q '^NO-VERDICT 001-add-mul: mutate.sh --only 001-add-mul exited 1 before a verdict: mutate: FAIL simulated pre-verdict failure$' <<< "$out" || fail "no-verdict: no NO-VERDICT line naming the id and its error: $out"
+grep -q '^mutate_slice: FAIL NO-VERDICT: 001-add-mul (slice central)$' <<< "$out" || fail "no-verdict: no FAIL NO-VERDICT summary naming the id: $out"
+rm -rf "$t/mutate-out/central"
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-want_cases=34; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+want_cases=39; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
 [ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
 echo "mutate selftest: ok ($ncases cases)"

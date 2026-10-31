@@ -138,7 +138,8 @@ for e in "${equivs[@]}"; do
     case "$eline" in ''|'#'*|[[:space:]]*) continue ;; esac
     eid=${eline%%$'\t'*}; ereason=${eline#*$'\t'}
     { [ "$eid" != "$eline" ] && [ -n "${ereason//[[:space:]]/}" ]; } || { echo "mutate: FAIL $e: entry '$eline' needs ID<TAB>REASON"; exit 1; }
-    printf '%s\n' "$ids" | grep -qxF -- "$eid" || { echo "mutate: FAIL $e: equivalent id $eid is not in the manifest"; exit 1; }
+    # here-string, not `printf | grep -q`: under pipefail grep -q exiting at its match SIGPIPEs printf (rc 141), a false miss (Harper, 2026-10-29)
+    grep -qxF -- "$eid" <<< "$ids" || { echo "mutate: FAIL $e: equivalent id $eid is not in the manifest"; exit 1; }
     if [ -n "$eslice" ]; then
       enum=${eid%%-*}; erange=$(inrange "$((10#$enum))"); irc=$?
       [ "$irc" -eq 0 ] || { echo "mutate: FAIL inrange $eid: rc $irc"; exit 1; }
@@ -231,6 +232,19 @@ if ! fout=$(cd "$repo" && timeout "$bttl" cargo fetch 2>&1 </dev/null); then
   echo "mutate: FAIL FETCH: cargo fetch failed in $repo; no mutant ran (a fetch failure is never a kill):"; printf '%s\n' "$fout" | tail -5 | sed 's/^/    /'; exit 2
 fi
 lock="$repo/Cargo.lock"; [ -f "$lock" ] || { echo "mutate: FAIL FETCH: cargo fetch left no Cargo.lock in $repo"; exit 2; }
+# Per-ID test output (Harper, 2026-10-29): each mutant's `cargo test` output is kept as $logdir/<slice>/<id>.out (it used to be one
+# run.log the next mutant overwrote), and a KILLED result is followed by ONE indented line naming the failing tests (cargo's
+# `---- NAME stdout ----` blocks, capped at 5 plus `+N more`; `(timed out)` for a timeout kill, so EVERY KILLED line has one). The result line and the summary line are unchanged; mutate_slice.sh counts
+# only unindented result lines, so the extra line is ignored by every caller. env MUTATE_LOGDIR (default MUTATE_TMP/mutate-out, or MUTATE_PERSIST/mutate-out with MUTATE_TARGET).
+lbase=$base; [ -z "$persist" ] || lbase=$pbase   # persistent mode never writes under MUTATE_TMP (it may be unwritable)
+logdir=${MUTATE_LOGDIR:-$lbase/mutate-out}/${slice:-all}; mkdir -p "$logdir" || { echo "mutate: cannot create log dir $logdir"; exit 2; }
+# stale outputs (Spence review, 2026-10-29): a full run first removes every *.out in THIS slice's logdir (only regular files directly in it;
+# other files, subdirs and other slices are left alone), so an .out from an earlier HEAD cannot pass for a current one. An --only run
+# removes just its own <id>.out, since mutate_slice.sh runs a slice as one --only run per id and must keep the earlier ids' files.
+if [ -n "$only" ]; then [[ $only =~ ^[A-Za-z0-9._-]+$ && $only != *..* ]] || { echo "mutate: bad --only id $only"; exit 2; }; rm -f -- "$logdir/$only.out" || { echo "mutate: cannot clear $logdir/$only.out"; exit 2; }
+else find "$logdir" -mindepth 1 -maxdepth 1 -type f -name '*.out' -delete || { echo "mutate: cannot clear stale .out files in $logdir"; exit 2; }; fi
+# failnames FILE: the failing test names in a cargo test log, at most 5, then `+N more`
+failnames() { awk '/^---- .* stdout ----$/ { n++; if (n <= 5) s = s (s == "" ? "" : " ") $2 } END { if (n > 5) s = s " +" (n - 5) " more"; print (n ? s : "(none parsed)") }' "$1"; }
 nk=0; ns=0; ne=0; ni=0; total=0
 newtgt
 if [ -n "$rows" ]; then
@@ -251,6 +265,7 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
   else
     # rc captured explicitly: a failing suite is the EXPECTED outcome for a mutant, so it must not trip the poplog ERR trap
     rc=0; (cd "$work" && CARGO_TARGET_DIR="$tgt" timeout "$ttl" cargo test --offline --frozen --test "$suite" >"$tgt/run.log" 2>&1 </dev/null) || rc=$?
+    cp "$tgt/run.log" "$logdir/$id.out" 2>/dev/null || :
     if [ "$rc" = 0 ]; then
       if [ "${#equivs[@]}" -gt 0 ] && awk -F'\t' -v id="$id" '!/^[[:space:]]*(#|$)/ && $1 == id { f = 1 } END { exit !f }' "${equivs[@]}"; then
         echo "SURVIVED-EQUIVALENT $id ($fnpath, suite $suite): documented in EQUIVALENT.txt or equivalent.d"; ne=$((ne + 1))
@@ -258,9 +273,11 @@ while IFS="$(printf '\t')" read -r fnpath id patch suite; do
         echo "SURVIVED $id ($fnpath, suite $suite): the suite passed on the mutant"; ns=$((ns + 1))
       fi
     elif [ "$rc" = 124 ]; then echo "KILLED $id ($fnpath, suite $suite): timed out after $ttl"; nk=$((nk + 1))
+      echo "    failing tests: (timed out) (output: $logdir/$id.out)"   # every KILLED line is followed by one failing-tests line
     # a kill is a test binary that ran and failed: cargo then prints "error: test failed, to rerun pass". Anything else (resolve,
     # network, lock, I/O error) proves nothing about the mutant.
     elif grep -q '^error: test failed, to rerun pass' "$tgt/run.log"; then echo "KILLED $id ($fnpath, suite $suite): suite failed (rc $rc)"; nk=$((nk + 1))
+      echo "    failing tests: $(failnames "$tgt/run.log") (output: $logdir/$id.out)"
     else (exit "$rc")   # unexpected: re-raise rc so the ERR trap still records it
       echo "INVALID $id: suite run failed without a test failure (rc $rc; see: first lines below)"; head -5 "$tgt/run.log" | sed 's/^/    /'; ni=$((ni + 1)); fi
   fi
