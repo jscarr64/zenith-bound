@@ -77,6 +77,10 @@ out="$(run)" && fail "empty manifest passed (0 mutants proves nothing): $out"; e
 # a real mutant must be KILLED
 setm m.killed; out="$(run)" || fail "killable mutant not accepted: $out"
 echo "$out" | grep -c "^KILLED 001-add-mul" > /dev/null || fail "killed: wrong report: $out"
+# per-ID output (Harper, 2026-10-29): the KILLED line is followed by an indented line naming the failing test, and the mutant's
+# own cargo test output is kept as <logdir>/<slice>/<id>.out (it used to be one run.log the next mutant overwrote)
+echo "$out" | grep -A1 "^KILLED 001-add-mul" | grep -q "^    failing tests: add_works (output: " || fail "killed: no failing-test line naming add_works: $out"
+grep -q "panicked" "$t/mutate-out/all/001-add-mul.out" 2>/dev/null || fail "killed: no per-ID output $t/mutate-out/all/001-add-mul.out"
 
 # a surviving mutant makes the runner exit nonzero and is reported as SURVIVED
 setm m.surv; out="$(run)" && fail "surviving mutant passed (runner exited 0)"
