@@ -19,6 +19,9 @@ use crate::precision::{Precision, MAX_PRECISION, MIN_PRECISION};
 /// exact-subtraction cost for case analysis.
 const EXACT_GAP: i64 = 128;
 
+/// The normalized `Mag` mantissa of a power of two: `Mag(TOP, k)` is `2^(k-1)`.
+const TOP: u64 = 0x8000_0000_0000_0000;
+
 /// The sign of `x` as an ordering against zero (`Less` negative, `Equal` zero, `Greater` positive).
 fn sign(x: &ExactNum) -> Ordering {
     if x.is_zero() {
@@ -134,15 +137,40 @@ impl Mag {
         if me >= e.checked_add(2)? {
             return Some(Ordering::Greater);
         }
-        let m = self.to_exact_num().ok()?;
         // a - b = tb + ts with tb = ±big, ts = ±small; |a - b| = sb (a - b) where sb is the sign of tb.
         let big_neg = big.is_negative();
         let tb_pos = big_neg != a_big;
-        // u = tb - sb m, kept as u = (u_pos ? +1 : -1) * ur with ur formed from big and m.
-        let (ur, u_keep) = if big_neg {
-            (big.add_full_prec(&m), a_big)
+        let u_keep = a_big;
+        // u = tb - sb m, kept as u = (u_pos ? +1 : -1) * ur with ur = big - m (big >= 0) or big + m (big < 0).
+        let ur = if me == e.checked_add(1)? {
+            // self in [2^e, 2^(e+1)), possibly above EXPONENT_MAX (16.S2.1), so it is never converted here. A mantissa
+            // above TOP gives self >= 2^e + 2^(e-63) > 2^e + 2^(e-129) > |a - b|.
+            if self.mant()? != TOP {
+                return Some(Ordering::Greater);
+            }
+            // self = 2^e = h + h with h = 2^(e-1) = Mag(TOP, e), in range since big has exponent e.
+            let h = Mag::finite(TOP, e).ok()?.to_exact_num().ok()?;
+            let once = if big_neg {
+                big.add_full_prec(&h)
+            } else {
+                big.sub_full_prec(&h)
+            };
+            if once.inexact() || once.is_nan() {
+                return None;
+            }
+            if big_neg {
+                once.add_full_prec(&h)
+            } else {
+                once.sub_full_prec(&h)
+            }
         } else {
-            (big.sub_full_prec(&m), a_big)
+            // me == e: self < 2^e, in range since big has exponent e.
+            let m = self.to_exact_num().ok()?;
+            if big_neg {
+                big.add_full_prec(&m)
+            } else {
+                big.sub_full_prec(&m)
+            }
         };
         if ur.inexact() || ur.is_nan() {
             return None;

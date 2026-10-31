@@ -12,7 +12,7 @@ t=$(mktemp -d "$(zb_scratch)/la4-red-selftest.XXXXXX") || fail "mktemp failed"; 
 # fx NAME LA4_STATUS_LINE OTHER_STATUS_LINE [MARKER_TEXT...]: a fixture tree with docs/CONTRACT.md and one test file per marker
 fx() {
   local d="$t/$1" i=0; mkdir -p "$d/docs" "$d/tests/harness"
-  printf '## Slices\n### Slice LA2\n- **LA2.3** lu rows.\n### Slice LA3 (`src/qr.rs`)\n%s\n### Slice LA4 (`src/gls.rs`)\n%s\n- **LA4.1** gls rows.\n- **LA4.2** logdet rows; see also LA4.7 (prose mention only).\n### Slice LA5\n_Empty._\n' "$3" "$2" > "$d/docs/CONTRACT.md"
+  printf '## Slices\n### Slice LA2\n- **LA2.3** lu rows.\n### Slice LA3 (`src/qr.rs`)\n%s\n### Slice LA4 (`src/gls.rs`)\n%s\n- **LA4.1** gls rows.\n- **LA4.2** logdet rows; see also LA4.7 (prose mention only).\n### Slice LA5\n_Empty._\n### Slice S2 (`src/bridge.rs`)\n- **16.S2.1 cmp_exact_num.** cmp rows.\n- **16.S2.2 cmp_exact_diff.** diff rows; see also 16.S2.7 (prose mention only).\n' "$3" "$2" > "$d/docs/CONTRACT.md"
   shift 3
   for m in "$@"; do i=$((i + 1)); printf '#[test]\n#[ignore = "%s"]\nfn t%s() {}\n' "$m" "$i" > "$d/tests/harness/t$i.rs"; done
 }
@@ -33,6 +33,17 @@ fx otherslice 'Status: done' '_Empty._' 'red: not implemented: zb lu (CONTRACT L
 fx noentry '_Empty._' '_Empty._' 'red: not implemented: zb::gls (CONTRACT LA4.9: gls rows)'; ck; [ "$(run noentry)" = 1 ] || fail "a marker naming a CONTRACT id with no entry passed"
 ck; grep -q 'LA4.9 has no entry in docs/CONTRACT.md' "$t/out" || fail "missing entry not named: $(cat "$t/out")"
 fx prose '_Empty._' '_Empty._' 'red: not implemented: zb::gls (CONTRACT LA4.7: gls rows)'; ck; [ "$(run prose)" = 1 ] || fail "a prose-only mention counted as a CONTRACT entry"
+# Harper (2026-10-29): `red: CONTRACT <id>: ...` markers (slice clause ids 16.<SLICE>.<n>, e.g. 16.S2.1) must be well-formed and have a
+# `- **<id> <title>.**` entry in docs/CONTRACT.md (the form the 16.x clauses use); an unknown or malformed id fails.
+C1='red: CONTRACT 16.S2.1: cmp rows'; C2='red: CONTRACT 16.S2.2: diff rows'
+fx cgood '_Empty._' '_Empty._' "$C1" "$C2" "$G1"; ck; [ "$(run cgood)" = 0 ] || fail "known 16.S2.x CONTRACT markers failed: $(cat "$t/out")"
+ck; grep -q '1 LA4 red marker' "$t/out" || fail "LA4 count changed by CONTRACT markers: $(cat "$t/out")"
+fx cunknown '_Empty._' '_Empty._' 'red: CONTRACT 16.S2.9: no such clause'; ck; [ "$(run cunknown)" = 1 ] || fail "a CONTRACT marker with an unknown id passed"
+ck; grep -q '16.S2.9 has no entry in docs/CONTRACT.md' "$t/out" || fail "unknown id not named: $(cat "$t/out")"
+fx cprose '_Empty._' '_Empty._' 'red: CONTRACT 16.S2.7: prose only'; ck; [ "$(run cprose)" = 1 ] || fail "a prose-only 16.S2.7 mention counted as an entry"
+fx cmalformed '_Empty._' '_Empty._' 'red: CONTRACT S2.1: missing the 16. prefix'; ck; [ "$(run cmalformed)" = 1 ] || fail "a malformed CONTRACT id passed"
+ck; grep -q 'malformed' "$t/out" || fail "malformed id not named: $(cat "$t/out")"
+fx cnocolon '_Empty._' '_Empty._' 'red: CONTRACT 16.S2.1x rows'; ck; [ "$(run cnocolon)" = 1 ] || fail "a CONTRACT id without its colon passed"
 mkdir -p "$t/nocontract/tests"; ck; [ "$(run nocontract)" = 2 ] || fail "missing CONTRACT.md not a setup error"
-st_done la4_red_markers 15   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done la4_red_markers 23   # WANT: cases this script runs (tools/selftest_cases.sh)
 echo "la4_red_markers selftest: ok"

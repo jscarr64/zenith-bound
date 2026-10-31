@@ -77,6 +77,20 @@ out="$(run)" && fail "empty manifest passed (0 mutants proves nothing): $out"; e
 # a real mutant must be KILLED
 setm m.killed; out="$(run)" || fail "killable mutant not accepted: $out"
 echo "$out" | grep -c "^KILLED 001-add-mul" > /dev/null || fail "killed: wrong report: $out"
+# per-ID output (Harper, 2026-10-29): the KILLED line is followed by an indented line naming the failing test, and the mutant's
+# own cargo test output is kept as <logdir>/<slice>/<id>.out (it used to be one run.log the next mutant overwrote)
+echo "$out" | grep -A1 "^KILLED 001-add-mul" | grep -q "^    failing tests: add_works (output: " || fail "killed: no failing-test line naming add_works: $out"
+grep -q "panicked" "$t/mutate-out/all/001-add-mul.out" 2>/dev/null || fail "killed: no per-ID output $t/mutate-out/all/001-add-mul.out"
+# Spence review (2026-10-29): a full run first clears its slice logdir of .out files (stale ones from an earlier HEAD must not look
+# current); --only removes just its own id.out (mutate_slice.sh runs a slice one --only id at a time). Nothing else is touched.
+mkdir -p "$t/mutate-out/all" "$t/mutate-out/other"; touch "$t/mutate-out/all/999-stale.out" "$t/mutate-out/all/keep.txt" "$t/mutate-out/other/999-stale.out"
+out="$(run)" || fail "stale logdir: killable mutant not accepted: $out"
+[ -e "$t/mutate-out/all/999-stale.out" ] && fail "stale logdir: a stale .out from an earlier run was kept in the slice logdir"
+[ -f "$t/mutate-out/all/001-add-mul.out" ] || fail "stale logdir: this run's own 001-add-mul.out is missing"
+[ -f "$t/mutate-out/all/keep.txt" ] && [ -f "$t/mutate-out/other/999-stale.out" ] || fail "stale logdir: a non-.out file or another slice's .out was removed"
+touch "$t/mutate-out/all/999-stale.out"; out="$(run --only 001-add-mul)" || fail "stale logdir --only: $out"
+[ -f "$t/mutate-out/all/999-stale.out" ] || fail "stale logdir: --only removed another id's .out"
+rm -f "$t/mutate-out/all/999-stale.out" "$t/mutate-out/all/keep.txt"; rm -rf "$t/mutate-out/other"
 
 # a surviving mutant makes the runner exit nonzero and is reported as SURVIVED
 setm m.surv; out="$(run)" && fail "surviving mutant passed (runner exited 0)"
@@ -94,6 +108,8 @@ setm m.bad; out="$(run)" && fail "non-applying patch passed"; echo "$out" | grep
 # a hang is killed by the timeout
 setm m.hang; out="$(MUTATE_TIMEOUT=5s run)" || fail "hanging mutant not accepted as killed: $out"
 echo "$out" | grep -c "^KILLED 004-hang.*timed out" > /dev/null || fail "hang: wrong report: $out"
+# Spence review (2026-10-29): a timeout KILLED is followed by the same indented failing-tests line, `(timed out)` for the names
+echo "$out" | grep -A1 "^KILLED 004-hang" | grep -q "^    failing tests: (timed out) (output: $t/mutate-out/all/004-hang.out)$" || fail "hang: no failing-tests (timed out) line after KILLED: $out"
 
 # --only selects one row; an unknown id is an error
 cat m.killed m.surv > "$r/tools/mutants/manifest.txt"; cm
@@ -200,6 +216,6 @@ grep -q '^INVALID 001-add-mul: suite run failed without a test failure' <<< "$ou
 [ -f "$lg" ] && grep -q ' ERR rc=101 ' "$lg" || fail "err-loud: an unexpected failure (rc 101, no test failed) did not log an ERR trap line: $(cat "$lg" 2>/dev/null | grep ERR)"
 # every worktree and target dir was removed, in every case above
 n="$(leftovers)"; [ "$(printf '%s' "$n" | tr -d '\n 0')" = "" ] || fail "leftover worktrees or dirs: $n"
-want_cases=34; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
+want_cases=36; ncases=$(grep -c x "$t/cases" 2>/dev/null || echo 0)
 [ "$ncases" = "$want_cases" ] || fail "ran $ncases cases, expected $want_cases (a case was skipped or added without updating want_cases)"
 echo "mutate selftest: ok ($ncases cases)"
