@@ -835,6 +835,7 @@ fn enclosure_rows_contained() -> Result<(), String> {
 
 mod harper_cmp;
 mod harper_edges;
+mod harper_far_side_edge;
 mod harper_oracle;
 mod harper_props;
 

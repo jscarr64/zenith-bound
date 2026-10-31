@@ -50,3 +50,10 @@ src/mag/convert.rs:map_zf_error	346-ZFRETRY	bridge/346-ZFRETRY.patch	harness
 src/mag/convert.rs:map_zf_error	347-ZFALLOC	bridge/347-ZFALLOC.patch	harness
 src/bridge.rs:Mag::cmp_far_diff	348-URNAN	bridge/348-URNAN.patch	harness
 src/bridge.rs:Mag::cmp_far_diff	349-ZNAN	bridge/349-ZNAN.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	350-TOPEQ	bridge/350-TOPEQ.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	351-TOPLESS	bridge/351-TOPLESS.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	352-TOPEQUAL	bridge/352-TOPEQUAL.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	353-TOPDEL	bridge/353-TOPDEL.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	354-HALVES	bridge/354-HALVES.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	355-ONCENAN	bridge/355-ONCENAN.patch	harness
+src/bridge.rs:Mag::cmp_far_diff	356-TOPGT	bridge/356-TOPGT.patch	harness
