@@ -14,7 +14,9 @@ golden="$(attr tests/goldens/mag_ops.txt)"
 echo "$golden" | grep -q "text: unset" || fail "mag_ops.txt check-attr: $golden"
 text="$(attr README.md)"
 echo "$text" | grep -q "eol: lf" || fail "README.md check-attr: $text"
-tmp="$(mktemp -d "$HOME/.gitattributes-selftest.XXXXXX")" || fail "mktemp failed"
+# Spence review of PR #13: do not put the scratch dir under $HOME; use
+# $TMPDIR (falling back to /tmp only when $TMPDIR is unset, as in Vera's VM).
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/.gitattributes-selftest.XXXXXX")" || fail "mktemp failed"
 hash="$(sha256sum "$here/tests/goldens/mag_ops.txt" | cut -d' ' -f1)"
 sed 's/$/\r/' "$here/tests/goldens/mag_ops.txt" > "$tmp/mag_ops_crlf.txt"
 printf '%s  mag_ops_crlf.txt\n' "$hash" > "$tmp/SHA256SUMS"
