@@ -31,7 +31,11 @@ fn crlf_ball_row_parses_identically_through_lines() -> Result<(), String> {
     let crlf_text = format!("{}\r\n", row);
     let crlf_row = first_data_row(&crlf_text)?;
     let crlf = format_row(&parse_row(crlf_row)?)?;
-    expect_eq("CRLF row through lines() parses identically to LF row", &crlf, &lf)
+    expect_eq(
+        "CRLF row through lines() parses identically to LF row",
+        &crlf,
+        &lf,
+    )
 }
 
 #[test]
@@ -59,7 +63,9 @@ fn check_no_cr_in_dir(dir: &std::path::Path) -> Result<(), String> {
     for entry in entries {
         let entry = entry.map_err(|e| format!("dir entry: {}", e))?;
         let path = entry.path();
-        let kind = entry.file_type().map_err(|e| format!("{:?}: {}", path, e))?;
+        let kind = entry
+            .file_type()
+            .map_err(|e| format!("{:?}: {}", path, e))?;
         if kind.is_dir() {
             check_no_cr_in_dir(&path)?;
         } else if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
