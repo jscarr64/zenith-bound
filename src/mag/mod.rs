@@ -63,6 +63,20 @@ impl Mag {
     /// exponent becomes `exp - lz`. That adjustment is exact. `mant == 0` is accepted only
     /// together with `exp == 0`. If `exp - lz` would be below `i64::MIN`, the value is not
     /// representable and this returns [`BoundError::Representation`] without rounding.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use zenith_bound::mag::Mag;
+    ///
+    /// fn main() -> Result<(), zenith_bound::error::BoundError> {
+    ///     let m = Mag::finite(0x8000_0000_0000_0000, 1)?;
+    ///     assert_eq!(m.mant(), Some(0x8000_0000_0000_0000));
+    ///     assert_eq!(m.exp(), Some(1));
+    ///     assert!(Mag::zero().is_zero());
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn finite(mant: u64, exp: i64) -> Result<Mag, BoundError> {
         match NonZeroU64::new(mant) {
             None if exp == 0 => Ok(Mag::zero()),
