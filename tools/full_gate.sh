@@ -78,6 +78,7 @@ run toolchain "require rustc cargo sed && tools/toolchain_check_selftest.sh && t
 run target-dir "require git && tools/fresh_test_run.sh --claim"
 run build-tests "require cargo && cargo build --tests"
 run build-debug "require cargo && tools/fresh_test_run.sh cargo test -- --test-threads=\${RUST_TEST_THREADS:-8}"
+run zero-test "require cargo && bash scripts/check_zero_test_targets.sh"
 run build-release "require cargo && tools/fresh_test_run.sh cargo test --release -- --test-threads=\${RUST_TEST_THREADS:-8}"
 run test-floor "require awk grep && tools/test_floor_selftest.sh && tools/test_floor.sh build-debug \"$T/$tag-build-debug.log\" && tools/test_floor.sh build-release \"$T/$tag-build-release.log\""
 run rules-scan "require python3 git grep && tools/rules_scan_selftest.sh && tools/rules_scan.sh \${SCAN_ARGS:-\${RATCHET_BASE:-3c9f36f}..HEAD}"
