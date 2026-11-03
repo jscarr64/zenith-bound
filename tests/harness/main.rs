@@ -5,6 +5,7 @@ mod common;
 
 mod ball_boundary;
 mod ball_goldens_selftest;
+mod crlf_guards;
 mod edges_selftest;
 mod enclosure_selftest;
 mod fuzz_mag;
