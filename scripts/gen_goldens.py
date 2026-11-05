@@ -1,6 +1,6 @@
-#!/home/jsc64/.local/oracle-venv/bin/python
+#!/home/jsc64/team-env/oracle-2026-10-30/bin/python
 """
-Generates tests/goldens/mag_ops.txt; run with ~/.local/oracle-venv/bin/python (goldlib.require_oracle checks the four pinned versions at import).
+Generates tests/goldens/mag_ops.txt; run with ~/team-env/oracle-2026-10-30/bin/python (goldlib.require_oracle checks the four pinned versions at import).
 """
 
 import os
@@ -385,4 +385,4 @@ if __name__ == "__main__":
         main()
         main(None, L0A1_NAME)
     else:
-        raise SystemExit("usage: ~/.local/oracle-venv/bin/python scripts/gen_goldens.py [--check DIR]")
+        raise SystemExit("usage: ~/team-env/oracle-2026-10-30/bin/python scripts/gen_goldens.py [--check DIR]")

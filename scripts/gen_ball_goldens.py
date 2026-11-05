@@ -1,10 +1,10 @@
-#!/home/jsc64/.local/oracle-venv/bin/python
+#!/home/jsc64/team-env/oracle-2026-10-30/bin/python
 """
 Generates tests/goldens/ball_exact_ops.txt (TEST_PLAN section 9, L0b exact-input rows): the exact result of add, sub, mul, div and sqrt on exact
-dyadic inputs, rounded to PREC bits under each of the six modes. Run with ~/.local/oracle-venv/bin/python (goldlib.require_oracle):
-    ~/.local/oracle-venv/bin/python scripts/gen_ball_goldens.py              write tests/goldens/ball_exact_ops.txt
-    ~/.local/oracle-venv/bin/python scripts/gen_ball_goldens.py --check DIR  regenerate into DIR (never tests/goldens) and compare byte for byte
-    ~/.local/oracle-venv/bin/python scripts/gen_ball_goldens.py --selftest   the generator's own negative tests
+dyadic inputs, rounded to PREC bits under each of the six modes. Run with ~/team-env/oracle-2026-10-30/bin/python (goldlib.require_oracle):
+    ~/team-env/oracle-2026-10-30/bin/python scripts/gen_ball_goldens.py              write tests/goldens/ball_exact_ops.txt
+    ~/team-env/oracle-2026-10-30/bin/python scripts/gen_ball_goldens.py --check DIR  regenerate into DIR (never tests/goldens) and compare byte for byte
+    ~/team-env/oracle-2026-10-30/bin/python scripts/gen_ball_goldens.py --selftest   the generator's own negative tests
 
 INDEPENDENCE. The expected value comes from exact Fractions and goldlib.round_fraction (sqrt: integer square root with a sticky half unit, which
 cannot cross a rounding boundary). It never touches zenith-float. Every row is cross-checked against mpmath.libmp (mpf_add, mpf_sub, mpf_mul,
@@ -585,7 +585,7 @@ def main(argv):
         return 0
     if argv == ["--selftest"]:
         return 0
-    raise SystemExit("usage: ~/.local/oracle-venv/bin/python scripts/gen_ball_goldens.py [--check DIR | --selftest]")
+    raise SystemExit("usage: ~/team-env/oracle-2026-10-30/bin/python scripts/gen_ball_goldens.py [--check DIR | --selftest]")
 
 
 if __name__ == "__main__":
