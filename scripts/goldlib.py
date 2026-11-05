@@ -407,7 +407,8 @@ def selftest():
     _check(oracle_problems(good, venv, "/usr/local", vpath + ["/home/u/.local/lib/python3.12/site-packages"], venv, "/home/u/.local") != [], "~/.local on sys.path not reported")
     # team env only (Jeff 10:01 AM CT 2026-10-30: the team never uses ~/.local/oracle-venv). require_team_env(prefix) returns the env
     # name or raises SystemExit (nonzero) with a typed 'goldlib: REFUSED[...]' message; write_lines records the name in DIR/PROVENANCE.
-    st = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".local", "goldlib-selftest")
+    st = os.path.join(os.environ.get("ZB_SCRATCH") or os.path.expanduser("~/.cache/zenith-bound/scratch"), "goldlib-selftest")
+    os.makedirs(st, exist_ok=True)
     def _refused(prefix, root, tag):
         try:
             require_team_env(prefix, root)
@@ -419,7 +420,7 @@ def selftest():
     # (b) any other path is refused
     _check(_refused("/usr", TEAM_ENV_ROOT, "not-team-env"), "/usr not refused")
     _check(_refused(os.path.join(st, "elsewhere", "venv"), TEAM_ENV_ROOT, "not-team-env"), "arbitrary venv path not refused")
-    # (c) a team-env-shaped dir (fixture under .local/, nothing under ~/team-env) that fails verify_env.sh is refused
+    # (c) a team-env-shaped dir (fixture under zb_scratch/, nothing under ~/team-env) that fails verify_env.sh is refused
     fake_root = os.path.join(st, "team-env")
     os.makedirs(os.path.join(fake_root, "fake-env", "bin"), exist_ok=True)
     _check(_refused(os.path.join(fake_root, "fake-env"), fake_root, "verify-failed"), "team-env-shaped dir failing verify_env not refused")
