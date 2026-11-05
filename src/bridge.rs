@@ -90,7 +90,9 @@ impl Mag {
 
     /// `self` against `|a - b|`, decided exactly (16.S2.2). Operands within [`EXACT_GAP`] binades are subtracted
     /// exactly; otherwise the exponents decide unless the radius is within a factor 2 of the larger operand, and then
-    /// only the exact `|big| - self` and one short exact sum are formed (16.S2.3). `None` when an operand is NaN or
+    /// `|big| - self` is formed exactly (at radius exponent `e + 1` with mantissa `TOP`, as two exact halves of
+    /// `2^(e-1)`, never converting a radius above `EXPONENT_MAX`) and, when needed, one short exact sum with the
+    /// smaller operand (16.S2.3). `None` when an operand is NaN or
     /// infinite, or when zenith-float reports an exact operation inexact or returns NaN (an allocation failure).
     pub fn cmp_exact_diff(&self, a: &ExactNum, b: &ExactNum) -> Option<Ordering> {
         if not_finite(a) || not_finite(b) {
