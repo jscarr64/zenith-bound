@@ -1019,3 +1019,6 @@ mod harper_s2_goldens;
 
 // Harper S2 red (2026-10-29): cmp_exact_diff None when |a - b| leaves zf range (16.S2.2).
 mod harper_s2_diff_overflow;
+
+// Harper S2 f3 (2026-11-05, ZB-32): the far-halves arm of cmp_far_diff, Rusty edge rows I L M N and P3 (128..1024 bits).
+mod harper_s2_far_halves;
