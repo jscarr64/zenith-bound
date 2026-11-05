@@ -1,6 +1,6 @@
-#!/home/jsc64/.local/oracle-venv/bin/python
+#!/home/jsc64/team-env/oracle-2026-10-30/bin/python
 """
-goldlib: shared helpers for the golden generators (TEST_PLAN section 9). Run self-tests with:  ~/.local/oracle-venv/bin/python scripts/goldlib.py --selftest
+goldlib: shared helpers for the golden generators (TEST_PLAN section 9). Run self-tests with:  ~/team-env/oracle-2026-10-30/bin/python scripts/goldlib.py --selftest
 Rules: the oracle venv only (require_oracle: mpmath 1.3.0, sympy 1.14.0, gmpy2 2.3.2, python-flint 0.9.0), no Python `random` (its algorithms changed across 3.x), integer-only arithmetic or Fraction,
 no dict/set iteration order in output, LF line endings, no timestamps/hostnames/paths in generated files, no network.
 
@@ -20,8 +20,15 @@ MASK64 = (1 << 64) - 1
 # ---- oracle startup check (Jeff 9:22 AM CT 2026-10-23: goldens come from the isolated oracle venv) ----------------------------
 # Exact pins, the same as zenith-float scripts/oracle-requirements.lock and scripts/oracle_pins.py at 7c97b3c (read, not imported: zf is
 # not a dependency). The 'flint' in ~/.local is an unrelated tool, so nothing may be imported from ~/.local outside the venv.
-ORACLE_VENV = os.path.expanduser("~/.local/oracle-venv")
-ORACLE_PY = os.path.join(ORACLE_VENV, "bin", "python")
+# Team env only (Jeff 10:01 AM CT 2026-10-30: the team never uses ~/.local/oracle-venv). The interpreter must be ~/team-env/<name>/
+# and `~/team-env/verify_env.sh <name>` must pass; the name goes to stderr (the run log) and into DIR/PROVENANCE (write_lines).
+TEAM_ENV_ROOT = os.path.expanduser("~/team-env")
+DEFAULT_TEAM_ENV = "oracle-2026-10-30"
+JEFF_ORACLE_VENV = os.path.expanduser("~/.local/oracle-venv")   # refused by path only; never run
+ORACLE_VENV = os.path.join(TEAM_ENV_ROOT, DEFAULT_TEAM_ENV)
+ORACLE_PY = os.path.join(ORACLE_VENV, "bin", "python")          # the default GOLDENS_PYTHON (tools/goldens_regen.sh)
+VERIFY_ENV = os.path.join(TEAM_ENV_ROOT, "verify_env.sh")
+TEAM_ENV = None                                                  # set by require_oracle: the verified env name
 USER_LOCAL = os.path.expanduser("~/.local")
 PINS = (("mpmath", "1.3.0"), ("sympy", "1.14.0"), ("gmpy2", "2.3.2"), ("flint", "0.9.0"))
 MPMATH_VERSION = "1.3.0"
@@ -29,6 +36,34 @@ MPMATH_VERSION = "1.3.0"
 
 def _inside(path, root):
     return path == root or path.startswith(root + os.sep)
+
+
+def require_team_env(prefix, root=TEAM_ENV_ROOT):
+    """Return NAME when prefix is ROOT/NAME and `verify_env.sh NAME` (run with HOME = ROOT's parent) passes; otherwise raise
+    SystemExit (nonzero) with a typed 'goldlib: REFUSED[oracle-venv|not-team-env|verify-failed]: ...' message."""
+    import subprocess
+    use = "use GOLDENS_PYTHON=%s (team env %s)" % (ORACLE_PY, DEFAULT_TEAM_ENV)
+    ab, rp = os.path.abspath(prefix), os.path.realpath(prefix)
+    if _inside(ab, JEFF_ORACLE_VENV) or _inside(rp, os.path.realpath(JEFF_ORACLE_VENV)):
+        raise SystemExit("goldlib: REFUSED[oracle-venv]: %s is Jeff's personal ~/.local/oracle-venv; the team never uses it "
+                         "(Jeff 10:01 AM CT 2026-10-30); %s" % (prefix, use))
+    rroot = os.path.realpath(root)
+    name = os.path.basename(rp)
+    if os.path.dirname(rp) != rroot or not name or name.startswith("."):
+        raise SystemExit("goldlib: REFUSED[not-team-env]: %s is not a team env %s/<name>; %s" % (prefix, root, use))
+    verify = os.path.join(rroot, "verify_env.sh")
+    if not os.access(verify, os.X_OK):
+        verify = VERIFY_ENV
+    try:
+        res = subprocess.run([verify, name], env=dict(os.environ, HOME=os.path.dirname(rroot)),
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        rc, out = res.returncode, res.stdout.strip()
+    except OSError as e:
+        rc, out = 127, str(e)
+    if rc != 0:
+        raise SystemExit("goldlib: REFUSED[verify-failed]: team env %s failed %s %s (rc %d): %s; %s"
+                         % (name, verify, name, rc, out.splitlines()[-1] if out else "", use))
+    return name
 
 
 def oracle_problems(found, prefix, base_prefix, path, venv=ORACLE_VENV, user_local=USER_LOCAL):
@@ -66,10 +101,18 @@ def _found_versions():
 
 
 def require_oracle():
-    """Exit nonzero unless this is the oracle venv with exactly the four pinned versions and no ~/.local on sys.path. Returns mpmath."""
-    probs = oracle_problems(_found_versions(), sys.prefix, sys.base_prefix, sys.path)
+    """Exit nonzero unless this is a verified team env (require_team_env) with exactly the four pinned versions and no ~/.local
+    on sys.path. Logs the env name to stderr. Returns mpmath."""
+    global TEAM_ENV
+    if TEAM_ENV is not None:   # verified once per process (sys.prefix cannot change); mpmath_round calls this per sample
+        import mpmath
+        return mpmath
+    name = require_team_env(sys.prefix)
+    probs = oracle_problems(_found_versions(), sys.prefix, sys.base_prefix, sys.path, os.path.join(TEAM_ENV_ROOT, name))
     if probs:
-        raise SystemExit("goldlib: oracle check failed (run with %s or GOLDENS_PYTHON pointing to it): %s" % (ORACLE_PY, "; ".join(probs)))
+        raise SystemExit("goldlib: oracle check failed in team env %s: %s" % (name, "; ".join(probs)))
+    sys.stderr.write("goldlib: team-env=%s (verify_env.sh OK)\n" % name)
+    TEAM_ENV = name
     import mpmath
     return mpmath
 
@@ -155,11 +198,32 @@ def sorted_rows(rows, key=None):
     return sorted(set(rows), key=key)
 
 
-def write_lines(path, lines):
-    """Write lines with LF endings and a final newline, as bytes (no platform translation)."""
+def record_provenance(path, env_name=None):
+    """Record 'NAME team-env=ENV' for the gold at path in its directory's PROVENANCE file (one sorted line per gold, LF)."""
+    env_name = env_name or TEAM_ENV
+    if not env_name:
+        raise SystemExit("goldlib: REFUSED[no-team-env]: no verified team env to record in PROVENANCE for %s" % path)
+    d, base = os.path.split(os.path.abspath(path))
+    prov = os.path.join(d, "PROVENANCE")
+    keep = {}
+    if os.path.isfile(prov):
+        with open(prov, "rb") as f:
+            for l in f.read().decode("ascii").splitlines():
+                if l and not l.startswith("#"):
+                    keep[l.split(" ", 1)[0]] = l
+    keep[base] = "%s team-env=%s" % (base, env_name)
+    data = "# goldlib PROVENANCE: the team env (~/team-env/<name>, verify_env.sh OK) each gold in this directory was generated in\n"
+    data += "".join(keep[k] + "\n" for k in sorted(keep))
+    with open(prov, "wb") as f:
+        f.write(data.encode("ascii"))
+
+
+def write_lines(path, lines, env_name=None):
+    """Write lines with LF endings and a final newline, as bytes (no platform translation); record the team env in PROVENANCE."""
     data = "".join(l + "\n" for l in lines).encode("ascii")
     with open(path, "wb") as f:
         f.write(data)
+    record_provenance(path, env_name)
 
 
 # ---- --check DIR ------------------------------------------------------------------------------------------------------------
@@ -183,6 +247,8 @@ def check_against(dirpath, committed_dir, names):
     for name in names:
         cpath = os.path.join(committed_dir, name)
         rpath = os.path.join(dirpath, name)
+        if os.path.isfile(rpath) and TEAM_ENV:
+            record_provenance(rpath)
         if not os.path.isfile(cpath):
             print("check: MISSING committed %s" % name)
             bad += 1
@@ -339,6 +405,32 @@ def selftest():
     _check(oracle_problems(good, "/usr", "/usr", vpath, venv, "/home/u/.local") != [], "system prefix not reported")
     _check(oracle_problems(good, venv, venv, vpath, venv, "/home/u/.local") != [], "prefix == base_prefix (not a venv) not reported")
     _check(oracle_problems(good, venv, "/usr/local", vpath + ["/home/u/.local/lib/python3.12/site-packages"], venv, "/home/u/.local") != [], "~/.local on sys.path not reported")
+    # team env only (Jeff 10:01 AM CT 2026-10-30: the team never uses ~/.local/oracle-venv). require_team_env(prefix) returns the env
+    # name or raises SystemExit (nonzero) with a typed 'goldlib: REFUSED[...]' message; write_lines records the name in DIR/PROVENANCE.
+    st = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".local", "goldlib-selftest")
+    def _refused(prefix, root, tag):
+        try:
+            require_team_env(prefix, root)
+        except SystemExit as e:
+            return e.code not in (None, 0) and isinstance(e.code, str) and e.code.startswith("goldlib: REFUSED[%s]" % tag)
+        return False
+    # (a) Jeff's oracle venv is refused (the path is only a string here; it is never run)
+    _check(_refused(os.path.expanduser("~/.local/oracle-venv"), TEAM_ENV_ROOT, "oracle-venv"), "~/.local/oracle-venv not refused")
+    # (b) any other path is refused
+    _check(_refused("/usr", TEAM_ENV_ROOT, "not-team-env"), "/usr not refused")
+    _check(_refused(os.path.join(st, "elsewhere", "venv"), TEAM_ENV_ROOT, "not-team-env"), "arbitrary venv path not refused")
+    # (c) a team-env-shaped dir (fixture under .local/, nothing under ~/team-env) that fails verify_env.sh is refused
+    fake_root = os.path.join(st, "team-env")
+    os.makedirs(os.path.join(fake_root, "fake-env", "bin"), exist_ok=True)
+    _check(_refused(os.path.join(fake_root, "fake-env"), fake_root, "verify-failed"), "team-env-shaped dir failing verify_env not refused")
+    # (d) the default team env is accepted and its name lands in PROVENANCE
+    _check(DEFAULT_TEAM_ENV == "oracle-2026-10-30", "default team env")
+    _check(require_team_env(os.path.join(TEAM_ENV_ROOT, DEFAULT_TEAM_ENV), TEAM_ENV_ROOT) == DEFAULT_TEAM_ENV, "oracle-2026-10-30 not accepted")
+    out = os.path.join(st, "prov")
+    os.makedirs(out, exist_ok=True)
+    write_lines(os.path.join(out, "x.txt"), ["a"], env_name=DEFAULT_TEAM_ENV)
+    with open(os.path.join(out, "PROVENANCE")) as f:
+        _check("x.txt team-env=oracle-2026-10-30" in f.read(), "env name not written into PROVENANCE")
     # splitmix64: the same reference values as tests/harness/*_selftest.rs (computed independently of Rust)
     g = SplitMix64(0)
     _check([g.next() for _ in range(3)] == [0xE220A8397B1DCDAF, 0x6E789E6AA1B965F4, 0x06C45D188009454F], "seed 0 reference outputs")
@@ -422,5 +514,8 @@ def selftest():
 if __name__ == "__main__":
     if sys.argv[1:] == ["--selftest"]:
         selftest()
+    elif sys.argv[1:] == ["--team-env"]:   # goldens_regen.sh preflight (Spence LA2 review, 2026-10-30)
+        require_oracle()
+        print("team-env=%s" % TEAM_ENV)
     else:
-        raise SystemExit("usage: ~/.local/oracle-venv/bin/python scripts/goldlib.py --selftest")
+        raise SystemExit("usage: ~/team-env/oracle-2026-10-30/bin/python scripts/goldlib.py --selftest | --team-env")

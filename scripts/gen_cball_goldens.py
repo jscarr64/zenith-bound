@@ -1,7 +1,7 @@
-#!/home/jsc64/.local/oracle-venv/bin/python
+#!/home/jsc64/team-env/oracle-2026-10-30/bin/python
 """
 Generates tests/goldens/slices/cball/cball_rows.txt (CONTRACT 16.CB.10): mpmath.mpc POINT references for the CBall ops add, sub, mul, sqr, abs
-and div, plus per-part first-order radii RREF for the tightness factors. Run with ~/.local/oracle-venv/bin/python:
+and div, plus per-part first-order radii RREF for the tightness factors. Run with ~/team-env/oracle-2026-10-30/bin/python:
     scripts/gen_cball_goldens.py              write tests/goldens/slices/cball/cball_rows.txt
     scripts/gen_cball_goldens.py --check DIR  regenerate into DIR (never tests/goldens) and compare byte for byte
     scripts/gen_cball_goldens.py --selftest   the generator's own checks
