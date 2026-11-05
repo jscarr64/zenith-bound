@@ -168,5 +168,11 @@ ev ORACLE_PY="$HOME/team-env/oracle-2026-10-30/bin/python"
 ck; [ "$grc" = 0 ] && grep -qx 'goldens-regen: team-env=oracle-2026-10-30 (verify_env.sh OK, goldlib OK)' <<< "$out" || fail "ORACLE_PY=team env: not used or not logged (rc $grc): $out"
 ev
 ck; [ "$grc" = 0 ] && grep -qx 'goldens-regen: team-env=oracle-2026-10-30 (verify_env.sh OK, goldlib OK)' <<< "$out" || fail "default interpreter is not the team env oracle-2026-10-30 (rc $grc): $out"
+# Spence REQUEST_CHANGES on PR #11 (a23420a6): the fake.py cases above never run a real generator, so removing the --skip-heavy
+# strip in scripts/gen_bridge_const_goldens.py kept them green. Run the REAL generator with the argv goldens_regen.sh passes in
+# regen-gate mode (--check DIR --skip-heavy): it must exit 0 and must not fall through to its usage error.
+out=$(cd "$here/.." && "$HOME/team-env/oracle-2026-10-30/bin/python" scripts/gen_bridge_const_goldens.py --check "$t/bc" --skip-heavy 2>&1); grc=$?
+ck; [ "$grc" = 0 ] || fail "real gen_bridge_const_goldens.py --check DIR --skip-heavy exited $grc (--skip-heavy not stripped?): $out"
+ck; grep -q "usage:" <<< "$out" && fail "real gen_bridge_const_goldens.py --check DIR --skip-heavy hit its usage error: $out"
 echo "goldens_regen selftest: ok"
-st_done goldens_regen 65   # WANT: cases this script runs (tools/selftest_cases.sh)
+st_done goldens_regen 67   # WANT: cases this script runs (tools/selftest_cases.sh)
