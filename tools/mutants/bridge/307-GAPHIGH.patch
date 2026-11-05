@@ -1,8 +1,8 @@
 diff --git a/src/bridge.rs b/src/bridge.rs
-index 0ce786b..1b99a1f 100644
+index 11b06b8..6c208d7 100644
 --- a/src/bridge.rs
 +++ b/src/bridge.rs
-@@ -127,7 +127,7 @@ impl Mag {
+@@ -134,7 +134,7 @@ impl Mag {
          if me <= e.checked_sub(1)? {
              return Some(Ordering::Less);
          }
@@ -10,4 +10,4 @@ index 0ce786b..1b99a1f 100644
 +        if me >= e.checked_add(1)? {
              return Some(Ordering::Greater);
          }
-         let m = self.to_exact_num().ok()?;
+         // a - b = tb + ts with tb = ±big, ts = ±small; |a - b| = sb (a - b) where sb is the sign of tb.

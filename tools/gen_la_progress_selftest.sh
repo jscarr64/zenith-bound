@@ -12,7 +12,7 @@ set -u
 here=$(cd "$(dirname "$0")" && pwd); gen="$here/../scripts/gen_la_goldens.py"
 fail() { echo "gen_la_progress selftest FAIL: $*"; exit 1; }
 . "$here/scratch.sh"; t=$(mktemp -d "$(zb_scratch)/gen-la-progress-selftest.XXXXXX") || fail "mktemp"; runlog_on_exit "rm -rf \"$t\""; . "${BASH_SOURCE[0]%/*}/selftest_cases.sh"; st_init "$t"
-py=${ZB_ORACLE_PY:-$HOME/.local/oracle-venv/bin/python}; [[ -x $py ]] || fail "oracle python missing: $py"
+py=${ZB_ORACLE_PY:-$HOME/team-env/oracle-2026-10-30/bin/python}; [[ -x $py ]] || fail "oracle python missing: $py"
 run() { "$@" > "$t/out" 2> "$t/err"; echo $? > "$t/rc"; }
 rc() { cat "$t/rc"; }
 # 1. budget: a 1 ms per-case budget must trip on some case, rc 5, naming op and case_id
