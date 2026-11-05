@@ -43,7 +43,11 @@ fn op_index(op: &BallOp) -> usize {
 }
 
 /// The data lines (every line that is not a `#` header line).
-fn rows(text: &str) -> Vec<&str> {
+/// `pub(crate)` on purpose: `crlf_guards` feeds CRLF text through this
+/// real loader instead of re-implementing `lines()` in the test, so a
+/// switch from `lines()` to `split('\n')` here would make the CRLF guard
+/// fail (a `\r`-terminated row is rejected by `parse_row`).
+pub(crate) fn rows(text: &str) -> Vec<&str> {
     text.lines().filter(|l| !l.starts_with('#')).collect()
 }
 
