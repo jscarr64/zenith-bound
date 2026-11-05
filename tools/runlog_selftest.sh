@@ -42,7 +42,7 @@ awk -F'\t' '$2=="fixture-job" {print "row " NF " " $5 " " $6 " " $7 " " $8}' "$P
 runlog_warn "fixture warning"
 JOB
 POPLOG_HEARTBEAT=1 bash "$t/job.sh" > "$t/out" 2>&1; rc=$?
-log=$(find "$POPLOG_ROOT/selftest" -name '*-fixture-job.log' | head -1)
+log=$(find "$POPLOG_ROOT/selftest" -name '*-fixture-job.log' -print -quit)
 ck; [ -n "$log" ] || fail "no log under $POPLOG_ROOT/selftest/<date>/<HHMM>-fixture-job.log: $(cat "$t/out")"
 ck; case "$log" in "$POPLOG_ROOT/selftest/$(date +%F)/"[0-9][0-9][0-9][0-9]-fixture-job.log) ;; *) fail "log path $log";; esac
 ck; [ "$rc" != 0 ] || fail "run with a zero-test step exited 0"
@@ -69,7 +69,7 @@ runlog_step --tests t -- bash -c 'sleep 2; echo "test result: ok. 3 passed; 0 fa
 JOB
 ck; bash "$t/ok.sh" > "$t/ok.out" 2>&1 || fail "passing run exited nonzero: $(cat "$t/ok.out")"
 ck; grep -q ok-job "$POPLOG_ROOT/RUNNING.tsv" && fail "ok-job row left behind"
-okl=$(find "$POPLOG_ROOT/selftest" -name '*-ok-job.log' | head -1)
+okl=$(find "$POPLOG_ROOT/selftest" -name '*-ok-job.log' -print -quit)
 ck; grep -q "^RESULT: PASS" "$okl" || fail "passing footer: $(tail -6 "$okl")"
 # piped output must end when the run ends (the 300 s heartbeat must not hold the pipe)
 p0=$(date +%s); bash "$t/ok.sh" 2>&1 | cat > /dev/null
@@ -85,7 +85,7 @@ for _ in $(seq 20); do grep -q term-job "$POPLOG_ROOT/RUNNING.tsv" && break; sle
 ck; grep -q term-job "$POPLOG_ROOT/RUNNING.tsv" || fail "term-job row never added"
 sleep 1; kill -TERM "$p"; wait "$p"
 ck; grep -q term-job "$POPLOG_ROOT/RUNNING.tsv" && fail "row not removed on TERM"
-tl=$(find "$POPLOG_ROOT/selftest" -name '*-term-job.log' | head -1)
+tl=$(find "$POPLOG_ROOT/selftest" -name '*-term-job.log' -print -quit)
 ck; grep -q "^RESULT: FAIL" "$tl" || fail "TERM footer: $(tail -6 "$tl")"
 
 # nested inside a wrapped run, and inside poprun: no log of its own; the steps land in the outer log
@@ -98,13 +98,13 @@ before=$(find "$POPLOG_ROOT/selftest" -name '*-ok-job.log' | wc -l)
 ck; T_DIR="$t" bash "$t/outer.sh" > /dev/null 2>&1 || fail "outer run failed"
 ck; "$(dirname "$lib")/poprun" --agent selftest --job pr-outer -- bash "$t/ok.sh" > /dev/null 2>&1 || fail "poprun outer failed"
 ck; [ "$(find "$POPLOG_ROOT/selftest" -name '*-ok-job.log' | wc -l)" = "$before" ] || fail "nested run opened its own log"
-prl=$(find "$POPLOG_ROOT/selftest" -name '*-pr-outer.log' | head -1)
+prl=$(find "$POPLOG_ROOT/selftest" -name '*-pr-outer.log' -print -quit)
 ck; grep -q "STEP END t verdict=PASS" "$prl" || fail "step of a script under poprun not in poprun's log: $(cat "$prl")"
 # a nested full_gate under poprun with one failing step: non-zero exit, FAIL in poprun's log, the step's output in that log
 fx="$t/fx"; mkdir -p "$fx/src"; printf 'fn f() { unsafe { } }\n' > "$fx/src/lib.rs"
 "$(dirname "$lib")/poprun" --agent selftest --job pr-gate -- env REPO="$fx" GATE_STEPS="unsafe-scan" T="$t/gl" bash "$here/full_gate.sh" fx > "$t/gate.out" 2>&1 \
   && fail "nested full_gate with a failing step exited 0 under poprun: $(cat "$t/gate.out")"
-gl=$(find "$POPLOG_ROOT/selftest" -name '*-pr-gate.log' | head -1)
+gl=$(find "$POPLOG_ROOT/selftest" -name '*-pr-gate.log' -print -quit)
 ck; [ -n "$gl" ] || fail "poprun wrote no pr-gate log"
 ck; grep -q "SUB-RUN START selftest/full_gate" "$gl" || fail "full_gate did not join poprun's log as a sub-run: $(cat "$gl")"
 ck; grep -q "STEP END unsafe-scan verdict=FAIL" "$gl" || fail "failing gate step not FAIL in the log: $(cat "$gl")"
@@ -119,7 +119,7 @@ runlog_on_exit 'touch "$T_DIR/cleaned"'
 echo body
 JOB
 ck; T_DIR="$t" bash "$t/clean.sh" > "$t/clean.out" 2>&1 || fail "clean-job exited non-zero: $(cat "$t/clean.out")"
-cl=$(find "$POPLOG_ROOT/selftest" -name '*-clean-job.log' | head -1)
+cl=$(find "$POPLOG_ROOT/selftest" -name '*-clean-job.log' -print -quit)
 ck; [ -f "$t/cleaned" ] || fail "runlog_on_exit cleanup did not run"
 ck; grep -q "^RESULT: PASS" "$cl" || fail "run with an on-exit cleanup has no PASS footer: $(tail -4 "$cl")"
 ck; awk -F'\t' '$2=="clean-job"' "$POPLOG_ROOT/RUNNING.tsv" | grep -c . > /dev/null && fail "clean-job RUNNING.tsv row left behind"
@@ -155,9 +155,9 @@ ck; RUNLOG_PLAIN=1 RUNLOG_SELFTEST=1 RUNLOG_POPLOG=/nonexistent bash "$here/runl
 # (RUNLOG_AGENT, else poprun's POPLOG_AGENT, else popslot's POPSLOT_AGENT); with none, runlog refuses (no hardcoded default).
 printf '#!/usr/bin/env bash\n. "$RUNLOG_LIB"; runlog_wrap agent-job "$@"\necho agent-ran\n' > "$t/agent.sh"
 ( unset RUNLOG_AGENT POPSLOT_AGENT; POPLOG_AGENT=spence bash "$t/agent.sh" ) > "$t/a1" 2>&1
-ck; find "$POPLOG_ROOT/spence" -name '*-agent-job.log' 2>/dev/null | grep -q . || fail "POPLOG_AGENT=spence: no log under spence/: $(cat "$t/a1")"
+ck; [ -n "$(find "$POPLOG_ROOT/spence" -name '*-agent-job.log' -print -quit 2>/dev/null)" ] || fail "POPLOG_AGENT=spence: no log under spence/: $(cat "$t/a1")"
 rm -rf "$POPLOG_ROOT/spence"; ( unset RUNLOG_AGENT POPLOG_AGENT; POPSLOT_AGENT=spence bash "$t/agent.sh" ) > "$t/a2" 2>&1
-ck; find "$POPLOG_ROOT/spence" -name '*-agent-job.log' 2>/dev/null | grep -q . || fail "POPSLOT_AGENT=spence: no log under spence/: $(cat "$t/a2")"
+ck; [ -n "$(find "$POPLOG_ROOT/spence" -name '*-agent-job.log' -print -quit 2>/dev/null)" ] || fail "POPSLOT_AGENT=spence: no log under spence/: $(cat "$t/a2")"
 ( unset RUNLOG_AGENT POPLOG_AGENT POPSLOT_AGENT; bash "$t/agent.sh" ) > "$t/a3" 2>&1; rc=$?
 ck; [ "$rc" != 0 ] || fail "no agent given: runlog ran anyway: $(cat "$t/a3")"
 ck; grep -q "agent-ran" "$t/a3" && fail "no agent given: the script body ran"
